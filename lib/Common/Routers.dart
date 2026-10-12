@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../Pages/DashboardPage.dart';
 import '../Pages/HomePage.dart';
 import '../Pages/LoginPage.dart';
 
@@ -11,6 +12,7 @@ class Routers {
 
   static const String home = '/';
   static const String login = '/login';
+  static const String dashboard = '/resumen';
 
   static final GoRouter router = GoRouter(
     initialLocation: home,
@@ -22,6 +24,10 @@ class Routers {
       GoRoute(
         path: login,
         builder: (context, state) => const LoginPage(),
+      ),
+      GoRoute(
+        path: dashboard,
+        builder: (context, state) => const DashboardPage(),
       ),
     ],
     // Se muestra cuando se navega a una ruta que no existe.

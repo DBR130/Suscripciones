@@ -1,30 +1,38 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_suscripciones/Common/AppTheme.dart';
+import 'package:flutter_suscripciones/Pages/LoginPage.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:flutter_suscripciones/main.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  Widget app() => MaterialApp.router(
+        theme: AppTheme.dark,
+        routerConfig: GoRouter(routes: [
+          GoRoute(path: '/', builder: (_, _) => const LoginPage()),
+          GoRoute(path: '/resumen', builder: (_, _) => const Text('RESUMEN')),
+        ]),
+      );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('valida y navega al resumen', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.tap(find.text('Iniciar sesión'));
     await tester.pump();
+    expect(find.text('Ingresa tu correo electrónico'), findsOneWidget);
+    expect(find.text('Ingresa tu contraseña'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField).at(0), 'mal');
+    await tester.enterText(find.byType(TextFormField).at(1), '123');
+    await tester.tap(find.text('Iniciar sesión'));
+    await tester.pump();
+    expect(find.text('Correo no válido'), findsOneWidget);
+    expect(find.text('Mínimo 6 caracteres'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextFormField).at(0), 'a@b.co');
+    await tester.enterText(find.byType(TextFormField).at(1), '123456');
+    await tester.tap(find.text('Iniciar sesión'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 3));
+    expect(find.text('RESUMEN'), findsOneWidget);
   });
 }
