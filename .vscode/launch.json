@@ -1,0 +1,32 @@
+{
+    // Usa IntelliSense para saber los atributos posibles.
+    // Mantén el puntero para ver las descripciones de los existentes.
+    // Para más información, visita: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "flutter_suscripciones (Chrome)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "chrome"
+        },
+        {
+            "name": "flutter_suscripciones (Windows)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "windows"
+        },
+        {
+            "name": "flutter_suscripciones (Edge)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "edge"
+        },
+        {
+            "name": "flutter_suscripciones (Profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        }
+    ]
+}
