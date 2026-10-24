@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../Pages/DashboardPage.dart';
 import '../Pages/HomePage.dart';
 import '../Pages/LoginPage.dart';
+import '../services/auth_service.dart';
 
 /// Rutas de la aplicación con go_router.
 /// Para agregar una vista nueva: crear la constante y registrar su GoRoute.
@@ -14,28 +15,32 @@ class Routers {
   static const String login = '/login';
   static const String dashboard = '/resumen';
 
-  static final GoRouter router = GoRouter(
-    initialLocation: home,
-    routes: [
-      GoRoute(
-        path: home,
-        builder: (context, state) => const HomePage(),
+  /// Crea el router. [initialLocation] permite abrir directo en el resumen
+  /// cuando ya hay una sesión guardada (ver main.dart).
+  static GoRouter crear(AuthService authService, {String initialLocation = home}) {
+    return GoRouter(
+      initialLocation: initialLocation,
+      routes: [
+        GoRoute(
+          path: home,
+          builder: (context, state) => const HomePage(),
+        ),
+        GoRoute(
+          path: login,
+          builder: (context, state) => LoginPage(authService: authService),
+        ),
+        GoRoute(
+          path: dashboard,
+          builder: (context, state) => DashboardPage(authService: authService),
+        ),
+      ],
+      // Se muestra cuando se navega a una ruta que no existe.
+      errorBuilder: (context, state) => Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: Center(
+          child: Text('No existe la ruta: ${state.uri}'),
+        ),
       ),
-      GoRoute(
-        path: login,
-        builder: (context, state) => const LoginPage(),
-      ),
-      GoRoute(
-        path: dashboard,
-        builder: (context, state) => const DashboardPage(),
-      ),
-    ],
-    // Se muestra cuando se navega a una ruta que no existe.
-    errorBuilder: (context, state) => Scaffold(
-      appBar: AppBar(title: const Text('Error')),
-      body: Center(
-        child: Text('No existe la ruta: ${state.uri}'),
-      ),
-    ),
-  );
+    );
+  }
 }

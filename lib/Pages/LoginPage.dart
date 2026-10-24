@@ -3,11 +3,16 @@ import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
+import '../services/auth_service.dart';
 import '../utils/validators.dart';
+import '../widgets/app_marca.dart';
 import '../widgets/app_text_field.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, required this.authService});
+
+  /// Se recibe por parámetro para poder usar uno falso en los tests.
+  final AuthService authService;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -33,15 +38,24 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
-    await Future.delayed(const Duration(seconds: 2)); // aquí irá la API
-    if (!mounted) return;
-    setState(() => _loading = false);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Bienvenido, ${_emailCtrl.text.trim()}')),
-    );
-    // go (no push): reemplaza el historial y "atrás" no vuelve al login.
-    context.go(Routers.dashboard);
+    try {
+      final usuario = await widget.authService.login(
+        _emailCtrl.text,
+        _passCtrl.text,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Bienvenido, ${usuario.nombre}')),
+      );
+      // go (no push): reemplaza el historial y "atrás" no vuelve al login.
+      context.go(Routers.dashboard);
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.mensaje)),
+      );
+    }
   }
 
   @override
@@ -58,7 +72,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const _Marca(),
+                    const AppMarca(),
                     const SizedBox(height: 32),
                     const Text(
                       'Bienvenido',
@@ -166,46 +180,6 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Logo de SubTrack: el cuadro azul con la "S" del header del mockup.
-class _Marca extends StatelessWidget {
-  const _Marca();
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Container(
-          width: 64,
-          height: 64,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Text(
-            'S',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'SubTrack',
-          style: TextStyle(
-            color: AppColors.text,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.3,
-          ),
-        ),
-      ],
     );
   }
 }
