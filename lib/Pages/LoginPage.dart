@@ -154,15 +154,7 @@ class _LoginPageState extends State<LoginPage> {
                           style: TextStyle(color: AppColors.muted),
                         ),
                         TextButton(
-                          // Cuando exista RegistroPage:
-                          // onPressed: () => context.push(Routers.registro),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Registro: próximamente'),
-                              ),
-                            );
-                          },
+                          onPressed: () => context.push(Routers.registro),
                           style: TextButton.styleFrom(
                             foregroundColor: AppColors.accent,
                             textStyle: const TextStyle(

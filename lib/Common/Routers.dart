@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../Pages/DashboardPage.dart';
 import '../Pages/HomePage.dart';
 import '../Pages/LoginPage.dart';
+import '../Pages/RegistroPage.dart';
 import '../services/auth_service.dart';
 
 /// Rutas de la aplicación con go_router.
@@ -13,6 +14,7 @@ class Routers {
 
   static const String home = '/';
   static const String login = '/login';
+  static const String registro = '/registro';
   static const String dashboard = '/resumen';
 
   /// Crea el router. [initialLocation] permite abrir directo en el resumen
@@ -28,6 +30,10 @@ class Routers {
         GoRoute(
           path: login,
           builder: (context, state) => LoginPage(authService: authService),
+        ),
+        GoRoute(
+          path: registro,
+          builder: (context, state) => RegistroPage(authService: authService),
         ),
         GoRoute(
           path: dashboard,
