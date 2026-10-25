@@ -108,9 +108,33 @@ describe('calcularResumen', () => {
     assert.equal(r.proximos_cobros.length, 0);
   });
 
+  it('agrupa el gasto mensual por categoría y moneda', () => {
+    const r = calcularResumen([
+      sus({ categoria: 'Streaming', monto: 38900 }),
+      sus({ categoria: 'Streaming', monto: 26900 }),
+      sus({ categoria: 'Música', monto: 19900 }),
+      sus({ categoria: 'Diseño', monto: 120000, frecuencia: 'anual' }), // 10.000 al mes
+      sus({ categoria: null, monto: 99000 }),
+      sus({ categoria: 'Software', monto: 20, moneda: 'USD' }),
+      sus({ categoria: 'Cloud gaming', monto: 89900, es_prueba_gratis: true, fecha_fin_prueba: '2026-11-20' }),
+      sus({ categoria: 'Gimnasio', monto: 89900, estado: 'cancelada' }),
+    ], HOY);
+
+    assert.deepEqual(r.por_categoria, [
+      { categoria: 'Streaming', moneda: 'COP', gasto_mensual: 65800, cantidad: 2 },
+      { categoria: 'Música', moneda: 'COP', gasto_mensual: 19900, cantidad: 1 },
+      { categoria: 'Diseño', moneda: 'COP', gasto_mensual: 10000, cantidad: 1 },
+      // La prueba gratis cuenta pero suma 0.
+      { categoria: 'Cloud gaming', moneda: 'COP', gasto_mensual: 0, cantidad: 1 },
+      // "Sin categoría" va al final aunque gaste más.
+      { categoria: null, moneda: 'COP', gasto_mensual: 99000, cantidad: 1 },
+      { categoria: 'Software', moneda: 'USD', gasto_mensual: 20, cantidad: 1 },
+    ]);
+  });
+
   it('sin suscripciones devuelve todo vacío', () => {
     assert.deepEqual(calcularResumen([], HOY), {
-      totales: [], cantidad_activas: 0, proximos_cobros: [], pruebas_por_terminar: [],
+      totales: [], por_categoria: [], cantidad_activas: 0, proximos_cobros: [], pruebas_por_terminar: [],
     });
   });
 });

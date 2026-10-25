@@ -79,6 +79,10 @@ export const FRECUENCIAS = ['semanal', 'mensual', 'anual'];
 export const ESTADOS = ['activa', 'marcada_para_cancelar', 'cancelada'];
 const MONEDAS = ['COP', 'USD'];
 const ORIGENES = ['manual', 'notificacion'];
+// Mismas categorías que el CHECK de la migración 003.
+export const CATEGORIAS = [
+  'Streaming', 'Música', 'Cloud gaming', 'Almacenamiento', 'Gimnasio', 'Software', 'Diseño',
+];
 const NOMBRE_SERVICIO_MAX = 100;
 const DIAS_MAX = 30;
 
@@ -108,6 +112,12 @@ export function validarSuscripcion(req, res, next) {
   if (!nombre_servicio) return error400(res, 'El nombre del servicio es obligatorio');
   if (nombre_servicio.length > NOMBRE_SERVICIO_MAX) {
     return error400(res, `El nombre admite máximo ${NOMBRE_SERVICIO_MAX} caracteres`);
+  }
+
+  // Opcional: null, ausente o "" = sin categoría.
+  const categoria = body.categoria === undefined || body.categoria === '' ? null : body.categoria;
+  if (categoria !== null && !CATEGORIAS.includes(categoria)) {
+    return error400(res, `La categoría debe ser una de: ${CATEGORIAS.join(', ')}`);
   }
 
   const monto = montoValido(body.monto);
@@ -149,7 +159,7 @@ export function validarSuscripcion(req, res, next) {
   if (!ORIGENES.includes(origen)) return error400(res, 'El origen debe ser manual o notificacion');
 
   req.body = {
-    nombre_servicio, monto, moneda, frecuencia, fecha_proximo_cobro,
+    nombre_servicio, categoria, monto, moneda, frecuencia, fecha_proximo_cobro,
     es_prueba_gratis, fecha_fin_prueba, dias_aviso, origen,
   };
   next();

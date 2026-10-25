@@ -160,7 +160,7 @@ TOKEN=PEGA_AQUI_EL_TOKEN
 |---|---|---|
 | `GET /api/suscripciones?estado=activa` | — | `200 {"suscripciones":[...]}` ordenadas por `fecha_proximo_cobro`. `estado` es opcional y admite varios separados por coma |
 | `POST /api/suscripciones` | ver abajo | `201 {"suscripcion":{...}}` |
-| `GET /api/suscripciones/:id` | — | `200 {"suscripcion":{...}}` |
+| `GET /api/suscripciones/:id` | — | `200 {"suscripcion":{...},"pagos":[{"fecha_pago","monto"}],"pagado_total":0}` (los 3 últimos pagos) |
 | `PUT /api/suscripciones/:id` | igual que POST | `200 {"suscripcion":{...}}` |
 | `DELETE /api/suscripciones/:id` | — | `204` |
 | `PATCH /api/suscripciones/:id/estado` | `{"estado":"marcada_para_cancelar"}` | `200 {"suscripcion":{...}}` |
@@ -170,6 +170,7 @@ Campos del POST/PUT:
 | Campo | Obligatorio | Valores |
 |---|---|---|
 | `nombre_servicio` | sí | texto, máx. 100 |
+| `categoria` | no (`null`) | `Streaming`, `Música`, `Cloud gaming`, `Almacenamiento`, `Gimnasio`, `Software`, `Diseño`; `null` o `""` = sin categoría |
 | `monto` | sí | número ≥ 0, máx. 2 decimales (`38900` o `"12.99"`) |
 | `moneda` | no (`COP`) | `COP`, `USD` |
 | `frecuencia` | sí | `semanal`, `mensual`, `anual` |
@@ -204,6 +205,10 @@ curl http://localhost:3000/api/resumen -H "Authorization: Bearer $TOKEN"
     { "moneda": "COP", "gasto_mensual": 58900, "proyeccion_anual": 706800, "cantidad": 3 },
     { "moneda": "USD", "gasto_mensual": 20, "proyeccion_anual": 240, "cantidad": 1 }
   ],
+  "por_categoria": [
+    { "categoria": "Streaming", "moneda": "COP", "gasto_mensual": 38900, "cantidad": 1 },
+    { "categoria": null, "moneda": "USD", "gasto_mensual": 20, "cantidad": 1 }
+  ],
   "cantidad_activas": 4,
   "proximos_cobros": [ { "...": "...", "dias_restantes": 2 } ],
   "pruebas_por_terminar": [ { "...": "...", "dias_restantes": 3 } ],
@@ -217,6 +222,8 @@ curl http://localhost:3000/api/resumen -H "Authorization: Bearer $TOKEN"
 - Las pruebas gratis cuentan en `cantidad` pero no suman gasto (cuestan 0
   mientras dura la prueba).
 - Próximos cobros y pruebas: de hoy a 7 días.
+- `por_categoria`: gasto mensual por categoría y moneda, de mayor a menor;
+  `categoria: null` = sin categoría (va al final).
 
 ### Preferencias y cuenta
 

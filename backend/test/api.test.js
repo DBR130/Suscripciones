@@ -72,6 +72,7 @@ describe('suscripciones', () => {
     assert.equal(s.estado, 'activa');
     assert.equal(s.origen, 'manual');
     assert.equal(s.dias_aviso, null);
+    assert.equal(s.categoria, null);
     assert.equal(s.usuario_id, undefined);
   });
 
@@ -93,12 +94,50 @@ describe('suscripciones', () => {
       { dias_aviso: 31 },
       { dias_aviso: 2.5 },
       { origen: 'otro' },
+      { categoria: 'Videojuegos' },
+      { categoria: 'streaming' }, // distingue mayúsculas
     ];
     for (const cambio of casos) {
       const res = await request(app).post('/api/suscripciones').set(ana.auth).send({ ...NETFLIX, ...cambio });
       assert.equal(res.status, 400, `debió rechazar ${JSON.stringify(cambio)}`);
       assert.ok(res.body.error);
     }
+  });
+
+  it('guarda, edita y quita la categoría', async () => {
+    const ana = await crearUsuario();
+    const s = await crearSuscripcion(ana, { ...NETFLIX, categoria: 'Streaming' });
+    assert.equal(s.categoria, 'Streaming');
+
+    const musica = await request(app).put(`/api/suscripciones/${s.id}`).set(ana.auth)
+      .send({ ...NETFLIX, categoria: 'Música' }).expect(200);
+    assert.equal(musica.body.suscripcion.categoria, 'Música');
+
+    // "" o ausente = sin categoría.
+    const sin = await request(app).put(`/api/suscripciones/${s.id}`).set(ana.auth)
+      .send({ ...NETFLIX, categoria: '' }).expect(200);
+    assert.equal(sin.body.suscripcion.categoria, null);
+  });
+
+  it('el detalle incluye los 3 últimos pagos y el total pagado', async () => {
+    const ana = await crearUsuario();
+    const s = await crearSuscripcion(ana);
+    const vacia = await request(app).get(`/api/suscripciones/${s.id}`).set(ana.auth).expect(200);
+    assert.deepEqual(vacia.body.pagos, []);
+    assert.equal(vacia.body.pagado_total, 0);
+
+    await pool.query(
+      `INSERT INTO historial_pagos (suscripcion_id, monto, fecha_pago) VALUES
+       ($1, 35900, '2026-07-20'), ($1, 38900, '2026-08-20'), ($1, 38900, '2026-09-20'), ($1, 38900, '2026-10-20')`,
+      [s.id],
+    );
+    const { body } = await request(app).get(`/api/suscripciones/${s.id}`).set(ana.auth).expect(200);
+    assert.deepEqual(body.pagos, [
+      { fecha_pago: '2026-10-20', monto: 38900 },
+      { fecha_pago: '2026-09-20', monto: 38900 },
+      { fecha_pago: '2026-08-20', monto: 38900 },
+    ]);
+    assert.equal(body.pagado_total, 35900 + 38900 * 3);
   });
 
   it('acepta montos con 2 decimales y pruebas gratis', async () => {
@@ -198,8 +237,8 @@ describe('aislamiento entre usuarios', () => {
 describe('resumen', () => {
   it('calcula totales por moneda, próximos cobros y pruebas por terminar', async () => {
     const ana = await crearUsuario();
-    await crearSuscripcion(ana, { ...NETFLIX, monto: 38900, fecha_proximo_cobro: enDias(2) });
-    await crearSuscripcion(ana, { ...NETFLIX, nombre_servicio: 'Canva', monto: 240000, frecuencia: 'anual', fecha_proximo_cobro: enDias(90) });
+    await crearSuscripcion(ana, { ...NETFLIX, categoria: 'Streaming', monto: 38900, fecha_proximo_cobro: enDias(2) });
+    await crearSuscripcion(ana, { ...NETFLIX, nombre_servicio: 'Canva', categoria: 'Diseño', monto: 240000, frecuencia: 'anual', fecha_proximo_cobro: enDias(90) });
     await crearSuscripcion(ana, { ...NETFLIX, nombre_servicio: 'ChatGPT', monto: 20, moneda: 'USD', fecha_proximo_cobro: enDias(20) });
     await crearSuscripcion(ana, { ...NETFLIX, nombre_servicio: 'GeForce', monto: 89900, es_prueba_gratis: true,
       fecha_fin_prueba: enDias(3), fecha_proximo_cobro: enDias(3) });
@@ -211,6 +250,12 @@ describe('resumen', () => {
     assert.deepEqual(body.totales, [
       { moneda: 'COP', gasto_mensual: 38900 + 20000, proyeccion_anual: 38900 * 12 + 240000, cantidad: 3 },
       { moneda: 'USD', gasto_mensual: 20, proyeccion_anual: 240, cantidad: 1 },
+    ]);
+    assert.deepEqual(body.por_categoria, [
+      { categoria: 'Streaming', moneda: 'COP', gasto_mensual: 38900, cantidad: 1 },
+      { categoria: 'Diseño', moneda: 'COP', gasto_mensual: 20000, cantidad: 1 },
+      { categoria: null, moneda: 'COP', gasto_mensual: 0, cantidad: 1 },
+      { categoria: null, moneda: 'USD', gasto_mensual: 20, cantidad: 1 },
     ]);
     assert.equal(body.cantidad_activas, 4);
     assert.deepEqual(body.proximos_cobros.map((s) => [s.nombre_servicio, s.dias_restantes]), [['Netflix', 2]]);

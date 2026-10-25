@@ -10,6 +10,14 @@ const COBROS_POR_ANIO = { semanal: 52, mensual: 12, anual: 1 };
 
 const VENTANA_DIAS = 7;
 
+// Para ordenar: COP primero (la moneda del país); el resto en orden alfabético.
+function porMonedaPrimero(a, b) {
+  if (a.moneda === b.moneda) return 0;
+  if (a.moneda === 'COP') return -1;
+  if (b.moneda === 'COP') return 1;
+  return a.moneda.localeCompare(b.moneda);
+}
+
 /**
  * Costo anual en centavos. Se trabaja en centavos (enteros) para evitar los
  * errores de redondeo de los decimales en JavaScript (0.1 + 0.2 !== 0.3).
@@ -36,14 +44,37 @@ export function calcularResumen(suscripciones, hoy) {
     porMoneda.set(s.moneda, total);
   }
   const totales = [...porMoneda.values()]
-    // COP primero (la moneda del país); el resto en orden alfabético.
-    .sort((a, b) => (a.moneda === 'COP' ? -1 : b.moneda === 'COP' ? 1 : a.moneda.localeCompare(b.moneda)))
+    .sort(porMonedaPrimero)
     .map((t) => ({
       moneda: t.moneda,
       // Mensual equivalente = anual / 12 (semanal: monto * 52 / 12).
       gasto_mensual: Math.round(t.centavosAnuales / 12) / 100,
       proyeccion_anual: t.centavosAnuales / 100,
       cantidad: t.cantidad,
+    }));
+
+  // Gasto mensual por categoría (y moneda, porque no se suman COP con USD).
+  // categoria null = "Sin categoría".
+  const porCategoria = new Map();
+  for (const s of enCurso) {
+    const clave = `${s.categoria ?? ''}|${s.moneda}`;
+    const grupo = porCategoria.get(clave)
+      ?? { categoria: s.categoria ?? null, moneda: s.moneda, centavosAnuales: 0, cantidad: 0 };
+    grupo.centavosAnuales += centavosAnuales(s);
+    grupo.cantidad += 1;
+    porCategoria.set(clave, grupo);
+  }
+  const por_categoria = [...porCategoria.values()]
+    // Por moneda (COP primero), luego de mayor a menor gasto y "Sin categoría" al final.
+    .sort((a, b) => porMonedaPrimero(a, b)
+      || (a.categoria === null) - (b.categoria === null)
+      || b.centavosAnuales - a.centavosAnuales
+      || (a.categoria ?? '').localeCompare(b.categoria ?? ''))
+    .map((g) => ({
+      categoria: g.categoria,
+      moneda: g.moneda,
+      gasto_mensual: Math.round(g.centavosAnuales / 12) / 100,
+      cantidad: g.cantidad,
     }));
 
   const enVentana = (fecha) => {
@@ -64,6 +95,7 @@ export function calcularResumen(suscripciones, hoy) {
 
   return {
     totales,
+    por_categoria,
     cantidad_activas: enCurso.length,
     proximos_cobros,
     pruebas_por_terminar,

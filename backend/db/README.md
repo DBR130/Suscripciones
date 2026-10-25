@@ -7,6 +7,7 @@ numerados en `db/migraciones/` que se aplican en orden y una sola vez.
 |---|---|
 | `001_inicial.sql` | Tablas `usuarios` y `suscripciones` de la fase 1 |
 | `002_modelo_completo.sql` | Preferencias del usuario, estados de la suscripción, pruebas gratis y tablas `historial_pagos`, `cancelaciones`, `guias_cancelacion`, `notificaciones_enviadas` |
+| `003_categoria.sql` | Columna opcional `categoria` en `suscripciones`, limitada a las categorías del diseño |
 
 La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
 
@@ -35,6 +36,7 @@ La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
    ```
    + 001_inicial.sql
    + 002_modelo_completo.sql
+   + 003_categoria.sql
    ```
 
 ## Actualizar una base que ya existe
@@ -72,7 +74,9 @@ Para usar otra base, define `TEST_DATABASE_URL`; su nombre debe terminar en
 
 - **usuarios**: `dias_anticipacion_recordatorio` (0–30, por defecto 3),
   `pais` (`CO`), `permiso_notificaciones`.
-- **suscripciones**: `nombre_servicio`, `monto` (NUMERIC 12,2), `moneda`
+- **suscripciones**: `nombre_servicio`, `categoria` (opcional: `Streaming`,
+  `Música`, `Cloud gaming`, `Almacenamiento`, `Gimnasio`, `Software`,
+  `Diseño`), `monto` (NUMERIC 12,2), `moneda`
   (`COP` o `USD`), `frecuencia` (`semanal`, `mensual`, `anual`),
   `fecha_proximo_cobro`, `es_prueba_gratis` + `fecha_fin_prueba` (obligatoria
   si es prueba), `dias_aviso` (NULL = usar la preferencia del usuario),
