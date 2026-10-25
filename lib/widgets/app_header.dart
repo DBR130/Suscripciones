@@ -29,12 +29,19 @@ class AppHeader extends StatelessWidget {
   }
 }
 
-/// Botón "Volver" translúcido de los encabezados.
+/// Botón "Volver" translúcido de los encabezados. También sirve para
+/// "✎ Editar" pasando otro [texto] e [icono].
 class AppBotonVolver extends StatelessWidget {
-  const AppBotonVolver({super.key, required this.onPressed, this.texto = 'Volver'});
+  const AppBotonVolver({
+    super.key,
+    required this.onPressed,
+    this.texto = 'Volver',
+    this.icono = Icons.chevron_left,
+  });
 
   final VoidCallback onPressed;
   final String texto;
+  final IconData icono;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +49,7 @@ class AppBotonVolver extends StatelessWidget {
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
         onPressed: onPressed,
-        icon: const Icon(Icons.chevron_left, size: 18),
+        icon: Icon(icono, size: icono == Icons.chevron_left ? 18 : 14),
         label: Text(texto),
         style: TextButton.styleFrom(
           foregroundColor: AppColors.textSoft,

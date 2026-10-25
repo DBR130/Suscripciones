@@ -29,6 +29,10 @@ class AppColors {
   static const Color amberStrong = Color(0xFFFCD34D);
   static const Color amberBorder = Color(0x73FBBF24); // rgba(251,191,36,.45)
   static const Color amberBg = Color(0x21FBBF24); // rgba(251,191,36,.13)
+  static const Color errorSoft = Color(0xFFFCA5A5); // texto del banner de error
+  static const Color errorBg = Color(0x1FF87171); // rgba(248,113,113,.12)
+  static const Color errorLine = Color(0x73F87171); // rgba(248,113,113,.45)
+  static const Color danger = Color(0xFFDC2626); // botón destructivo del diálogo
 
   /// Degradado de los encabezados (dashboard, detalle, perfil...).
   static const LinearGradient header = LinearGradient(
@@ -46,7 +50,7 @@ class AppTheme {
 
   static OutlineInputBorder _border(Color color, [double width = 1]) {
     return OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14), // --radius
+      borderRadius: BorderRadius.circular(12), // inputs del diseño
       borderSide: BorderSide(color: color, width: width),
     );
   }
@@ -70,7 +74,7 @@ class AppTheme {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       labelStyle: const TextStyle(
         color: AppColors.muted,
         fontWeight: FontWeight.w500,
@@ -90,6 +94,7 @@ class AppTheme {
       suffixIconColor: AppColors.muted,
       errorStyle: const TextStyle(
         color: AppColors.error,
+        fontSize: 12,
         fontWeight: FontWeight.w600,
       ),
       enabledBorder: _border(AppColors.line),
@@ -108,10 +113,19 @@ class AppTheme {
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
       ),
     ),
-    snackBarTheme: const SnackBarThemeData(
+    // "Toast" del diseño: tarjeta flotante con borde (ver mostrarToast).
+    snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surface,
-      contentTextStyle: TextStyle(color: AppColors.text),
+      contentTextStyle: const TextStyle(
+        color: AppColors.text,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
       behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppColors.lineStrong),
+      ),
     ),
   );
 }

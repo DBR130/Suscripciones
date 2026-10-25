@@ -1,34 +1,47 @@
 import 'package:intl/intl.dart';
 
-/// Formato colombiano para montos y fechas.
+/// Formatos de design/subtrack-pantallas.md: dinero "$38.900" y fechas
+/// "20 sep", "20 sep 2026" o "mar 2024".
 class Formato {
   Formato._();
 
   // es_CO usa punto para miles y coma para decimales. Su patrón por defecto
-  // pone el símbolo al final ("45.900 $"), así que se fuerza "$ 45.900".
-  // ¤ = símbolo de la moneda;   = espacio que no se parte en dos líneas.
+  // pone el símbolo al final ("38.900 $"), así que se fuerza "$38.900".
+  // ¤ = símbolo de la moneda.
   static final NumberFormat _cop = NumberFormat.currency(
     locale: 'es_CO',
     symbol: r'$',
     decimalDigits: 0,
-    customPattern: '¤ #,##0',
+    customPattern: '¤#,##0',
   );
   static final NumberFormat _usd = NumberFormat.currency(
     locale: 'es_CO',
     symbol: r'US$',
     decimalDigits: 2,
-    customPattern: '¤ #,##0.00',
+    customPattern: '¤#,##0.00',
   );
-  static final DateFormat _fecha = DateFormat('dd/MM/yyyy');
   static final DateFormat _fechaApi = DateFormat('yyyy-MM-dd');
 
-  /// "$ 45.900" en COP o "US$ 12,99" en USD.
+  static const List<String> _meses = [
+    'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+    'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+  ];
+
+  /// "$38.900" en COP o "US$12,99" en USD.
   static String moneda(num monto, String moneda) {
     return (moneda == 'USD' ? _usd : _cop).format(monto);
   }
 
-  /// "24/11/2026"
-  static String fecha(DateTime fecha) => _fecha.format(fecha);
+  /// "20 sep"
+  static String fechaCorta(DateTime fecha) =>
+      '${fecha.day} ${_meses[fecha.month - 1]}';
+
+  /// "20 sep 2026"
+  static String fecha(DateTime fecha) => '${fechaCorta(fecha)} ${fecha.year}';
+
+  /// "mar 2024"
+  static String mesAnio(DateTime fecha) =>
+      '${_meses[fecha.month - 1]} ${fecha.year}';
 
   /// "2026-11-24", el formato que usa el backend.
   static String fechaApi(DateTime fecha) => _fechaApi.format(fecha);

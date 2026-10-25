@@ -7,8 +7,9 @@ import 'app_card.dart';
 import 'logo_servicio.dart';
 
 /// Aviso que se muestra en la tarjeta de una suscripción, o null si no hay.
-/// Las pruebas gratis, las marcadas y los cobros vencidos van en ámbar; los
-/// cobros que entran en el periodo de aviso, en azul.
+/// Reglas de design/subtrack-pantallas.md, en orden: marcada, prueba gratis,
+/// (cambio de precio, cuando exista el dato) y cobro cercano. Un cobro con
+/// fecha vencida también avisa en ámbar para que se actualice.
 ({String texto, bool ambar})? avisoDeSuscripcion(
   Suscripcion s,
   DateTime hoy,
@@ -25,7 +26,7 @@ import 'logo_servicio.dart';
     }
     final cuando = switch (dias) {
       0 => 'hoy',
-      1 => 'mañana',
+      1 => 'en 1 día',
       _ => 'en $dias días',
     };
     return (texto: 'Prueba gratis: se convierte en $precio $cuando', ambar: true);
@@ -48,11 +49,26 @@ import 'logo_servicio.dart';
   return null;
 }
 
-/// "Mensual · Registro manual"
+/// Línea bajo el nombre: la categoría o, si no tiene, "Mensual · Registro manual".
 String descripcionSuscripcion(Suscripcion s) {
+  if (s.categoria != null) return s.categoria!;
   final origen = s.origen == 'notificacion' ? 'Detectada' : 'Registro manual';
   return '${s.frecuencia.etiqueta} · $origen';
 }
+
+/// Línea de estado de la lista (pantalla 08): "Mensual · próximo 20 sep",
+/// "Prueba gratis hasta 19 sep" o "Marcada para cancelar · 20 sep".
+String lineaDeEstado(Suscripcion s) {
+  if (s.estado == EstadoSuscripcion.marcadaParaCancelar) {
+    return 'Marcada para cancelar · ${Formato.fechaCorta(s.fechaClave)}';
+  }
+  if (s.esPruebaGratis) return 'Prueba gratis hasta ${Formato.fechaCorta(s.fechaClave)}';
+  return '${s.frecuencia.etiqueta} · próximo ${Formato.fechaCorta(s.fechaProximoCobro)}';
+}
+
+/// La tarjeta va resaltada en ámbar si es prueba gratis o está marcada.
+bool esDestacada(Suscripcion s) =>
+    s.esPruebaGratis || s.estado == EstadoSuscripcion.marcadaParaCancelar;
 
 /// Tarjeta de una suscripción en el dashboard (pantalla 07 del diseño).
 class SuscripcionCard extends StatelessWidget {
@@ -74,11 +90,11 @@ class SuscripcionCard extends StatelessWidget {
     final s = suscripcion;
     final aviso = avisoDeSuscripcion(s, hoy, diasGlobales);
     final linea = s.esPruebaGratis
-        ? 'Prueba termina ${Formato.fecha(s.fechaClave)}'
-        : 'Próximo cobro: ${Formato.fecha(s.fechaProximoCobro)}';
+        ? 'Prueba termina ${Formato.fechaCorta(s.fechaClave)}'
+        : 'Próximo cobro: ${Formato.fechaCorta(s.fechaProximoCobro)}';
 
     return AppCard(
-      destacada: s.esPruebaGratis || s.estado == EstadoSuscripcion.marcadaParaCancelar,
+      destacada: esDestacada(s),
       child: InkWell(
         onTap: onVerDetalle,
         child: Column(

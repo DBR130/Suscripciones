@@ -89,3 +89,50 @@ class AppPills<T> extends StatelessWidget {
     );
   }
 }
+
+/// Botón con borde discontinuo ("+ Agregar suscripción manualmente").
+class AppBotonPunteado extends StatelessWidget {
+  const AppBotonPunteado({super.key, required this.texto, required this.onPressed});
+
+  final String texto;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _BordePunteado(),
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.textSoft,
+          shape: const StadiumBorder(),
+          minimumSize: const Size.fromHeight(46),
+          textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+        ),
+        child: Text(texto),
+      ),
+    );
+  }
+}
+
+/// Dibuja el contorno de una píldora con trazos de 5 px y espacios de 4 px.
+class _BordePunteado extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final contorno = Path()
+      ..addRRect(RRect.fromRectAndRadius(rect.deflate(0.5), Radius.circular(size.height / 2)));
+    final pincel = Paint()
+      ..color = AppColors.lineStrong
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    for (final metrica in contorno.computeMetrics()) {
+      for (double d = 0; d < metrica.length; d += 9) {
+        canvas.drawPath(metrica.extractPath(d, d + 5), pincel);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BordePunteado oldDelegate) => false;
+}
