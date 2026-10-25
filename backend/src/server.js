@@ -12,6 +12,7 @@ for (const nombre of ['DATABASE_URL', 'JWT_SECRET']) {
 }
 
 const { app } = await import('./app.js');
+const { iniciarTareas } = await import('./tareas.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 // 0.0.0.0 = escuchar en todas las interfaces de red, no solo en localhost.
@@ -24,4 +25,6 @@ app.listen(PORT, HOST, (err) => {
     process.exit(1);
   }
   console.log(`API de SubTrack escuchando en http://${HOST}:${PORT}`);
+  // Cobros automáticos: al arrancar y todos los días a las 00:05 (Colombia).
+  iniciarTareas();
 });

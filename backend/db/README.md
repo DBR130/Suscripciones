@@ -8,6 +8,7 @@ numerados en `db/migraciones/` que se aplican en orden y una sola vez.
 | `001_inicial.sql` | Tablas `usuarios` y `suscripciones` de la fase 1 |
 | `002_modelo_completo.sql` | Preferencias del usuario, estados de la suscripción, pruebas gratis y tablas `historial_pagos`, `cancelaciones`, `guias_cancelacion`, `notificaciones_enviadas` |
 | `003_categoria.sql` | Columna opcional `categoria` en `suscripciones`, limitada a las categorías del diseño |
+| `004_cobros_y_precios.sql` | `UNIQUE (suscripcion_id, fecha_pago)` en `historial_pagos` y tabla `cambios_precio` |
 
 La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
 
@@ -37,6 +38,7 @@ La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
    + 001_inicial.sql
    + 002_modelo_completo.sql
    + 003_categoria.sql
+   + 004_cobros_y_precios.sql
    ```
 
 ## Actualizar una base que ya existe
@@ -82,8 +84,8 @@ Para usar otra base, define `TEST_DATABASE_URL`; su nombre debe terminar en
   si es prueba), `dias_aviso` (NULL = usar la preferencia del usuario),
   `origen` (`manual`, `notificacion`), `estado` (`activa`,
   `marcada_para_cancelar`, `cancelada`), `fecha_deteccion`.
-- **historial_pagos**, **cancelaciones**: dependen de una suscripción y se
-  borran con ella.
+- **historial_pagos**, **cancelaciones**, **cambios_precio**: dependen de una
+  suscripción y se borran con ella. Un pago es único por suscripción y fecha.
 - **notificaciones_enviadas**: dependen del usuario; si se borra la
   suscripción, el aviso se conserva sin ella.
 - **guias_cancelacion**: catálogo general, una guía por servicio.

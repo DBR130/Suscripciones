@@ -52,15 +52,25 @@ export async function obtener(req, res) {
   if (rows.length === 0) throw new HttpError(404, NO_ENCONTRADA);
 
   // Ya se comprobó arriba que la suscripción es del usuario.
-  const [pagos, total] = await Promise.all([
+  const [pagos, total, cambio] = await Promise.all([
     query(
       `SELECT fecha_pago, monto FROM historial_pagos
        WHERE suscripcion_id = $1 ORDER BY fecha_pago DESC, id DESC LIMIT 3`,
       [id],
     ),
     query('SELECT COALESCE(SUM(monto), 0) AS total FROM historial_pagos WHERE suscripcion_id = $1', [id]),
+    query(
+      `SELECT monto_anterior, monto_nuevo, fecha_cambio FROM cambios_precio
+       WHERE suscripcion_id = $1 ORDER BY fecha_cambio DESC, id DESC LIMIT 1`,
+      [id],
+    ),
   ]);
-  res.json({ suscripcion: rows[0], pagos: pagos.rows, pagado_total: total.rows[0].total });
+  res.json({
+    suscripcion: rows[0],
+    pagos: pagos.rows,
+    pagado_total: total.rows[0].total,
+    ultimo_cambio_precio: cambio.rows[0] ?? null,
+  });
 }
 
 // POST /api/suscripciones  (req.body ya validado por validarSuscripcion)
@@ -82,21 +92,38 @@ export async function crear(req, res) {
 
 // PUT /api/suscripciones/:id
 // Edita los datos. El estado se cambia aparte (PATCH .../estado) y el origen
-// no se modifica.
+// no se modifica. Si el monto cambia, queda registrado en cambios_precio (RF08).
 export async function actualizar(req, res) {
+  const id = idDeLaRuta(req);
   const s = req.body;
-  const { rows } = await query(
-    `UPDATE suscripciones
-     SET nombre_servicio = $3, monto = $4, moneda = $5, frecuencia = $6,
-         fecha_proximo_cobro = $7, es_prueba_gratis = $8, fecha_fin_prueba = $9, dias_aviso = $10,
-         categoria = $11
-     WHERE id = $1 AND usuario_id = $2
-     RETURNING ${COLUMNAS}`,
-    [idDeLaRuta(req), req.usuarioId, s.nombre_servicio, s.monto, s.moneda, s.frecuencia,
-      s.fecha_proximo_cobro, s.es_prueba_gratis, s.fecha_fin_prueba, s.dias_aviso, s.categoria],
-  );
-  if (rows.length === 0) throw new HttpError(404, NO_ENCONTRADA);
-  res.json({ suscripcion: rows[0] });
+  const suscripcion = await transaccion(async (client) => {
+    const anterior = await client.query(
+      'SELECT monto FROM suscripciones WHERE id = $1 AND usuario_id = $2 FOR UPDATE',
+      [id, req.usuarioId],
+    );
+    if (anterior.rows.length === 0) throw new HttpError(404, NO_ENCONTRADA);
+
+    const { rows } = await client.query(
+      `UPDATE suscripciones
+       SET nombre_servicio = $3, monto = $4, moneda = $5, frecuencia = $6,
+           fecha_proximo_cobro = $7, es_prueba_gratis = $8, fecha_fin_prueba = $9, dias_aviso = $10,
+           categoria = $11
+       WHERE id = $1 AND usuario_id = $2
+       RETURNING ${COLUMNAS}`,
+      [id, req.usuarioId, s.nombre_servicio, s.monto, s.moneda, s.frecuencia,
+        s.fecha_proximo_cobro, s.es_prueba_gratis, s.fecha_fin_prueba, s.dias_aviso, s.categoria],
+    );
+
+    const montoAnterior = anterior.rows[0].monto;
+    if (rows[0].monto !== montoAnterior) {
+      await client.query(
+        'INSERT INTO cambios_precio (suscripcion_id, monto_anterior, monto_nuevo) VALUES ($1, $2, $3)',
+        [id, montoAnterior, rows[0].monto],
+      );
+    }
+    return rows[0];
+  });
+  res.json({ suscripcion });
 }
 
 // DELETE /api/suscripciones/:id

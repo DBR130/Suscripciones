@@ -20,7 +20,8 @@ backend/
 │   ├── routes/           Qué URL atiende cada controlador
 │   ├── controllers/      Lógica de cada endpoint (consultas a la BD)
 │   ├── middlewares/      Validación de datos, verificación del token y errores
-│   ├── services/         Cálculos sin BD (resumen.js)
+│   ├── services/         Resumen, avisos y cobros automáticos
+│   ├── tareas.js         Tarea diaria de cobros (node-cron)
 │   └── utils/            HttpError y fechas
 └── test/                 npm test (node:test + supertest)
 ```
@@ -230,6 +231,34 @@ curl http://localhost:3000/api/resumen -H "Authorization: Bearer $TOKEN"
 - Próximos cobros y pruebas: de hoy a 7 días.
 - `por_categoria`: gasto mensual por categoría y moneda, de mayor a menor;
   `categoria: null` = sin categoría (va al final).
+
+### GET /api/avisos
+
+Datos de la pestaña Avisos:
+
+- `proximo_cobro`: cobros que ya entraron en sus días de aviso (los de la
+  suscripción o la preferencia global).
+- `fin_prueba_gratis`: pruebas gratis que terminan dentro de sus días de aviso.
+- `cambio_precio`: cambios de monto de los últimos 30 días (trae `monto_anterior`).
+
+Cada aviso trae `suscripcion_id`, `nombre_servicio`, `monto`, `moneda`,
+`fecha` (del cobro, fin de prueba o cambio) y `fecha_aviso` (cuándo salió el
+recordatorio). Van del más reciente al más antiguo.
+
+### Cobros automáticos y cambios de precio
+
+- Al arrancar el servidor y todos los días a las **00:05 hora de Colombia**,
+  `services/cobros.js` revisa las suscripciones `activa` o
+  `marcada_para_cancelar` cuyo próximo cobro ya llegó: guarda el pago en
+  `historial_pagos` y avanza la fecha según la frecuencia (si se saltaron
+  varios ciclos, los registra todos; 31 ene + 1 mes = 28 feb). Una prueba
+  gratis vencida deja de ser prueba y se cobra. Correrlo dos veces no duplica
+  pagos.
+- Limitación: tras un fin de mes la fecha se queda en el día ajustado
+  (31 ene → 28 feb → 28 mar), porque no se guarda el día original del cobro.
+- `PUT /api/suscripciones/:id` registra en `cambios_precio` cuando el monto
+  cambia, y `GET /api/suscripciones/:id` devuelve `ultimo_cambio_precio`
+  (`{monto_anterior, monto_nuevo, fecha_cambio}` o `null`).
 
 ### Preferencias y cuenta
 

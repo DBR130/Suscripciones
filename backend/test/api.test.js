@@ -6,7 +6,7 @@ import { after, before, describe, it } from 'node:test';
 import request from 'supertest';
 
 import { prepararBdPruebas } from './helpers/bd.js';
-import { hoyLocal } from '../src/utils/fechas.js';
+import { hoyColombia } from '../src/utils/fechas.js';
 
 // app.js y db.js se importan DESPUÉS de preparar la base, porque db.js lee
 // DATABASE_URL en el momento de importarse.
@@ -27,7 +27,7 @@ after(async () => {
 function enDias(dias) {
   const d = new Date();
   d.setDate(d.getDate() + dias);
-  return hoyLocal(d);
+  return hoyColombia(d);
 }
 
 let contador = 0;

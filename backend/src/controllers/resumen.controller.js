@@ -1,6 +1,6 @@
 import { query } from '../db.js';
 import { calcularResumen, ESTADOS_EN_CURSO } from '../services/resumen.js';
-import { hoyLocal } from '../utils/fechas.js';
+import { hoyColombia } from '../utils/fechas.js';
 import { COLUMNAS } from './suscripciones.controller.js';
 
 // GET /api/resumen
@@ -16,7 +16,7 @@ export async function resumen(req, res) {
   ]);
 
   res.json({
-    ...calcularResumen(suscripciones.rows, hoyLocal()),
+    ...calcularResumen(suscripciones.rows, hoyColombia()),
     // La app lo usa para resaltar los cobros que entran en el aviso.
     dias_anticipacion_recordatorio: usuario.rows[0]?.dias_anticipacion_recordatorio ?? 3,
   });
