@@ -25,8 +25,9 @@ class SuscripcionService {
         .toList();
   }
 
-  Future<Suscripcion> obtener(int id) async =>
-      _leer(await _api.get('$_ruta/$id'));
+  /// La suscripción con sus 3 últimos pagos y el total pagado.
+  Future<DetalleSuscripcion> obtener(int id) async =>
+      DetalleSuscripcion.fromJson(await _api.get('$_ruta/$id'));
 
   Future<Suscripcion> crear(Suscripcion suscripcion) async =>
       _leer(await _api.post(_ruta, suscripcion.toJson()));

@@ -22,10 +22,34 @@ class TotalMoneda {
       );
 }
 
+/// Gasto mensual de una categoría en una moneda.
+class TotalCategoria {
+  const TotalCategoria({
+    required this.categoria,
+    required this.moneda,
+    required this.gastoMensual,
+    required this.cantidad,
+  });
+
+  /// null = sin categoría.
+  final String? categoria;
+  final String moneda;
+  final double gastoMensual;
+  final int cantidad;
+
+  factory TotalCategoria.fromJson(Map<String, dynamic> json) => TotalCategoria(
+        categoria: json['categoria'] as String?,
+        moneda: json['moneda'] as String,
+        gastoMensual: (json['gasto_mensual'] as num).toDouble(),
+        cantidad: json['cantidad'] as int,
+      );
+}
+
 /// Respuesta de GET /api/resumen.
 class Resumen {
   const Resumen({
     required this.totales,
+    this.porCategoria = const [],
     required this.cantidadActivas,
     required this.proximosCobros,
     required this.pruebasPorTerminar,
@@ -33,6 +57,9 @@ class Resumen {
   });
 
   final List<TotalMoneda> totales;
+
+  /// De mayor a menor gasto, por moneda; "sin categoría" al final.
+  final List<TotalCategoria> porCategoria;
   final int cantidadActivas;
   final List<Suscripcion> proximosCobros;
   final List<Suscripcion> pruebasPorTerminar;
@@ -45,6 +72,9 @@ class Resumen {
     return Resumen(
       totales: (json['totales'] as List)
           .map((t) => TotalMoneda.fromJson(t as Map<String, dynamic>))
+          .toList(),
+      porCategoria: (json['por_categoria'] as List? ?? const [])
+          .map((c) => TotalCategoria.fromJson(c as Map<String, dynamic>))
           .toList(),
       cantidadActivas: json['cantidad_activas'] as int,
       proximosCobros: lista('proximos_cobros'),
