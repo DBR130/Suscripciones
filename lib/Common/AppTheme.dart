@@ -34,6 +34,30 @@ class AppColors {
   static const Color errorLine = Color(0x73F87171); // rgba(248,113,113,.45)
   static const Color danger = Color(0xFFDC2626); // botón destructivo del diálogo
 
+  // Mismos colores con el nombre del token en design/subtrack-pantallas.md,
+  // para poder copiar la tabla del diseño tal cual.
+  static const Color surface2 = flagBlueBg; // --surface-2
+  static const Color surface3 = avatar; // --surface-3
+  static const Color bar = panel; // --bar
+  static const Color line2 = lineStrong; // --line-2
+  static const Color text2 = textSoft; // --text-2
+  static const Color mutedHero = mutedOnGradient; // --muted-hero
+  static const Color accentSoft = flagBlueText; // --accent-soft
+  static const Color amberLine = amberBorder; // --amber-line
+
+  /// Orbes decorativos detrás del contenido (degradado radial azul).
+  static const Color orbA = Color(0x733B82F6); // rgba(59,130,246,.45)
+  static const Color orbB = Color(0x612563EB); // rgba(37,99,235,.38)
+
+  /// Degradado de la bienvenida: el del hero a 160° (casi vertical, hacia
+  /// abajo y un poco a la derecha).
+  static const LinearGradient bienvenida = LinearGradient(
+    begin: Alignment(-0.34, -0.94),
+    end: Alignment(0.34, 0.94),
+    colors: [Color(0xFF0D1526), Color(0xFF152443), Color(0xFF1E3A6E)],
+    stops: [0, 0.55, 1],
+  );
+
   /// Degradado de los encabezados (dashboard, detalle, perfil...).
   static const LinearGradient header = LinearGradient(
     begin: Alignment.topLeft,
