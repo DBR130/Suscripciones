@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_suscripciones/services/api_client.dart';
 import 'package:flutter_suscripciones/services/auth_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -20,38 +21,38 @@ void main() {
         headers: {'content-type': 'application/json'},
       );
 
+  AuthService servicio(MockClientHandler handler) =>
+      AuthService(ApiClient(client: MockClient(handler), storage: storage));
+
   test('login envía el correo sin espacios y guarda el token', () async {
     late http.Request enviada;
-    final service = AuthService(
-      storage: storage,
-      client: MockClient((req) async {
-        enviada = req;
-        return json({'token': 'abc', 'usuario': usuarioJson}, 200);
-      }),
-    );
+    final service = servicio((req) async {
+      enviada = req;
+      return json({'token': 'abc', 'usuario': usuarioJson}, 200);
+    });
 
     final usuario = await service.login('  ana@correo.com ', '123456');
 
+    expect(enviada.method, 'POST');
     expect(enviada.url.path, '/api/auth/login');
+    expect(enviada.headers['Authorization'], isNull);
     expect(jsonDecode(enviada.body), {
       'correo': 'ana@correo.com',
       'password': '123456',
     });
     expect(usuario.nombre, 'Ana');
+    expect(service.usuario?.iniciales, 'A');
     expect(await storage.read(key: 'auth_token'), 'abc');
   });
 
   test('muestra el mensaje de error que envía el servidor', () async {
-    final service = AuthService(
-      storage: storage,
-      client: MockClient(
-        (_) async => json({'error': 'Correo o contraseña incorrectos'}, 401),
-      ),
+    final service = servicio(
+      (_) async => json({'error': 'Correo o contraseña incorrectos'}, 401),
     );
 
     expect(
       () => service.login('ana@correo.com', 'malo00'),
-      throwsA(isA<AuthException>().having(
+      throwsA(isA<ApiException>().having(
         (e) => e.mensaje,
         'mensaje',
         'Correo o contraseña incorrectos',
@@ -60,17 +61,14 @@ void main() {
   });
 
   test('sin conexión lanza "No se pudo conectar con el servidor"', () async {
-    final service = AuthService(
-      storage: storage,
-      client: MockClient((_) async => throw http.ClientException('sin red')),
-    );
+    final service = servicio((_) async => throw http.ClientException('sin red'));
 
     expect(
       () => service.registro('Ana', 'ana@correo.com', '123456'),
-      throwsA(isA<AuthException>().having(
+      throwsA(isA<ApiException>().having(
         (e) => e.mensaje,
         'mensaje',
-        AuthService.errorConexion,
+        ApiClient.errorConexion,
       )),
     );
   });
@@ -79,13 +77,10 @@ void main() {
       () async {
     FlutterSecureStorage.setMockInitialValues({'auth_token': 'vencido'});
     String? header;
-    final service = AuthService(
-      storage: storage,
-      client: MockClient((req) async {
-        header = req.headers['Authorization'];
-        return json({'error': 'Token inválido o expirado'}, 401);
-      }),
-    );
+    final service = servicio((req) async {
+      header = req.headers['Authorization'];
+      return json({'error': 'Token inválido o expirado'}, 401);
+    });
 
     expect(await service.haySesionActiva(), isFalse);
     expect(header, 'Bearer vencido');
@@ -94,15 +89,58 @@ void main() {
 
   test('sin token guardado no llama al servidor', () async {
     var llamadas = 0;
-    final service = AuthService(
-      storage: storage,
-      client: MockClient((_) async {
-        llamadas++;
-        return json({}, 200);
-      }),
-    );
+    final service = servicio((_) async {
+      llamadas++;
+      return json({}, 200);
+    });
 
     expect(await service.me(), isNull);
     expect(llamadas, 0);
+  });
+
+  test('lee y guarda los días de anticipación', () async {
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 't'});
+    final peticiones = <http.Request>[];
+    final service = servicio((req) async {
+      peticiones.add(req);
+      final dias = req.method == 'PUT'
+          ? (jsonDecode(req.body) as Map)['dias_anticipacion_recordatorio']
+          : 3;
+      return json({'preferencias': {'dias_anticipacion_recordatorio': dias}}, 200);
+    });
+
+    expect(await service.obtenerDiasAnticipacion(), 3);
+    expect(await service.guardarDiasAnticipacion(7), 7);
+    expect(peticiones.map((r) => '${r.method} ${r.url.path}'), [
+      'GET /api/usuarios/me/preferencias',
+      'PUT /api/usuarios/me/preferencias',
+    ]);
+  });
+
+  test('eliminar cuenta envía la contraseña y borra el token', () async {
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 't'});
+    late http.Request enviada;
+    final service = servicio((req) async {
+      enviada = req;
+      return http.Response('', 204);
+    });
+
+    await service.eliminarCuenta('secreta');
+
+    expect(enviada.method, 'DELETE');
+    expect(enviada.url.path, '/api/usuarios/me');
+    expect(jsonDecode(enviada.body), {'password': 'secreta'});
+    expect(await storage.read(key: 'auth_token'), isNull);
+  });
+
+  test('contraseña incorrecta (403) no cierra la sesión', () async {
+    FlutterSecureStorage.setMockInitialValues({'auth_token': 't'});
+    final service = servicio((_) async => json({'error': 'Contraseña incorrecta'}, 403));
+
+    await expectLater(
+      service.eliminarCuenta('mala'),
+      throwsA(isA<ApiException>().having((e) => e.statusCode, 'statusCode', 403)),
+    );
+    expect(await storage.read(key: 'auth_token'), 't');
   });
 }

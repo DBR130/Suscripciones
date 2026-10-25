@@ -1,45 +1,17 @@
-import 'dart:async';
-import 'dart:convert';
-
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:http/http.dart' as http;
-
 import '../models/usuario.dart';
+import 'api_client.dart';
 
-/// Error que las vistas muestran tal cual en un SnackBar.
-class AuthException implements Exception {
-  const AuthException(this.mensaje);
-
-  final String mensaje;
-
-  @override
-  String toString() => mensaje;
-}
-
-/// Llamadas de autenticación al backend y manejo del token.
-///
-/// La URL base se cambia al ejecutar la app:
-///   flutter run --dart-define=API_URL=http://192.168.1.50:3000
-/// Por defecto usa 10.0.2.2, que es el "localhost" del PC visto desde el
-/// emulador de Android.
+/// Autenticación y datos de la cuenta del usuario.
 class AuthService {
-  AuthService({http.Client? client, FlutterSecureStorage? storage})
-      : _client = client ?? http.Client(),
-        _storage = storage ?? const FlutterSecureStorage();
+  AuthService(this._api);
 
-  static const String baseUrl = String.fromEnvironment(
-    'API_URL',
-    defaultValue: 'http://10.0.2.2:3000',
-  );
+  final ApiClient _api;
+  Usuario? _usuario;
 
-  static const String _tokenKey = 'auth_token';
-  static const Duration _timeout = Duration(seconds: 10);
-  static const String errorConexion = 'No se pudo conectar con el servidor';
+  /// Usuario de la sesión actual (se llena al iniciar sesión o con [me]).
+  Usuario? get usuario => _usuario;
 
-  final http.Client _client;
-  final FlutterSecureStorage _storage;
-
-  /// Inicia sesión y guarda el token. Lanza [AuthException] si falla.
+  /// Inicia sesión y guarda el token. Lanza [ApiException] si falla.
   Future<Usuario> login(String correo, String password) {
     return _autenticar('/api/auth/login', {
       'correo': correo.trim(),
@@ -47,7 +19,7 @@ class AuthService {
     });
   }
 
-  /// Crea la cuenta y deja la sesión iniciada. Lanza [AuthException] si falla.
+  /// Crea la cuenta y deja la sesión iniciada. Lanza [ApiException] si falla.
   Future<Usuario> registro(String nombre, String correo, String password) {
     return _autenticar('/api/auth/registro', {
       'nombre': nombre.trim(),
@@ -58,23 +30,16 @@ class AuthService {
 
   /// Datos del usuario del token guardado, o null si no hay sesión válida.
   /// Si el servidor rechaza el token (vencido o inválido), se borra.
-  /// Lanza [AuthException] si no hay conexión.
+  /// Lanza [ApiException] si no hay conexión.
   Future<Usuario?> me() async {
-    final token = await _storage.read(key: _tokenKey);
-    if (token == null) return null;
-
-    final res = await _enviar(
-      () => _client.get(
-        Uri.parse('$baseUrl/api/auth/me'),
-        headers: {'Authorization': 'Bearer $token'},
-      ),
-    );
-    if (res.statusCode == 401) {
-      await cerrarSesion();
-      return null;
+    if (await _api.leerToken() == null) return _usuario = null;
+    try {
+      final json = await _api.get('/api/auth/me');
+      return _usuario = Usuario.fromJson(json['usuario'] as Map<String, dynamic>);
+    } on ApiException catch (e) {
+      if (e.statusCode == 401) return _usuario = null;
+      rethrow;
     }
-    final json = _decodificar(res);
-    return Usuario.fromJson(json['usuario'] as Map<String, dynamic>);
   }
 
   /// true si hay un token guardado y el servidor lo acepta.
@@ -82,54 +47,43 @@ class AuthService {
   Future<bool> haySesionActiva() async {
     try {
       return await me() != null;
-    } on AuthException {
+    } on ApiException {
       return false;
     }
   }
 
-  Future<void> cerrarSesion() => _storage.delete(key: _tokenKey);
+  Future<void> cerrarSesion() {
+    _usuario = null;
+    return _api.borrarToken();
+  }
+
+  /// Días de anticipación global para los recordatorios.
+  Future<int> obtenerDiasAnticipacion() async {
+    final json = await _api.get('/api/usuarios/me/preferencias');
+    return _dias(json);
+  }
+
+  Future<int> guardarDiasAnticipacion(int dias) async {
+    final json = await _api.put('/api/usuarios/me/preferencias', {
+      'dias_anticipacion_recordatorio': dias,
+    });
+    return _dias(json);
+  }
+
+  /// Elimina la cuenta y todos sus datos. Exige la contraseña.
+  Future<void> eliminarCuenta(String password) async {
+    await _api.delete('/api/usuarios/me', body: {'password': password});
+    await cerrarSesion();
+  }
+
+  int _dias(Map<String, dynamic> json) {
+    final preferencias = json['preferencias'] as Map<String, dynamic>;
+    return preferencias['dias_anticipacion_recordatorio'] as int;
+  }
 
   Future<Usuario> _autenticar(String ruta, Map<String, String> datos) async {
-    final res = await _enviar(
-      () => _client.post(
-        Uri.parse('$baseUrl$ruta'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(datos),
-      ),
-    );
-    final json = _decodificar(res);
-    await _storage.write(key: _tokenKey, value: json['token'] as String);
-    return Usuario.fromJson(json['usuario'] as Map<String, dynamic>);
-  }
-
-  /// Ejecuta la petición y convierte los fallos de red en [AuthException].
-  Future<http.Response> _enviar(Future<http.Response> Function() peticion) async {
-    try {
-      return await peticion().timeout(_timeout);
-    } on http.ClientException {
-      throw const AuthException(errorConexion);
-    } on TimeoutException {
-      throw const AuthException(errorConexion);
-    }
-  }
-
-  /// Devuelve el JSON si la respuesta es 2xx; si no, lanza el mensaje
-  /// de error que envió el servidor ({"error": "..."}).
-  Map<String, dynamic> _decodificar(http.Response res) {
-    Object? cuerpo;
-    try {
-      cuerpo = jsonDecode(utf8.decode(res.bodyBytes));
-    } on FormatException {
-      cuerpo = null; // la respuesta no era JSON
-    }
-    final json = cuerpo is Map<String, dynamic> ? cuerpo : null;
-
-    if (res.statusCode >= 200 && res.statusCode < 300 && json != null) {
-      return json;
-    }
-    final error = json?['error'];
-    throw AuthException(
-      error is String ? error : 'Error del servidor (${res.statusCode})',
-    );
+    final json = await _api.post(ruta, datos, autenticado: false);
+    await _api.guardarToken(json['token'] as String);
+    return _usuario = Usuario.fromJson(json['usuario'] as Map<String, dynamic>);
   }
 }

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
+import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../utils/validators.dart';
 import '../widgets/app_marca.dart';
@@ -60,7 +61,7 @@ class _RegistroPageState extends State<RegistroPage> {
       );
       // El registro deja la sesión iniciada: se va directo al resumen.
       context.go(Routers.dashboard);
-    } on AuthException catch (e) {
+    } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(

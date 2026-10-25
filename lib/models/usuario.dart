@@ -13,4 +13,11 @@ class Usuario {
       correo: json['correo'] as String,
     );
   }
+
+  /// "Daniela Bustos" → "DB"; "Ana" → "A".
+  String get iniciales {
+    final palabras =
+        nombre.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
+    return palabras.take(2).map((p) => p[0].toUpperCase()).join();
+  }
 }
