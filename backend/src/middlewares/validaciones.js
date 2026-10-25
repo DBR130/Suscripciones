@@ -114,8 +114,11 @@ export function validarSuscripcion(req, res, next) {
     return error400(res, `El nombre admite máximo ${NOMBRE_SERVICIO_MAX} caracteres`);
   }
 
-  // Opcional: null, ausente o "" = sin categoría.
-  const categoria = body.categoria === undefined || body.categoria === '' ? null : body.categoria;
+  // Opcional: null, ausente o "" = sin categoría. Se normaliza a NFC porque
+  // "Música" puede llegar como "u" + tilde combinada y no coincidiría.
+  const categoria = body.categoria === undefined || body.categoria === ''
+    ? null
+    : typeof body.categoria === 'string' ? body.categoria.normalize('NFC') : body.categoria;
   if (categoria !== null && !CATEGORIAS.includes(categoria)) {
     return error400(res, `La categoría debe ser una de: ${CATEGORIAS.join(', ')}`);
   }

@@ -193,6 +193,12 @@ curl -X PATCH http://localhost:3000/api/suscripciones/1/estado \
 
 Si la suscripción no existe **o es de otro usuario**, responde `404`.
 
+> **Tildes en Windows:** `curl` desde Git Bash o PowerShell puede enviar
+> "Música" o "Diseño" con la codificación de Windows en lugar de UTF-8, y el
+> servidor responde 400. Para probar categorías con tilde usa Thunder Client o
+> Postman, o guarda el JSON en un archivo UTF-8 y envíalo con
+> `curl --data-binary @suscripcion.json`.
+
 ### GET /api/resumen
 
 ```bash

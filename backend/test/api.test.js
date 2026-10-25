@@ -113,6 +113,11 @@ describe('suscripciones', () => {
       .send({ ...NETFLIX, categoria: 'Música' }).expect(200);
     assert.equal(musica.body.suscripcion.categoria, 'Música');
 
+    // Acepta la tilde como carácter combinado (NFD) y la guarda normalizada.
+    const nfd = await request(app).put(`/api/suscripciones/${s.id}`).set(ana.auth)
+      .send({ ...NETFLIX, categoria: 'Diseño'.normalize('NFD') }).expect(200);
+    assert.equal(nfd.body.suscripcion.categoria, 'Diseño');
+
     // "" o ausente = sin categoría.
     const sin = await request(app).put(`/api/suscripciones/${s.id}`).set(ana.auth)
       .send({ ...NETFLIX, categoria: '' }).expect(200);
