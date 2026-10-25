@@ -4,18 +4,18 @@ import 'package:flutter_suscripciones/widgets/suscripcion_card.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  // intl separa el símbolo con un espacio que no se parte (U+00A0).
-  String sinNbsp(String s) => s.replaceAll(' ', ' ');
-
   test('montos con formato colombiano', () {
-    expect(sinNbsp(Formato.moneda(45900, 'COP')), r'$ 45.900');
-    expect(sinNbsp(Formato.moneda(1234567, 'COP')), r'$ 1.234.567');
-    expect(sinNbsp(Formato.moneda(0, 'COP')), r'$ 0');
-    expect(sinNbsp(Formato.moneda(12.99, 'USD')), r'US$ 12,99');
+    expect(Formato.moneda(45900, 'COP'), r'$45.900');
+    expect(Formato.moneda(1234567, 'COP'), r'$1.234.567');
+    expect(Formato.moneda(0, 'COP'), r'$0');
+    expect(Formato.moneda(12.99, 'USD'), r'US$12,99');
   });
 
-  test('fechas dd/mm/aaaa', () {
-    expect(Formato.fecha(DateTime(2026, 3, 5)), '05/03/2026');
+  test('fechas del diseño: "20 sep", "20 sep 2026", "mar 2024"', () {
+    expect(Formato.fechaCorta(DateTime(2026, 9, 20)), '20 sep');
+    expect(Formato.fecha(DateTime(2026, 3, 5)), '5 mar 2026');
+    expect(Formato.mesAnio(DateTime(2024, 3, 20)), 'mar 2024');
+    expect(Formato.fechaCorta(DateTime(2026, 12, 1)), '1 dic');
     expect(Formato.fechaApi(DateTime(2026, 3, 5)), '2026-03-05');
     expect(Formato.leerFechaApi('2026-12-31'), DateTime(2026, 12, 31));
   });
@@ -38,6 +38,25 @@ void main() {
       final texto = Formato.montoParaEditar(monto, moneda);
       expect(Formato.leerMonto(texto, moneda), monto, reason: texto);
     }
+  });
+
+  test('línea de la tarjeta: categoría o "Frecuencia · Registro manual"', () {
+    final base = Suscripcion(
+      nombreServicio: 'Netflix',
+      monto: 38900,
+      frecuencia: Frecuencia.mensual,
+      fechaProximoCobro: DateTime(2026, 9, 20),
+    );
+    expect(descripcionSuscripcion(base), 'Mensual · Registro manual');
+    expect(lineaDeEstado(base), 'Mensual · próximo 20 sep');
+    final conCategoria = Suscripcion(
+      nombreServicio: 'Netflix',
+      categoria: 'Streaming',
+      monto: 38900,
+      frecuencia: Frecuencia.mensual,
+      fechaProximoCobro: DateTime(2026, 9, 20),
+    );
+    expect(descripcionSuscripcion(conCategoria), 'Streaming');
   });
 
   group('aviso de la tarjeta', () {
@@ -71,7 +90,7 @@ void main() {
     test('pruebas gratis, marcadas y cobros vencidos en ámbar', () {
       final prueba = avisoDeSuscripcion(sus(fecha: DateTime(2026, 11, 12), prueba: true), hoy, 3)!;
       expect(prueba.ambar, isTrue);
-      expect(sinNbsp(prueba.texto), r'Prueba gratis: se convierte en $ 38.900/mes en 2 días');
+      expect(prueba.texto, r'Prueba gratis: se convierte en $38.900/mes en 2 días');
 
       final marcada = avisoDeSuscripcion(
         sus(fecha: DateTime(2026, 12, 30), estado: EstadoSuscripcion.marcadaParaCancelar),
@@ -82,7 +101,7 @@ void main() {
 
       final vencida = avisoDeSuscripcion(sus(fecha: DateTime(2026, 11, 1)), hoy, 3)!;
       expect(vencida.ambar, isTrue);
-      expect(vencida.texto, contains('01/11/2026'));
+      expect(vencida.texto, contains('1 nov 2026'));
     });
   });
 }

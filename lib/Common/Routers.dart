@@ -8,11 +8,14 @@ import '../Pages/PerfilPage.dart';
 import '../Pages/RegistroPage.dart';
 import '../Pages/SuscripcionDetallePage.dart';
 import '../Pages/SuscripcionFormPage.dart';
+import '../Pages/SuscripcionesPage.dart';
 import '../models/suscripcion.dart';
 import '../services/auth_service.dart';
 import '../services/suscripcion_service.dart';
+import '../widgets/app_shell.dart';
 
-/// Rutas de la aplicación con go_router.
+/// Rutas de la aplicación con go_router (ver "Navegación" en
+/// design/subtrack-pantallas.md).
 /// Para agregar una vista nueva: crear la constante y registrar su GoRoute.
 class Routers {
   Routers._();
@@ -20,12 +23,18 @@ class Routers {
   static const String home = '/';
   static const String login = '/login';
   static const String registro = '/registro';
-  static const String dashboard = '/resumen';
-  static const String perfil = '/perfil';
-  static const String nuevaSuscripcion = '/suscripciones/nueva';
 
-  static String detalle(int id) => '/suscripciones/$id';
-  static String editarSuscripcion(int id) => '/suscripciones/$id/editar';
+  // Con barra de pestañas.
+  static const String dashboard = '/resumen';
+  static const String suscripciones = '/suscripciones';
+  static const String perfil = '/perfil';
+  static String detalle(int id) => '/suscripcion/$id';
+
+  // Sin barra de pestañas.
+  static const String nuevaSuscripcion = '/suscripcion/nueva';
+  static String editarSuscripcion(int id) => '/suscripcion/$id/editar';
+
+  static int _id(GoRouterState state) => int.tryParse(state.pathParameters['id']!) ?? 0;
 
   /// Crea el router. [initialLocation] permite abrir directo en el resumen
   /// cuando ya hay una sesión guardada (ver main.dart).
@@ -49,48 +58,60 @@ class Routers {
           path: registro,
           builder: (context, state) => RegistroPage(authService: authService),
         ),
-        GoRoute(
-          path: dashboard,
-          builder: (context, state) => DashboardPage(
-            authService: authService,
-            suscripcionService: suscripcionService,
-          ),
-        ),
-        GoRoute(
-          path: perfil,
-          builder: (context, state) => PerfilPage(authService: authService),
-        ),
-        // "nueva" va antes de ":id" para que no se confunda con un id.
+        // El formulario va fuera del shell (sin pestañas). Estas dos rutas
+        // van antes que '/suscripcion/:id' para que "nueva" no se lea como id.
         GoRoute(
           path: nuevaSuscripcion,
           builder: (context, state) =>
               SuscripcionFormPage(suscripcionService: suscripcionService),
         ),
         GoRoute(
-          path: '/suscripciones/:id',
-          builder: (context, state) => SuscripcionDetallePage(
-            id: int.tryParse(state.pathParameters['id']!) ?? 0,
-            suscripcionService: suscripcionService,
-          ),
+          path: '/suscripcion/:id/editar',
+          builder: (context, state) {
+            // La suscripción llega en "extra" desde el detalle. Si no viene
+            // (por ejemplo, tras reiniciar la app), se muestra el detalle.
+            final suscripcion = state.extra;
+            if (suscripcion is Suscripcion) {
+              return SuscripcionFormPage(
+                suscripcionService: suscripcionService,
+                inicial: suscripcion,
+              );
+            }
+            return SuscripcionDetallePage(
+              id: _id(state),
+              authService: authService,
+              suscripcionService: suscripcionService,
+            );
+          },
+        ),
+        ShellRoute(
+          builder: (context, state, child) => AppShell(child: child),
           routes: [
-            // La suscripción a editar llega en "extra" desde el detalle.
-            // Si no viene (por ejemplo, tras reiniciar la app), se muestra
-            // el detalle, que la vuelve a cargar.
             GoRoute(
-              path: 'editar',
-              builder: (context, state) {
-                final suscripcion = state.extra;
-                if (suscripcion is Suscripcion) {
-                  return SuscripcionFormPage(
-                    suscripcionService: suscripcionService,
-                    inicial: suscripcion,
-                  );
-                }
-                return SuscripcionDetallePage(
-                  id: int.tryParse(state.pathParameters['id']!) ?? 0,
-                  suscripcionService: suscripcionService,
-                );
-              },
+              path: dashboard,
+              builder: (context, state) => DashboardPage(
+                authService: authService,
+                suscripcionService: suscripcionService,
+              ),
+            ),
+            GoRoute(
+              path: suscripciones,
+              builder: (context, state) => SuscripcionesPage(
+                authService: authService,
+                suscripcionService: suscripcionService,
+              ),
+            ),
+            GoRoute(
+              path: perfil,
+              builder: (context, state) => PerfilPage(authService: authService),
+            ),
+            GoRoute(
+              path: '/suscripcion/:id',
+              builder: (context, state) => SuscripcionDetallePage(
+                id: _id(state),
+                authService: authService,
+                suscripcionService: suscripcionService,
+              ),
             ),
           ],
         ),

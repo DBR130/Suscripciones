@@ -16,6 +16,7 @@ void main() {
   const netflixJson = {
     'id': 7,
     'nombre_servicio': 'Netflix',
+    'categoria': 'Streaming',
     'monto': 38900,
     'moneda': 'COP',
     'frecuencia': 'mensual',
@@ -65,6 +66,7 @@ void main() {
     final s = lista.single;
     expect(s.id, 7);
     expect(s.monto, 38900);
+    expect(s.categoria, 'Streaming');
     expect(s.frecuencia, Frecuencia.mensual);
     expect(s.fechaProximoCobro, DateTime(2026, 11, 20));
     expect(s.diasAviso, isNull);
@@ -76,6 +78,7 @@ void main() {
 
     await service.crear(Suscripcion(
       nombreServicio: 'GeForce NOW',
+      categoria: 'Cloud gaming',
       monto: 12.5,
       moneda: 'USD',
       frecuencia: Frecuencia.semanal,
@@ -89,6 +92,7 @@ void main() {
     expect(req.method, 'POST');
     expect(jsonDecode(req.body), {
       'nombre_servicio': 'GeForce NOW',
+      'categoria': 'Cloud gaming',
       'monto': 12.5,
       'moneda': 'USD',
       'frecuencia': 'semanal',
@@ -119,11 +123,34 @@ void main() {
     expect(marcada.estado, EstadoSuscripcion.marcadaParaCancelar);
   });
 
+  test('obtener trae la suscripción con sus pagos y el total', () async {
+    final service = servicio((_) async => json({
+          'suscripcion': netflixJson,
+          'pagos': [
+            {'fecha_pago': '2026-10-20', 'monto': 38900},
+            {'fecha_pago': '2026-09-20', 'monto': 35900},
+          ],
+          'pagado_total': 74800,
+        }));
+
+    final d = await service.obtener(7);
+
+    expect(peticiones.single.url.path, '/api/suscripciones/7');
+    expect(d.suscripcion.nombreServicio, 'Netflix');
+    expect(d.pagos.map((p) => p.fecha), [DateTime(2026, 10, 20), DateTime(2026, 9, 20)]);
+    expect(d.pagos.last.monto, 35900);
+    expect(d.pagadoTotal, 74800);
+  });
+
   test('resumen lee totales por moneda y listas', () async {
     final service = servicio((_) async => json({
           'totales': [
             {'moneda': 'COP', 'gasto_mensual': 58900, 'proyeccion_anual': 706800, 'cantidad': 2},
             {'moneda': 'USD', 'gasto_mensual': 43.33, 'proyeccion_anual': 520, 'cantidad': 1},
+          ],
+          'por_categoria': [
+            {'categoria': 'Streaming', 'moneda': 'COP', 'gasto_mensual': 38900, 'cantidad': 1},
+            {'categoria': null, 'moneda': 'COP', 'gasto_mensual': 20000, 'cantidad': 1},
           ],
           'cantidad_activas': 3,
           'proximos_cobros': [{...netflixJson, 'dias_restantes': 2}],
@@ -135,6 +162,8 @@ void main() {
 
     expect(r.totales.map((t) => t.moneda), ['COP', 'USD']);
     expect(r.totales[1].gastoMensual, 43.33);
+    expect(r.porCategoria.map((c) => c.categoria), ['Streaming', null]);
+    expect(r.porCategoria.first.gastoMensual, 38900);
     expect(r.cantidadActivas, 3);
     expect(r.proximosCobros.single.nombreServicio, 'Netflix');
     expect(r.diasAnticipacion, 7);

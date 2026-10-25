@@ -2,18 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
+import '../Common/Routers.dart';
 import '../models/suscripcion.dart';
 import '../services/api_client.dart';
 import '../services/suscripcion_service.dart';
 import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/app_text_field.dart';
 
-/// Agregar o editar una suscripción manual (pantalla 13 del diseño).
-/// Con [inicial] edita esa suscripción; sin ella, crea una nueva.
-/// Al guardar vuelve con la suscripción guardada como resultado.
+/// Agregar o editar una suscripción (pantalla 13 del diseño).
+/// Con [inicial] edita esa suscripción (y permite eliminarla); sin ella,
+/// crea una nueva. Al guardar vuelve con la suscripción guardada.
 class SuscripcionFormPage extends StatefulWidget {
   const SuscripcionFormPage({
     super.key,
@@ -35,13 +37,14 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
   final _fechaCtrl = TextEditingController();
   final _finPruebaCtrl = TextEditingController();
 
+  String? _categoria;
   String _moneda = 'COP';
   Frecuencia _frecuencia = Frecuencia.mensual;
   DateTime? _fecha;
   bool _esPrueba = false;
   DateTime? _finPrueba;
-  int? _diasAviso; // null = preferencia global
   bool _guardando = false;
+  String? _errorServidor;
 
   bool get _editando => widget.inicial != null;
 
@@ -51,11 +54,11 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
     final s = widget.inicial;
     if (s != null) {
       _nombreCtrl.text = s.nombreServicio;
+      _categoria = s.categoria;
       _montoCtrl.text = Formato.montoParaEditar(s.monto, s.moneda);
       _moneda = s.moneda;
       _frecuencia = s.frecuencia;
       _esPrueba = s.esPruebaGratis;
-      _diasAviso = s.diasAviso;
       _ponerFecha(s.fechaProximoCobro);
       if (s.fechaFinPrueba != null) _ponerFinPrueba(s.fechaFinPrueba!);
     }
@@ -81,10 +84,9 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
   }
 
   Future<DateTime?> _elegirFecha(DateTime? actual) {
-    final hoy = DateUtils.dateOnly(DateTime.now());
     return showDatePicker(
       context: context,
-      initialDate: actual ?? hoy,
+      initialDate: actual ?? DateUtils.dateOnly(DateTime.now()),
       firstDate: DateTime(2000),
       lastDate: DateTime(2100, 12, 31),
       helpText: 'Selecciona la fecha',
@@ -92,27 +94,30 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
   }
 
   String? _validarMonto(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Ingresa el monto';
-    if (Formato.leerMonto(value, _moneda) == null) {
-      return 'Monto no válido (máximo 2 decimales)';
-    }
+    if (value == null || value.trim().isEmpty) return 'Ingresa un monto mayor a 0';
+    final monto = Formato.leerMonto(value, _moneda);
+    if (monto == null) return 'Monto no válido (máximo 2 decimales)';
+    if (monto <= 0) return 'Ingresa un monto mayor a 0';
     return null;
   }
 
   Future<void> _guardar() async {
     FocusScope.of(context).unfocus();
+    setState(() => _errorServidor = null);
     if (!_formKey.currentState!.validate()) return;
 
     final suscripcion = Suscripcion(
       id: widget.inicial?.id,
       nombreServicio: _nombreCtrl.text.trim(),
+      categoria: _categoria,
       monto: Formato.leerMonto(_montoCtrl.text, _moneda)!,
       moneda: _moneda,
       frecuencia: _frecuencia,
       fechaProximoCobro: _fecha!,
       esPruebaGratis: _esPrueba,
       fechaFinPrueba: _esPrueba ? _finPrueba : null,
-      diasAviso: _diasAviso,
+      // Los días de aviso se cambian en el detalle; aquí se conservan.
+      diasAviso: widget.inicial?.diasAviso,
     );
 
     setState(() => _guardando = true);
@@ -121,16 +126,42 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
           ? await widget.suscripcionService.actualizar(suscripcion)
           : await widget.suscripcionService.crear(suscripcion);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_editando ? 'Cambios guardados' : 'Suscripción agregada'),
-        ),
+      mostrarToast(
+        context,
+        _editando ? 'Cambios guardados' : '${guardada.nombreServicio} se agregó a tu lista',
       );
       context.pop(guardada);
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _guardando = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
+      setState(() {
+        _guardando = false;
+        _errorServidor = e.mensaje;
+      });
+    }
+  }
+
+  Future<void> _eliminar() async {
+    final s = widget.inicial!;
+    final ok = await confirmarAccion(
+      context,
+      titulo: '¿Eliminar ${s.nombreServicio}?',
+      texto: 'Se borra de tu lista junto con su historial de pagos y sus recordatorios. '
+          'Esto no cancela el servicio con el proveedor y no se puede deshacer.',
+      boton: 'Eliminar suscripción',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _guardando = true);
+    try {
+      await widget.suscripcionService.eliminar(s.id!);
+      if (!mounted) return;
+      mostrarToast(context, '${s.nombreServicio} se eliminó de tu lista');
+      context.go(Routers.dashboard);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _guardando = false;
+        _errorServidor = e.mensaje;
+      });
     }
   }
 
@@ -164,11 +195,14 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
                 children: [
+                  if (_errorServidor != null) ...[
+                    BannerError(_errorServidor!),
+                    const SizedBox(height: 14),
+                  ],
                   AppTextField(
                     controller: _nombreCtrl,
                     label: 'Servicio',
                     hint: 'ej. HBO Max',
-                    icon: Icons.subscriptions_outlined,
                     textInputAction: TextInputAction.next,
                     validator: (v) => v == null || v.trim().isEmpty
                         ? 'Ingresa el nombre del servicio'
@@ -177,15 +211,21 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
                             : null,
                   ),
                   const SizedBox(height: 14),
+                  const AppEtiqueta('Categoría (opcional)'),
+                  const SizedBox(height: 7),
+                  _SelectorCategoria(
+                    seleccion: _categoria,
+                    onChanged: (c) => setState(() => _categoria = c),
+                  ),
+                  const SizedBox(height: 14),
                   AppTextField(
                     controller: _montoCtrl,
                     label: 'Monto ($_moneda)',
                     hint: _moneda == 'COP' ? '24900' : '9.99',
-                    icon: Icons.payments_outlined,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     validator: _validarMonto,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   const AppEtiqueta('Moneda'),
                   const SizedBox(height: 7),
                   AppPills<String>(
@@ -193,7 +233,7 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
                     seleccion: _moneda,
                     onChanged: (m) => setState(() => _moneda = m),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   const AppEtiqueta('Frecuencia'),
                   const SizedBox(height: 7),
                   AppPills<Frecuencia>(
@@ -205,12 +245,12 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
                     seleccion: _frecuencia,
                     onChanged: (f) => setState(() => _frecuencia = f),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   AppTextField(
                     controller: _fechaCtrl,
-                    label: 'Próximo cobro',
-                    hint: 'dd/mm/aaaa',
-                    icon: Icons.calendar_today_outlined,
+                    label: _esPrueba ? 'Primer cobro (al terminar la prueba)' : 'Próximo cobro',
+                    hint: 'Elige una fecha',
+                    suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
                     readOnly: true,
                     validator: (_) => _fecha == null ? 'Elige la fecha del próximo cobro' : null,
                     onTap: () async {
@@ -220,12 +260,19 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
                   ),
                   const SizedBox(height: 14),
                   AppCard(
-                    padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+                    padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
                     child: SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       value: _esPrueba,
                       onChanged: (v) => setState(() => _esPrueba = v),
                       activeTrackColor: AppColors.primary,
+                      inactiveTrackColor: AppColors.surface,
+                      inactiveThumbColor: const Color(0xFF5B6A85),
+                      trackOutlineColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.selected)
+                            ? Colors.transparent
+                            : AppColors.lineStrong,
+                      ),
                       title: const Text(
                         'Es una prueba gratis',
                         style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
@@ -241,8 +288,8 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
                     AppTextField(
                       controller: _finPruebaCtrl,
                       label: 'Fin de la prueba',
-                      hint: 'dd/mm/aaaa',
-                      icon: Icons.event_outlined,
+                      hint: 'Elige una fecha',
+                      suffixIcon: const Icon(Icons.event_outlined, size: 18),
                       readOnly: true,
                       validator: (_) => _esPrueba && _finPrueba == null
                           ? 'Elige cuándo termina la prueba'
@@ -253,19 +300,6 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
                       },
                     ),
                   ],
-                  const SizedBox(height: 18),
-                  const AppEtiqueta('Recordatorio de esta suscripción'),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Global usa tu preferencia de Configuración',
-                    style: TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  AppPills<int?>(
-                    opciones: const [(null, 'Global'), (1, '1 día'), (3, '3 días'), (7, '7 días')],
-                    seleccion: _diasAviso,
-                    onChanged: (d) => setState(() => _diasAviso = d),
-                  ),
                 ],
               ),
             ),
@@ -278,20 +312,81 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
             ),
             child: SafeArea(
               top: false,
-              child: FilledButton(
-                onPressed: _guardando ? null : _guardar,
-                child: _guardando
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('Guardar suscripción'),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  FilledButton(
+                    onPressed: _guardando ? null : _guardar,
+                    child: _guardando
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : Text(_editando ? 'Guardar cambios' : 'Guardar suscripción'),
+                  ),
+                  if (_editando) ...[
+                    const SizedBox(height: 4),
+                    TextButton(
+                      onPressed: _guardando ? null : _eliminar,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.error,
+                        minimumSize: const Size.fromHeight(42),
+                        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                      child: const Text('Eliminar suscripción'),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Píldoras con las categorías del diseño, más "Sin categoría".
+class _SelectorCategoria extends StatelessWidget {
+  const _SelectorCategoria({required this.seleccion, required this.onChanged});
+
+  final String? seleccion;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final opciones = <(String?, String)>[
+      (null, 'Sin categoría'),
+      for (final c in Suscripcion.categorias) (c, c),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (valor, texto) in opciones)
+          Semantics(
+            selected: valor == seleccion,
+            button: true,
+            child: TextButton(
+              onPressed: () => onChanged(valor),
+              style: TextButton.styleFrom(
+                backgroundColor: valor == seleccion ? AppColors.primary : Colors.transparent,
+                foregroundColor: valor == seleccion ? Colors.white : AppColors.textSoft,
+                side: valor == seleccion
+                    ? BorderSide.none
+                    : const BorderSide(color: AppColors.lineStrong),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+              ),
+              child: Text(texto),
+            ),
+          ),
+      ],
     );
   }
 }

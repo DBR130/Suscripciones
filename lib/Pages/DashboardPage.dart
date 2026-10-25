@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,12 +11,15 @@ import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../services/suscripcion_service.dart';
 import '../utils/formato.dart';
+import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/estado_vacio.dart';
 import '../widgets/suscripcion_card.dart';
 
-/// Dashboard (pantalla 07 del diseño): gasto del mes, próximos 7 días y el
-/// resto de suscripciones ordenadas por fecha de cobro.
+/// Dashboard (pantalla 07 del diseño): gasto del mes, próximos 7 días, el
+/// resto ordenado por fecha y el gasto por categoría.
 class DashboardPage extends StatefulWidget {
   const DashboardPage({
     super.key,
@@ -58,12 +63,7 @@ class _DashboardPageState extends State<DashboardPage> {
         _error = null;
       });
     } on ApiException catch (e) {
-      if (!mounted) return;
-      if (_suscripciones == null) {
-        setState(() => _error = e.mensaje);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
-      }
+      if (mounted) setState(() => _error = e.mensaje);
     }
   }
 
@@ -103,12 +103,12 @@ class _DashboardPageState extends State<DashboardPage> {
             _Encabezado(
               resumen: _resumen,
               iniciales: widget.authService.usuario?.iniciales,
-              proximoCobro: _proximoCobro(suscripciones, hoy),
-              onPerfil: () => _abrir(Routers.perfil),
+              proximo: suscripciones.isEmpty ? null : suscripciones.first.fechaClave,
+              onPerfil: () => context.go(Routers.perfil),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-              child: _cuerpo(pronto, despues, tarjeta),
+              padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
+              child: _cuerpo(pronto, despues, tarjeta, diasGlobales),
             ),
           ],
         ),
@@ -120,17 +120,22 @@ class _DashboardPageState extends State<DashboardPage> {
     List<Suscripcion> pronto,
     List<Suscripcion> despues,
     Widget Function(Suscripcion) tarjeta,
+    int diasGlobales,
   ) {
-    if (_error != null) {
-      return _Mensaje(
-        icono: Icons.cloud_off_outlined,
-        titulo: 'No pudimos cargar tus suscripciones',
-        texto: _error!,
-        boton: 'Reintentar',
-        onPressed: () {
-          setState(() => _error = null);
-          _cargar();
-        },
+    if (_error != null && _suscripciones == null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          BannerError(_error!),
+          const SizedBox(height: 12),
+          AppBotonSecundario(
+            texto: 'Reintentar',
+            onPressed: () {
+              setState(() => _error = null);
+              _cargar();
+            },
+          ),
+        ],
       );
     }
     if (_suscripciones == null) {
@@ -140,24 +145,25 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
     if (_suscripciones!.isEmpty) {
-      return _Mensaje(
-        icono: Icons.receipt_long_outlined,
+      return EstadoVacio(
         titulo: 'Aún no tienes suscripciones',
-        texto: 'Agrega la primera para ver cuánto pagas al mes y recibir '
-            'avisos antes de cada cobro.',
-        boton: 'Agregar mi primera suscripción',
+        texto: 'Agrega la primera con su monto y la fecha del próximo cobro. '
+            'Te avisaremos $diasGlobales días antes.',
+        boton: 'Agregar suscripción',
         onPressed: () => _abrir(Routers.nuevaSuscripcion),
       );
     }
 
+    final categorias = _resumen?.porCategoria ?? const [];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (_error != null) ...[BannerError(_error!), const SizedBox(height: 14)],
         if (pronto.isNotEmpty) ...[
           _TituloSeccion(
             titulo: 'Próximos 7 días',
             cantidad: pronto.length,
-            detalle: _porCobrar(pronto),
+            nota: _porCobrar(pronto),
           ),
           ...pronto.map(tarjeta),
           const SizedBox(height: 11),
@@ -166,27 +172,24 @@ class _DashboardPageState extends State<DashboardPage> {
           _TituloSeccion(
             titulo: 'Más adelante',
             cantidad: despues.length,
-            detalle: 'Ordenadas por cobro',
+            nota: 'Ordenadas por cobro',
           ),
           ...despues.map(tarjeta),
           const SizedBox(height: 11),
         ],
-        OutlinedButton(
+        if (categorias.any((c) => c.categoria != null)) ...[
+          _GastoPorCategoria(categorias),
+          const SizedBox(height: 22),
+        ],
+        AppBotonPunteado(
+          texto: '+ Agregar suscripción manualmente',
           onPressed: () => _abrir(Routers.nuevaSuscripcion),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textSoft,
-            side: const BorderSide(color: AppColors.lineStrong),
-            shape: const StadiumBorder(),
-            minimumSize: const Size.fromHeight(48),
-            textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-          ),
-          child: const Text('+ Agregar suscripción manualmente'),
         ),
       ],
     );
   }
 
-  /// "$ 65.800 por cobrar" (las pruebas gratis no suman).
+  /// "$65.800 por cobrar" (las pruebas gratis no suman).
   String _porCobrar(List<Suscripcion> lista) {
     final porMoneda = <String, double>{};
     for (final s in lista.where((s) => !s.esPruebaGratis)) {
@@ -196,28 +199,21 @@ class _DashboardPageState extends State<DashboardPage> {
     final textos = porMoneda.entries.map((e) => Formato.moneda(e.value, e.key));
     return '${textos.join(' + ')} por cobrar';
   }
-
-  DateTime? _proximoCobro(List<Suscripcion> lista, DateTime hoy) {
-    final fechas = lista
-        .where((s) => !s.esPruebaGratis && !s.fechaProximoCobro.isBefore(hoy))
-        .map((s) => s.fechaProximoCobro)
-        .toList()
-      ..sort();
-    return fechas.isEmpty ? null : fechas.first;
-  }
 }
 
 class _Encabezado extends StatelessWidget {
   const _Encabezado({
     required this.resumen,
     required this.iniciales,
-    required this.proximoCobro,
+    required this.proximo,
     required this.onPerfil,
   });
 
   final Resumen? resumen;
   final String? iniciales;
-  final DateTime? proximoCobro;
+
+  /// Fecha de la primera tarjeta (cobro o fin de prueba).
+  final DateTime? proximo;
   final VoidCallback onPerfil;
 
   @override
@@ -227,11 +223,10 @@ class _Encabezado extends StatelessWidget {
     final principal = totales.isEmpty ? null : totales.first;
     final otras = totales.skip(1);
     final pruebas = resumen?.pruebasPorTerminar ?? const [];
-
+    final activas = resumen?.cantidadActivas ?? 0;
     final proyeccion = totales.isEmpty
         ? Formato.moneda(0, 'COP')
         : totales.map((t) => Formato.moneda(t.proyeccionAnual, t.moneda)).join(' + ');
-    final activas = resumen?.cantidadActivas ?? 0;
 
     return AppHeader(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
@@ -242,14 +237,15 @@ class _Encabezado extends StatelessWidget {
             children: [
               const _MarcaPequena(),
               const Spacer(),
-              Tooltip(
-                message: 'Perfil y configuración',
+              Semantics(
+                button: true,
+                label: 'Perfil',
                 child: InkWell(
                   onTap: onPerfil,
                   customBorder: const CircleBorder(),
                   child: Container(
-                    width: 36,
-                    height: 36,
+                    width: 34,
+                    height: 34,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: AppColors.avatar,
@@ -272,15 +268,7 @@ class _Encabezado extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Tarjeta translúcida ("glass") del diseño.
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.36)),
-            ),
+          _Glass(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -294,19 +282,23 @@ class _Encabezado extends StatelessWidget {
                     style: const TextStyle(
                       color: AppColors.text,
                       fontSize: 38,
+                      height: 1.05,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: -0.9,
+                      letterSpacing: -0.95,
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
                 ),
                 for (final t in otras)
-                  Text(
-                    '+ ${Formato.moneda(t.gastoMensual, t.moneda)} al mes',
-                    style: const TextStyle(
-                      color: AppColors.text,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      '+ ${Formato.moneda(t.gastoMensual, t.moneda)} al mes',
+                      style: const TextStyle(
+                        color: AppColors.text,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 const SizedBox(height: 3),
@@ -318,15 +310,14 @@ class _Encabezado extends StatelessWidget {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                if (pruebas.isNotEmpty || proximoCobro != null) ...[
+                if (activas > 0 && proximo != null) ...[
                   const SizedBox(height: 13),
                   Wrap(
                     spacing: 7,
                     runSpacing: 7,
                     children: [
                       if (pruebas.isNotEmpty) _ChipPrueba(pruebas: pruebas),
-                      if (proximoCobro != null)
-                        _Chip(texto: 'Próximo cobro: ${Formato.fecha(proximoCobro!)}'),
+                      _Chip(texto: 'Próximo cobro: ${Formato.fechaCorta(proximo!)}'),
                     ],
                   ),
                 ],
@@ -334,6 +325,48 @@ class _Encabezado extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Tarjeta translúcida con desenfoque ("glass") del diseño.
+class _Glass extends StatelessWidget {
+  const _Glass({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final radio = BorderRadius.circular(22);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radio,
+        boxShadow: const [
+          BoxShadow(color: Color(0x29000000), blurRadius: 26, offset: Offset(0, 12)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radio,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 15),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.15),
+              borderRadius: radio,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.36)),
+              // Brillo interior en el borde superior.
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: const Alignment(0, -0.85),
+                colors: [Colors.white.withValues(alpha: 0.12), Colors.transparent],
+              ),
+            ),
+            child: child,
+          ),
+        ),
       ),
     );
   }
@@ -408,21 +441,20 @@ class _ChipPrueba extends StatelessWidget {
     final String texto;
     if (pruebas.length == 1) {
       final dias = pruebas.first.diasHasta(hoy);
-      final cuando = switch (dias) {
+      texto = '1 prueba gratis termina ${switch (dias) {
         0 => 'hoy',
-        1 => 'mañana',
+        1 => 'en 1 día',
         _ => 'en $dias días',
-      };
-      texto = '1 prueba gratis termina $cuando';
+      }}';
     } else {
       texto = '${pruebas.length} pruebas gratis terminan esta semana';
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
       decoration: BoxDecoration(
-        color: AppColors.amberBg,
+        color: const Color(0x24FBBF24), // rgba(251,191,36,.14)
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.amber.withValues(alpha: 0.42)),
+        border: Border.all(color: const Color(0x6BFBBF24)), // rgba(251,191,36,.42)
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -446,11 +478,11 @@ class _ChipPrueba extends StatelessWidget {
 }
 
 class _TituloSeccion extends StatelessWidget {
-  const _TituloSeccion({required this.titulo, required this.cantidad, required this.detalle});
+  const _TituloSeccion({required this.titulo, required this.cantidad, required this.nota});
 
   final String titulo;
   final int cantidad;
-  final String detalle;
+  final String nota;
 
   @override
   Widget build(BuildContext context) {
@@ -477,7 +509,7 @@ class _TituloSeccion extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              detalle,
+              nota,
               textAlign: TextAlign.right,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -490,54 +522,84 @@ class _TituloSeccion extends StatelessWidget {
   }
 }
 
-/// Estado vacío o de error, con un botón de acción.
-class _Mensaje extends StatelessWidget {
-  const _Mensaje({
-    required this.icono,
-    required this.titulo,
-    required this.texto,
-    required this.boton,
-    required this.onPressed,
-  });
+/// Gasto mensual por categoría (GET /api/resumen → por_categoria), con una
+/// barra proporcional al mayor gasto de la misma moneda.
+class _GastoPorCategoria extends StatelessWidget {
+  const _GastoPorCategoria(this.categorias);
 
-  final IconData icono;
-  final String titulo;
-  final String texto;
-  final String boton;
-  final VoidCallback onPressed;
+  final List<TotalCategoria> categorias;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(22),
-      child: Column(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: AppColors.flagBlueBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.lineStrong),
-            ),
-            child: Icon(icono, color: AppColors.link),
+    final maximo = <String, double>{};
+    for (final c in categorias) {
+      if (c.gastoMensual > (maximo[c.moneda] ?? 0)) maximo[c.moneda] = c.gastoMensual;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(2, 0, 2, 9),
+          child: Text(
+            'Gasto por categoría',
+            style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w800),
           ),
-          const SizedBox(height: 16),
-          Text(
-            titulo,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.text, fontSize: 17, fontWeight: FontWeight.w800),
+        ),
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Column(
+            children: [
+              for (final (i, c) in categorias.indexed)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                  decoration: BoxDecoration(
+                    border: i == categorias.length - 1
+                        ? null
+                        : const Border(bottom: BorderSide(color: AppColors.divider)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${c.categoria ?? 'Sin categoría'} · ${c.cantidad}',
+                              style: const TextStyle(
+                                color: AppColors.muted,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            '${Formato.moneda(c.gastoMensual, c.moneda)}/mes',
+                            style: const TextStyle(
+                              color: AppColors.text,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 7),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(99),
+                        child: LinearProgressIndicator(
+                          value: (maximo[c.moneda] ?? 0) == 0 ? 0 : c.gastoMensual / maximo[c.moneda]!,
+                          minHeight: 5,
+                          backgroundColor: AppColors.bg,
+                          color: c.categoria == null ? AppColors.lineStrong : AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            texto,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.muted, fontSize: 13.5, height: 1.45),
-          ),
-          const SizedBox(height: 18),
-          FilledButton(onPressed: onPressed, child: Text(boton)),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

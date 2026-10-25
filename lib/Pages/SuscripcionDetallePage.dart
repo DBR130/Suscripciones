@@ -5,24 +5,28 @@ import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
 import '../models/suscripcion.dart';
 import '../services/api_client.dart';
+import '../services/auth_service.dart';
 import '../services/suscripcion_service.dart';
 import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/logo_servicio.dart';
-import '../widgets/suscripcion_card.dart';
 
-/// Detalle de una suscripción (pantalla 09 del diseño): datos, editar,
-/// marcar "quiero cancelar" / cancelada y eliminar.
+/// Detalle de una suscripción (pantalla 09 del diseño): datos, historial de
+/// pagos, recordatorio propio, "quiero cancelar" y cancelar. Editar y
+/// eliminar están en el formulario (botón "Editar" del encabezado).
 class SuscripcionDetallePage extends StatefulWidget {
   const SuscripcionDetallePage({
     super.key,
     required this.id,
+    required this.authService,
     required this.suscripcionService,
   });
 
   final int id;
+  final AuthService authService;
   final SuscripcionService suscripcionService;
 
   @override
@@ -30,9 +34,12 @@ class SuscripcionDetallePage extends StatefulWidget {
 }
 
 class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
-  Suscripcion? _suscripcion;
+  DetalleSuscripcion? _detalle;
+  int _diasGlobales = 3;
   String? _error;
   bool _ocupado = false;
+
+  Suscripcion? get _s => _detalle?.suscripcion;
 
   @override
   void initState() {
@@ -42,8 +49,16 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
 
   Future<void> _cargar() async {
     try {
-      final s = await widget.suscripcionService.obtener(widget.id);
-      if (mounted) setState(() => _suscripcion = s);
+      final resultados = await Future.wait([
+        widget.suscripcionService.obtener(widget.id),
+        widget.authService.obtenerDiasAnticipacion(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _detalle = resultados[0] as DetalleSuscripcion;
+        _diasGlobales = resultados[1] as int;
+        _error = null;
+      });
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
     }
@@ -55,93 +70,67 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
     try {
       await accion();
     } on ApiException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.mensaje)));
-      }
+      if (mounted) mostrarToast(context, e.mensaje);
     } finally {
       if (mounted) setState(() => _ocupado = false);
     }
+  }
+
+  void _reemplazar(Suscripcion s) {
+    setState(() => _detalle = DetalleSuscripcion(
+          suscripcion: s,
+          pagos: _detalle!.pagos,
+          pagadoTotal: _detalle!.pagadoTotal,
+        ));
   }
 
   Future<void> _cambiarEstado(EstadoSuscripcion estado, String mensaje) {
     return _accion(() async {
       final s = await widget.suscripcionService.cambiarEstado(widget.id, estado);
       if (!mounted) return;
-      setState(() => _suscripcion = s);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensaje)));
+      _reemplazar(s);
+      mostrarToast(context, mensaje);
+    });
+  }
+
+  Future<void> _cambiarDias(int dias) {
+    return _accion(() async {
+      final s = await widget.suscripcionService.actualizar(_s!.conDiasAviso(dias));
+      if (!mounted) return;
+      _reemplazar(s);
+      mostrarToast(context, 'Te avisaremos ${dias == 1 ? '1 día' : '$dias días'} antes de este cobro');
     });
   }
 
   Future<void> _editar() async {
-    final editada = await context.push<Suscripcion>(
-      Routers.editarSuscripcion(widget.id),
-      extra: _suscripcion,
-    );
-    if (editada != null && mounted) setState(() => _suscripcion = editada);
+    await context.push(Routers.editarSuscripcion(widget.id), extra: _s);
+    // Si se eliminó, el formulario ya llevó al dashboard y esta pantalla no existe.
+    if (mounted) _cargar();
   }
 
-  Future<void> _marcarCancelada() async {
-    final ok = await _confirmar(
-      titulo: '¿Ya cancelaste ${_suscripcion!.nombreServicio}?',
+  /// La guía de cancelación (pantalla 10) llega en otra fase; por ahora se
+  /// confirma directamente que ya se canceló con el proveedor.
+  Future<void> _cancelar() async {
+    final s = _s!;
+    final ok = await confirmarAccion(
+      context,
+      titulo: '¿Ya cancelaste ${s.nombreServicio}?',
       texto: 'Márcala como cancelada solo si ya la cancelaste con el proveedor. '
-          'Dejará de contar en tu gasto y no recibirás más avisos de ella.',
+          'Deja de sumar en tu gasto y apagamos sus recordatorios.',
       boton: 'Sí, ya la cancelé',
     );
-    if (ok) await _cambiarEstado(EstadoSuscripcion.cancelada, 'Suscripción marcada como cancelada');
-  }
-
-  Future<void> _eliminar() async {
-    final ok = await _confirmar(
-      titulo: '¿Eliminar ${_suscripcion!.nombreServicio}?',
-      texto: 'Se borrará de tu lista junto con su historial. '
-          'Esta acción no se puede deshacer.',
-      boton: 'Eliminar',
-      peligro: true,
-    );
-    if (!ok) return;
+    if (!ok || !mounted) return;
     await _accion(() async {
-      await widget.suscripcionService.eliminar(widget.id);
+      await widget.suscripcionService.cambiarEstado(widget.id, EstadoSuscripcion.cancelada);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Suscripción eliminada')),
-      );
+      mostrarToast(context, '${s.nombreServicio} quedó en canceladas');
       context.pop();
     });
   }
 
-  Future<bool> _confirmar({
-    required String titulo,
-    required String texto,
-    required String boton,
-    bool peligro = false,
-  }) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        title: Text(titulo),
-        content: Text(texto, style: const TextStyle(color: AppColors.muted, height: 1.4)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(
-              foregroundColor: peligro ? AppColors.error : AppColors.amber,
-            ),
-            child: Text(boton),
-          ),
-        ],
-      ),
-    );
-    return ok ?? false;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final s = _suscripcion;
+    final s = _s;
     if (s == null) {
       return Scaffold(
         body: Column(
@@ -151,17 +140,11 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
               child: AppBotonVolver(onPressed: () => context.pop()),
             ),
             Expanded(
-              child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
                 child: _error == null
-                    ? const CircularProgressIndicator()
-                    : Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          _error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: AppColors.muted),
-                        ),
-                      ),
+                    ? const Center(child: CircularProgressIndicator())
+                    : Column(children: [BannerError(_error!)]),
               ),
             ),
           ],
@@ -180,7 +163,17 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppBotonVolver(onPressed: () => context.pop()),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    AppBotonVolver(onPressed: () => context.pop()),
+                    AppBotonVolver(
+                      texto: 'Editar',
+                      icono: Icons.edit_outlined,
+                      onPressed: _ocupado ? () {} : _editar,
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -201,7 +194,7 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            descripcionSuscripcion(s),
+                            s.categoria ?? 'Registro manual',
                             style: const TextStyle(
                               color: AppColors.mutedOnGradient,
                               fontSize: 12.5,
@@ -234,109 +227,173 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
                     fontSize: 32,
                     fontWeight: FontWeight.w800,
                     letterSpacing: -0.8,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
             ),
           ),
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-              children: [
-                if (marcada || cancelada) ...[
-                  _Banner(
-                    cancelada
-                        ? 'Esta suscripción está cancelada.'
-                        : 'Tú marcaste esta suscripción para cancelar.',
-                  ),
+            child: RefreshIndicator(
+              onRefresh: _cargar,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                children: [
+                  if (marcada || cancelada) ...[
+                    _AvisoAmbar(
+                      cancelada
+                          ? 'Esta suscripción está cancelada.'
+                          : 'Tú marcaste esta suscripción para cancelar.',
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  _Datos(_detalle!),
                   const SizedBox(height: 14),
+                  _Historial(_detalle!),
+                  if (!cancelada) ...[
+                    const SizedBox(height: 14),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Recordatorio de esta suscripción',
+                            style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Sobrescribe tu preferencia global',
+                            style: TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 12),
+                          AppPills<int>(
+                            opciones: const [(1, '1 día'), (3, '3 días'), (7, '7 días')],
+                            seleccion: s.diasAvisoEfectivos(_diasGlobales),
+                            onChanged: _ocupado ? null : _cambiarDias,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
+                  if (cancelada)
+                    AppBotonSecundario(
+                      texto: 'Reactivar suscripción',
+                      onPressed: _ocupado
+                          ? null
+                          : () => _cambiarEstado(EstadoSuscripcion.activa, 'Suscripción reactivada'),
+                    )
+                  else ...[
+                    AppBotonSecundario(
+                      texto: 'Cancelar esta suscripción',
+                      ambar: true,
+                      onPressed: _ocupado ? null : _cancelar,
+                    ),
+                    const SizedBox(height: 9),
+                    AppBotonSecundario(
+                      texto: marcada
+                          ? 'Quitar marca de "quiero cancelar"'
+                          : 'Marcar como "quiero cancelar"',
+                      onPressed: _ocupado
+                          ? null
+                          : () => marcada
+                              ? _cambiarEstado(EstadoSuscripcion.activa, 'Quitamos la marca')
+                              : _cambiarEstado(
+                                  EstadoSuscripcion.marcadaParaCancelar,
+                                  'Marcada para cancelar',
+                                ),
+                    ),
+                  ],
                 ],
-                AppCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                  child: Column(children: _datos(s)),
-                ),
-                const SizedBox(height: 18),
-                AppBotonSecundario(
-                  texto: 'Editar suscripción',
-                  icon: Icons.edit_outlined,
-                  onPressed: _ocupado ? null : _editar,
-                ),
-                const SizedBox(height: 9),
-                if (cancelada)
-                  AppBotonSecundario(
-                    texto: 'Reactivar suscripción',
-                    onPressed: _ocupado
-                        ? null
-                        : () => _cambiarEstado(EstadoSuscripcion.activa, 'Suscripción reactivada'),
-                  )
-                else ...[
-                  AppBotonSecundario(
-                    texto: 'Marcar como cancelada',
-                    ambar: true,
-                    onPressed: _ocupado ? null : _marcarCancelada,
-                  ),
-                  const SizedBox(height: 9),
-                  AppBotonSecundario(
-                    texto: marcada
-                        ? 'Quitar marca de "quiero cancelar"'
-                        : 'Marcar como "quiero cancelar"',
-                    onPressed: _ocupado
-                        ? null
-                        : () => marcada
-                            ? _cambiarEstado(EstadoSuscripcion.activa, 'Marca quitada')
-                            : _cambiarEstado(
-                                EstadoSuscripcion.marcadaParaCancelar,
-                                'Marcada para cancelar',
-                              ),
-                  ),
-                ],
-                const SizedBox(height: 9),
-                TextButton.icon(
-                  onPressed: _ocupado ? null : _eliminar,
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('Eliminar suscripción'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                    minimumSize: const Size.fromHeight(46),
-                    textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  List<Widget> _datos(Suscripcion s) {
+class _Datos extends StatelessWidget {
+  const _Datos(this.detalle);
+
+  final DetalleSuscripcion detalle;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = detalle.suscripcion;
     final filas = <(String, String)>[
       ('Frecuencia', s.frecuencia.etiqueta),
-      ('Próximo cobro', Formato.fecha(s.fechaProximoCobro)),
       if (s.esPruebaGratis && s.fechaFinPrueba != null)
         ('Fin de la prueba', Formato.fecha(s.fechaFinPrueba!)),
-      ('Moneda', s.moneda),
-      (
-        'Recordatorio',
-        s.diasAviso == null
-            ? 'Preferencia global'
-            : s.diasAviso == 1
-                ? '1 día antes'
-                : '${s.diasAviso} días antes',
-      ),
-      ('Estado', s.estado.etiqueta),
+      (s.esPruebaGratis ? 'Primer cobro' : 'Próximo cobro', Formato.fecha(s.fechaProximoCobro)),
+      ('Pagado en total', Formato.moneda(detalle.pagadoTotal, s.moneda)),
+      if (s.desde != null) ('Desde', Formato.mesAnio(s.desde!)),
       ('Origen', s.origen == 'notificacion' ? 'Detección por notificación' : 'Registro manual'),
-      if (s.creadoEn != null) ('Registrada el', Formato.fecha(s.creadoEn!)),
     ];
-    return [
-      for (final (i, (clave, valor)) in filas.indexed)
-        FilaDato(clave, valor, ultima: i == filas.length - 1),
-    ];
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Column(
+        children: [
+          for (final (i, (clave, valor)) in filas.indexed)
+            FilaDato(clave, valor, ultima: i == filas.length - 1),
+        ],
+      ),
+    );
   }
 }
 
-class _Banner extends StatelessWidget {
-  const _Banner(this.texto);
+class _Historial extends StatelessWidget {
+  const _Historial(this.detalle);
+
+  final DetalleSuscripcion detalle;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = detalle.suscripcion;
+    final pagos = detalle.pagos;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(2, 0, 2, 9),
+          child: Text(
+            'Historial de pagos',
+            style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w800),
+          ),
+        ),
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Column(
+            children: pagos.isEmpty
+                ? [
+                    FilaDato(
+                      s.esPruebaGratis
+                          ? 'Sin pagos aún: está en prueba gratis'
+                          : 'Sin pagos registrados aún',
+                      Formato.moneda(0, s.moneda),
+                      ultima: true,
+                    ),
+                  ]
+                : [
+                    for (final (i, p) in pagos.indexed)
+                      FilaDato(
+                        s.frecuencia == Frecuencia.anual
+                            ? Formato.fecha(p.fecha)
+                            : Formato.fechaCorta(p.fecha),
+                        Formato.moneda(p.monto, s.moneda),
+                        ultima: i == pagos.length - 1,
+                      ),
+                  ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AvisoAmbar extends StatelessWidget {
+  const _AvisoAmbar(this.texto);
 
   final String texto;
 
