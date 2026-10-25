@@ -14,7 +14,9 @@ class AppTextField extends StatelessWidget {
     this.keyboardType,
     this.textInputAction,
     this.onFieldSubmitted,
+    this.onTap,
     this.obscureText = false,
+    this.readOnly = false,
   });
 
   final String label;
@@ -26,7 +28,11 @@ class AppTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onFieldSubmitted;
+
+  /// Con [readOnly], sirve para abrir un selector (por ejemplo, de fecha).
+  final VoidCallback? onTap;
   final bool obscureText;
+  final bool readOnly;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +42,9 @@ class AppTextField extends StatelessWidget {
       keyboardType: keyboardType,
       textInputAction: textInputAction,
       onFieldSubmitted: onFieldSubmitted,
+      onTap: onTap,
       obscureText: obscureText,
+      readOnly: readOnly,
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,

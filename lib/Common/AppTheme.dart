@@ -12,6 +12,31 @@ class AppColors {
   static const Color accent = Color(0xFF60A5FA); // --accent
   static const Color primary = Color(0xFF2563EB); // --btn-bg / --mark-bg
   static const Color error = Color(0xFFF87171);
+
+  // Colores adicionales de design/SubTrack_Simulacion.html.
+  static const Color link = Color(0xFF7DB3FF);
+  static const Color textSoft = Color(0xFFD6E3FB); // texto de botones secundarios
+  static const Color mutedOnGradient = Color(0xFFA6B6D0);
+  static const Color lineStrong = Color(0xFF2C3B58); // borde de botones/pills
+  static const Color divider = Color(0xFF1E2A40);
+  static const Color panel = Color(0xFF0E1626); // barra inferior fija
+  static const Color chip = Color(0xFF1A263D);
+  static const Color avatar = Color(0xFF1C2942);
+  static const Color cardFlag = Color(0xFF17203A); // tarjeta resaltada
+  static const Color flagBlueBg = Color(0xFF16273F);
+  static const Color flagBlueText = Color(0xFFA9CCFF);
+  static const Color amber = Color(0xFFFBD167); // avisos y acciones de cancelar
+  static const Color amberStrong = Color(0xFFFCD34D);
+  static const Color amberBorder = Color(0x73FBBF24); // rgba(251,191,36,.45)
+  static const Color amberBg = Color(0x21FBBF24); // rgba(251,191,36,.13)
+
+  /// Degradado de los encabezados (dashboard, detalle, perfil...).
+  static const LinearGradient header = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF0D1526), Color(0xFF152443), Color(0xFF1E3A6E)],
+    stops: [0, 0.55, 1],
+  );
 }
 
 /// Tema de la app: aquí se define una sola vez cómo se ven
