@@ -6,6 +6,18 @@
 // necesitan.
 import pg from 'pg';
 
+// Cómo convierte "pg" algunos tipos de PostgreSQL a JavaScript:
+// - NUMERIC (montos): por defecto llega como texto ("45900.00") para no perder
+//   precisión. Con 12 dígitos y 2 decimales un número de JS basta, así que se
+//   convierte a número para que la API devuelva 45900 y no "45900.00".
+// - DATE: por defecto se convierte a un Date a la medianoche de la zona horaria
+//   del PC, y al enviarlo como JSON puede cambiar de día. Se deja como el texto
+//   "AAAA-MM-DD" que manda PostgreSQL.
+const OID_NUMERIC = 1700;
+const OID_DATE = 1082;
+pg.types.setTypeParser(OID_NUMERIC, (valor) => Number(valor));
+pg.types.setTypeParser(OID_DATE, (valor) => valor);
+
 export const pool = new pg.Pool({
   // Toda la información (usuario, contraseña, host, puerto y base de datos)
   // viene en una sola cadena definida en el archivo .env.
@@ -30,4 +42,23 @@ pool.on('error', (err) => {
  */
 export function query(text, params) {
   return pool.query(text, params);
+}
+
+/**
+ * Ejecuta varias consultas como una sola unidad (transacción): si alguna
+ * falla, se deshacen todas. `fn` recibe un cliente y debe usar client.query().
+ */
+export async function transaccion(fn) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const resultado = await fn(client);
+    await client.query('COMMIT');
+    return resultado;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }

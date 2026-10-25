@@ -1,7 +1,7 @@
 # Backend de SubTrack
 
-API REST en **Node.js 24 + Express 5 + PostgreSQL**. En esta fase solo cubre la
-autenticación (registro, login y sesión con JWT).
+API REST en **Node.js 24 + Express 5 + PostgreSQL**: autenticación con JWT,
+suscripciones, resumen del dashboard y preferencias del usuario.
 
 ## Estructura
 
@@ -9,13 +9,20 @@ autenticación (registro, login y sesión con JWT).
 backend/
 ├── .env.example          Plantilla de variables de entorno
 ├── package.json
-└── src/
-    ├── app.js            Punto de entrada: crea el servidor y monta las rutas
-    ├── db.js             Pool de conexiones a PostgreSQL
-    ├── routes/           Qué URL atiende cada controlador
-    ├── controllers/      Lógica de cada endpoint (consultas a la BD)
-    ├── middlewares/      Validación de datos, verificación del token y errores
-    └── utils/            Utilidades (HttpError)
+├── db/
+│   ├── migraciones/      001_inicial.sql, 002_modelo_completo.sql, ...
+│   ├── migrar.js         npm run db:migrate
+│   └── README.md         Cómo crear la BD y correr migraciones
+├── src/
+│   ├── server.js         Punto de entrada: valida el .env y abre el puerto
+│   ├── app.js            Crea la app Express y monta las rutas
+│   ├── db.js             Pool de conexiones a PostgreSQL y transacciones
+│   ├── routes/           Qué URL atiende cada controlador
+│   ├── controllers/      Lógica de cada endpoint (consultas a la BD)
+│   ├── middlewares/      Validación de datos, verificación del token y errores
+│   ├── services/         Cálculos sin BD (resumen.js)
+│   └── utils/            HttpError y fechas
+└── test/                 npm test (node:test + supertest)
 ```
 
 Flujo de una petición: `routes` → `middlewares` (validar / verificar token) →
@@ -63,11 +70,20 @@ copy .env.example .env
 
 `.env` está en `.gitignore`: nunca lo subas al repositorio.
 
-## 3. Ejecutar
+## 3. Crear/actualizar las tablas
+
+```bash
+npm run db:migrate
+```
+
+Ver [db/README.md](db/README.md).
+
+## 4. Ejecutar
 
 ```bash
 npm run dev     # se reinicia solo al guardar cambios
 npm start       # modo normal
+npm test        # pruebas (usan la base subtrack_test, no la real)
 ```
 
 Debe aparecer `API de SubTrack escuchando en http://0.0.0.0:3000`.
@@ -75,7 +91,7 @@ Debe aparecer `API de SubTrack escuchando en http://0.0.0.0:3000`.
 > La primera vez Windows puede preguntar si permite a Node.js acceder a la red.
 > Acepta en **redes privadas** para que el celular pueda conectarse.
 
-## 4. Probar los endpoints
+## 5. Probar los endpoints
 
 Ejemplos con `curl` (Git Bash). En PowerShell usa `curl.exe` en lugar de `curl`.
 En Thunder Client / Postman usa el mismo método, URL y cuerpo JSON
@@ -130,6 +146,92 @@ En Thunder Client: pestaña **Auth → Bearer** y pega el token.
 
 - `200 {"usuario":{"id":1,"nombre":"Ana","correo":"ana@correo.com"}}`
 - `401` si falta el token, es inválido o expiró.
+
+### Suscripciones
+
+Todas requieren `Authorization: Bearer <token>`. Para no repetirlo, en Git
+Bash guarda el token en una variable:
+
+```bash
+TOKEN=PEGA_AQUI_EL_TOKEN
+```
+
+| Método y ruta | Cuerpo | Respuesta |
+|---|---|---|
+| `GET /api/suscripciones?estado=activa` | — | `200 {"suscripciones":[...]}` ordenadas por `fecha_proximo_cobro`. `estado` es opcional y admite varios separados por coma |
+| `POST /api/suscripciones` | ver abajo | `201 {"suscripcion":{...}}` |
+| `GET /api/suscripciones/:id` | — | `200 {"suscripcion":{...}}` |
+| `PUT /api/suscripciones/:id` | igual que POST | `200 {"suscripcion":{...}}` |
+| `DELETE /api/suscripciones/:id` | — | `204` |
+| `PATCH /api/suscripciones/:id/estado` | `{"estado":"marcada_para_cancelar"}` | `200 {"suscripcion":{...}}` |
+
+Campos del POST/PUT:
+
+| Campo | Obligatorio | Valores |
+|---|---|---|
+| `nombre_servicio` | sí | texto, máx. 100 |
+| `monto` | sí | número ≥ 0, máx. 2 decimales (`38900` o `"12.99"`) |
+| `moneda` | no (`COP`) | `COP`, `USD` |
+| `frecuencia` | sí | `semanal`, `mensual`, `anual` |
+| `fecha_proximo_cobro` | sí | `AAAA-MM-DD` |
+| `es_prueba_gratis` | no (`false`) | `true`, `false` |
+| `fecha_fin_prueba` | si es prueba | `AAAA-MM-DD` |
+| `dias_aviso` | no (`null`) | entero 0–30; `null` = usar la preferencia global |
+
+```bash
+curl -X POST http://localhost:3000/api/suscripciones \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"nombre_servicio":"Netflix","monto":38900,"frecuencia":"mensual","fecha_proximo_cobro":"2026-11-20"}'
+
+curl "http://localhost:3000/api/suscripciones?estado=activa" -H "Authorization: Bearer $TOKEN"
+
+curl -X PATCH http://localhost:3000/api/suscripciones/1/estado \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"estado":"cancelada"}'
+```
+
+Si la suscripción no existe **o es de otro usuario**, responde `404`.
+
+### GET /api/resumen
+
+```bash
+curl http://localhost:3000/api/resumen -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "totales": [
+    { "moneda": "COP", "gasto_mensual": 58900, "proyeccion_anual": 706800, "cantidad": 3 },
+    { "moneda": "USD", "gasto_mensual": 20, "proyeccion_anual": 240, "cantidad": 1 }
+  ],
+  "cantidad_activas": 4,
+  "proximos_cobros": [ { "...": "...", "dias_restantes": 2 } ],
+  "pruebas_por_terminar": [ { "...": "...", "dias_restantes": 3 } ],
+  "dias_anticipacion_recordatorio": 3
+}
+```
+
+- Solo cuenta suscripciones `activa` y `marcada_para_cancelar`.
+- Mensual equivalente: semanal × 52 / 12, mensual, anual / 12. Las monedas no
+  se convierten.
+- Las pruebas gratis cuentan en `cantidad` pero no suman gasto (cuestan 0
+  mientras dura la prueba).
+- Próximos cobros y pruebas: de hoy a 7 días.
+
+### Preferencias y cuenta
+
+```bash
+curl http://localhost:3000/api/usuarios/me/preferencias -H "Authorization: Bearer $TOKEN"
+
+curl -X PUT http://localhost:3000/api/usuarios/me/preferencias \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"dias_anticipacion_recordatorio":7}'
+
+# Elimina la cuenta y TODOS sus datos. 403 si la contraseña no coincide.
+curl -X DELETE http://localhost:3000/api/usuarios/me \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"password":"123456"}'
+```
 
 ### Ver los datos en la BD
 
