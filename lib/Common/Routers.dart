@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../Pages/AvisosPage.dart';
 import '../Pages/BienvenidaPage.dart';
 import '../Pages/DashboardPage.dart';
 import '../Pages/LoginPage.dart';
 import '../Pages/PerfilPage.dart';
+import '../Pages/PreferenciasPage.dart';
 import '../Pages/RegistroPage.dart';
 import '../Pages/SuscripcionDetallePage.dart';
 import '../Pages/SuscripcionFormPage.dart';
 import '../Pages/SuscripcionesPage.dart';
 import '../models/suscripcion.dart';
 import '../services/auth_service.dart';
+import '../services/recordatorios_service.dart';
 import '../services/suscripcion_service.dart';
 import '../widgets/app_shell.dart';
 
@@ -27,10 +30,12 @@ class Routers {
   // Con barra de pestañas.
   static const String dashboard = '/resumen';
   static const String suscripciones = '/suscripciones';
+  static const String avisos = '/avisos';
   static const String perfil = '/perfil';
   static String detalle(int id) => '/suscripcion/$id';
 
   // Sin barra de pestañas.
+  static const String preferencias = '/preferencias';
   static const String nuevaSuscripcion = '/suscripcion/nueva';
   static String editarSuscripcion(int id) => '/suscripcion/$id/editar';
 
@@ -41,6 +46,7 @@ class Routers {
   static GoRouter crear(
     AuthService authService,
     SuscripcionService suscripcionService, {
+    RecordatoriosService? recordatorios,
     String initialLocation = home,
   }) {
     return GoRouter(
@@ -64,12 +70,17 @@ class Routers {
             ),
           ],
         ),
+        GoRoute(
+          path: preferencias,
+          builder: (context, state) =>
+              PreferenciasPage(authService: authService, recordatorios: recordatorios),
+        ),
         // El formulario va fuera del shell (sin pestañas). Estas dos rutas
         // van antes que '/suscripcion/:id' para que "nueva" no se lea como id.
         GoRoute(
           path: nuevaSuscripcion,
           builder: (context, state) =>
-              SuscripcionFormPage(suscripcionService: suscripcionService),
+              SuscripcionFormPage(suscripcionService: suscripcionService, recordatorios: recordatorios),
         ),
         GoRoute(
           path: '/suscripcion/:id/editar',
@@ -80,6 +91,7 @@ class Routers {
             if (suscripcion is Suscripcion) {
               return SuscripcionFormPage(
                 suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
                 inicial: suscripcion,
               );
             }
@@ -87,6 +99,7 @@ class Routers {
               id: _id(state),
               authService: authService,
               suscripcionService: suscripcionService,
+              recordatorios: recordatorios,
             );
           },
         ),
@@ -98,6 +111,7 @@ class Routers {
               builder: (context, state) => DashboardPage(
                 authService: authService,
                 suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
               ),
             ),
             GoRoute(
@@ -105,11 +119,20 @@ class Routers {
               builder: (context, state) => SuscripcionesPage(
                 authService: authService,
                 suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
               ),
             ),
             GoRoute(
+              path: avisos,
+              builder: (context, state) => AvisosPage(suscripcionService: suscripcionService),
+            ),
+            GoRoute(
               path: perfil,
-              builder: (context, state) => PerfilPage(authService: authService),
+              builder: (context, state) => PerfilPage(
+                authService: authService,
+                suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
+              ),
             ),
             GoRoute(
               path: '/suscripcion/:id',
@@ -117,6 +140,7 @@ class Routers {
                 id: _id(state),
                 authService: authService,
                 suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
               ),
             ),
           ],

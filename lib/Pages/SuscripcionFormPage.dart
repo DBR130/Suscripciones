@@ -5,6 +5,7 @@ import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
 import '../models/suscripcion.dart';
 import '../services/api_client.dart';
+import '../services/recordatorios_service.dart';
 import '../services/suscripcion_service.dart';
 import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
@@ -20,10 +21,12 @@ class SuscripcionFormPage extends StatefulWidget {
   const SuscripcionFormPage({
     super.key,
     required this.suscripcionService,
+    this.recordatorios,
     this.inicial,
   });
 
   final SuscripcionService suscripcionService;
+  final RecordatoriosService? recordatorios;
   final Suscripcion? inicial;
 
   @override
@@ -79,6 +82,9 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
   }
 
   void _ponerFinPrueba(DateTime fecha) {
+    // El primer cobro suele ser el día en que termina la prueba: se llena
+    // solo si está vacío o si seguía igual al fin anterior (no lo tocaron).
+    if (_fecha == null || _fecha == _finPrueba) _ponerFecha(fecha);
     _finPrueba = fecha;
     _finPruebaCtrl.text = Formato.fecha(fecha);
   }
@@ -125,6 +131,7 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
       final guardada = _editando
           ? await widget.suscripcionService.actualizar(suscripcion)
           : await widget.suscripcionService.crear(suscripcion);
+      widget.recordatorios?.sincronizar(widget.suscripcionService);
       if (!mounted) return;
       mostrarToast(
         context,
@@ -153,6 +160,7 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
     setState(() => _guardando = true);
     try {
       await widget.suscripcionService.eliminar(s.id!);
+      widget.recordatorios?.sincronizar(widget.suscripcionService);
       if (!mounted) return;
       mostrarToast(context, '${s.nombreServicio} se eliminó de tu lista');
       context.go(Routers.dashboard);
@@ -190,117 +198,123 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
             ),
           ),
           Expanded(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-                children: [
-                  if (_errorServidor != null) ...[
-                    BannerError(_errorServidor!),
-                    const SizedBox(height: 14),
-                  ],
-                  AppTextField(
-                    controller: _nombreCtrl,
-                    label: 'Servicio',
-                    hint: 'ej. HBO Max',
-                    textInputAction: TextInputAction.next,
-                    validator: (v) => v == null || v.trim().isEmpty
-                        ? 'Ingresa el nombre del servicio'
-                        : v.trim().length > 100
-                            ? 'Máximo 100 caracteres'
-                            : null,
-                  ),
-                  const SizedBox(height: 14),
-                  const AppEtiqueta('Categoría (opcional)'),
-                  const SizedBox(height: 7),
-                  _SelectorCategoria(
-                    seleccion: _categoria,
-                    onChanged: (c) => setState(() => _categoria = c),
-                  ),
-                  const SizedBox(height: 14),
-                  AppTextField(
-                    controller: _montoCtrl,
-                    label: 'Monto ($_moneda)',
-                    hint: _moneda == 'COP' ? '24900' : '9.99',
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    validator: _validarMonto,
-                  ),
-                  const SizedBox(height: 14),
-                  const AppEtiqueta('Moneda'),
-                  const SizedBox(height: 7),
-                  AppPills<String>(
-                    opciones: const [('COP', 'COP'), ('USD', 'USD')],
-                    seleccion: _moneda,
-                    onChanged: (m) => setState(() => _moneda = m),
-                  ),
-                  const SizedBox(height: 14),
-                  const AppEtiqueta('Frecuencia'),
-                  const SizedBox(height: 7),
-                  AppPills<Frecuencia>(
-                    // Mismo orden que el diseño.
-                    opciones: [
-                      for (final f in const [Frecuencia.mensual, Frecuencia.anual, Frecuencia.semanal])
-                        (f, f.etiqueta),
+            // SafeArea lateral: en horizontal o con muesca, el sistema puede
+            // tapar los bordes y cortar el inicio de las etiquetas.
+            child: SafeArea(
+              top: false,
+              bottom: false,
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                  children: [
+                    if (_errorServidor != null) ...[
+                      BannerError(_errorServidor!),
+                      const SizedBox(height: 14),
                     ],
-                    seleccion: _frecuencia,
-                    onChanged: (f) => setState(() => _frecuencia = f),
-                  ),
-                  const SizedBox(height: 14),
-                  AppTextField(
-                    controller: _fechaCtrl,
-                    label: _esPrueba ? 'Primer cobro (al terminar la prueba)' : 'Próximo cobro',
-                    hint: 'Elige una fecha',
-                    suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
-                    readOnly: true,
-                    validator: (_) => _fecha == null ? 'Elige la fecha del próximo cobro' : null,
-                    onTap: () async {
-                      final fecha = await _elegirFecha(_fecha);
-                      if (fecha != null) setState(() => _ponerFecha(fecha));
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  AppCard(
-                    padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
-                    child: SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _esPrueba,
-                      onChanged: (v) => setState(() => _esPrueba = v),
-                      activeTrackColor: AppColors.primary,
-                      inactiveTrackColor: AppColors.surface,
-                      inactiveThumbColor: const Color(0xFF5B6A85),
-                      trackOutlineColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected)
-                            ? Colors.transparent
-                            : AppColors.lineStrong,
-                      ),
-                      title: const Text(
-                        'Es una prueba gratis',
-                        style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: const Text(
-                        'Activa el aviso de fin de prueba',
-                        style: TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
-                      ),
+                    AppTextField(
+                      controller: _nombreCtrl,
+                      label: 'Servicio',
+                      hint: 'ej. HBO Max',
+                      textInputAction: TextInputAction.next,
+                      validator: (v) => v == null || v.trim().isEmpty
+                          ? 'Ingresa el nombre del servicio'
+                          : v.trim().length > 100
+                              ? 'Máximo 100 caracteres'
+                              : null,
                     ),
-                  ),
-                  if (_esPrueba) ...[
+                    const SizedBox(height: 14),
+                    const AppEtiqueta('Categoría (opcional)'),
+                    const SizedBox(height: 7),
+                    _SelectorCategoria(
+                      seleccion: _categoria,
+                      onChanged: (c) => setState(() => _categoria = c),
+                    ),
                     const SizedBox(height: 14),
                     AppTextField(
-                      controller: _finPruebaCtrl,
-                      label: 'Fin de la prueba',
+                      controller: _montoCtrl,
+                      label: 'Monto ($_moneda)',
+                      hint: _moneda == 'COP' ? '24900' : '9.99',
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: _validarMonto,
+                    ),
+                    const SizedBox(height: 14),
+                    const AppEtiqueta('Moneda'),
+                    const SizedBox(height: 7),
+                    AppPills<String>(
+                      opciones: const [('COP', 'COP'), ('USD', 'USD')],
+                      seleccion: _moneda,
+                      onChanged: (m) => setState(() => _moneda = m),
+                    ),
+                    const SizedBox(height: 14),
+                    const AppEtiqueta('Frecuencia'),
+                    const SizedBox(height: 7),
+                    AppPills<Frecuencia>(
+                      // Mismo orden que el diseño.
+                      opciones: [
+                        for (final f in const [Frecuencia.mensual, Frecuencia.anual, Frecuencia.semanal])
+                          (f, f.etiqueta),
+                      ],
+                      seleccion: _frecuencia,
+                      onChanged: (f) => setState(() => _frecuencia = f),
+                    ),
+                    const SizedBox(height: 14),
+                    AppTextField(
+                      controller: _fechaCtrl,
+                      label: _esPrueba ? 'Primer cobro (al terminar la prueba)' : 'Próximo cobro',
                       hint: 'Elige una fecha',
-                      suffixIcon: const Icon(Icons.event_outlined, size: 18),
+                      suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
                       readOnly: true,
-                      validator: (_) => _esPrueba && _finPrueba == null
-                          ? 'Elige cuándo termina la prueba'
-                          : null,
+                      validator: (_) => _fecha == null ? 'Elige la fecha del próximo cobro' : null,
                       onTap: () async {
-                        final fecha = await _elegirFecha(_finPrueba ?? _fecha);
-                        if (fecha != null) setState(() => _ponerFinPrueba(fecha));
+                        final fecha = await _elegirFecha(_fecha);
+                        if (fecha != null) setState(() => _ponerFecha(fecha));
                       },
                     ),
+                    const SizedBox(height: 14),
+                    AppCard(
+                      padding: const EdgeInsets.fromLTRB(14, 4, 8, 4),
+                      child: SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _esPrueba,
+                        onChanged: (v) => setState(() => _esPrueba = v),
+                        activeTrackColor: AppColors.primary,
+                        inactiveTrackColor: AppColors.surface,
+                        inactiveThumbColor: const Color(0xFF5B6A85),
+                        trackOutlineColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? Colors.transparent
+                              : AppColors.lineStrong,
+                        ),
+                        title: const Text(
+                          'Es una prueba gratis',
+                          style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
+                        ),
+                        subtitle: const Text(
+                          'Activa el aviso de fin de prueba',
+                          style: TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    if (_esPrueba) ...[
+                      const SizedBox(height: 14),
+                      AppTextField(
+                        controller: _finPruebaCtrl,
+                        label: 'Fin de la prueba',
+                        hint: 'Elige una fecha',
+                        suffixIcon: const Icon(Icons.event_outlined, size: 18),
+                        readOnly: true,
+                        validator: (_) => _esPrueba && _finPrueba == null
+                            ? 'Elige cuándo termina la prueba'
+                            : null,
+                        onTap: () async {
+                          final fecha = await _elegirFecha(_finPrueba ?? _fecha);
+                          if (fecha != null) setState(() => _ponerFinPrueba(fecha));
+                        },
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           ),

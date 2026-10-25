@@ -5,7 +5,7 @@ import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
 
 /// Barra de pestañas inferior de las pantallas con sesión (diseño: Resumen,
-/// Suscripciones, Avisos, Perfil). Avisos se agrega cuando exista su pantalla.
+/// Suscripciones, Avisos, Perfil).
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.child});
 
@@ -14,6 +14,7 @@ class AppShell extends StatelessWidget {
   static const _pestanas = [
     (ruta: Routers.dashboard, icono: Icons.home_outlined, texto: 'Resumen'),
     (ruta: Routers.suscripciones, icono: Icons.format_list_bulleted, texto: 'Suscripciones'),
+    (ruta: Routers.avisos, icono: Icons.notifications_none, texto: 'Avisos'),
     (ruta: Routers.perfil, icono: Icons.person_outline, texto: 'Perfil'),
   ];
 

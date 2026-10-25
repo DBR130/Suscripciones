@@ -153,6 +153,56 @@ void main() {
     expect(service.ultimaGuardada!.categoria, isNull);
   });
 
+  testWidgets('la etiqueta del monto cambia a USD', (tester) async {
+    await abrir(tester, app(FakeSuscripcionService()));
+    expect(find.text('MONTO (COP)'), findsOneWidget);
+    await tocar(tester, find.text('USD'));
+    expect(find.text('MONTO (USD)'), findsOneWidget);
+    expect(find.text('MONTO (COP)'), findsNothing);
+  });
+
+  testWidgets('al elegir el fin de la prueba se llena el primer cobro (editable)', (tester) async {
+    final service = FakeSuscripcionService();
+    await abrir(tester, app(service));
+    await tester.enterText(servicio, 'Disney+');
+    await tester.enterText(monto('COP'), '38900');
+    await tocar(tester, find.text('Es una prueba gratis'));
+
+    // Campos de fecha: 0 = primer cobro, 1 = fin de la prueba.
+    await elegirDia(tester, fecha(1), 18);
+    final elegidos = tester.widgetList<TextFormField>(find.byType(TextFormField))
+        .map((f) => f.controller?.text)
+        .where((t) => t != null && t.startsWith('18 '))
+        .length;
+    expect(elegidos, 2); // fin de la prueba y primer cobro con la misma fecha
+
+    // Se puede cambiar el primer cobro sin que el fin lo vuelva a pisar.
+    // Campos: servicio, monto, primer cobro, fin de la prueba.
+    await elegirDia(tester, find.byType(TextFormField).at(2), 20);
+    await guardar(tester);
+    expect(service.ultimaGuardada!.fechaFinPrueba!.day, 18);
+    expect(service.ultimaGuardada!.fechaProximoCobro.day, 20);
+  });
+
+  testWidgets('en pantalla angosta con letra grande no se corta ni se desborda', (tester) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    tester.view.physicalSize = const Size(840, 1800); // 280 px de ancho lógico
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app(FakeSuscripcionService()));
+    await tester.tap(find.text('ABRIR'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    for (final etiqueta in ['SERVICIO', 'MONTO (COP)', 'PRÓXIMO COBRO']) {
+      await tester.dragUntilVisible(find.text(etiqueta), find.byType(ListView), const Offset(0, -150));
+      final r = tester.getRect(find.text(etiqueta));
+      expect(r.left, greaterThanOrEqualTo(16), reason: etiqueta);
+      expect(r.right, lessThanOrEqualTo(280 - 16), reason: etiqueta);
+    }
+  });
+
   final spotify = Suscripcion(
     id: 5,
     nombreServicio: 'Spotify',

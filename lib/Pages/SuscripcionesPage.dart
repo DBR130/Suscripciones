@@ -6,6 +6,7 @@ import '../Common/Routers.dart';
 import '../models/suscripcion.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/recordatorios_service.dart';
 import '../services/suscripcion_service.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
@@ -21,10 +22,12 @@ class SuscripcionesPage extends StatefulWidget {
     super.key,
     required this.authService,
     required this.suscripcionService,
+    this.recordatorios,
   });
 
   final AuthService authService;
   final SuscripcionService suscripcionService;
+  final RecordatoriosService? recordatorios;
 
   @override
   State<SuscripcionesPage> createState() => _SuscripcionesPageState();
@@ -53,6 +56,9 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
         _dias = resultados[1] as int;
         _error = null;
       });
+      widget.recordatorios
+          ?.reprogramar(_todas!, _dias!)
+          .catchError((Object e) => debugPrint('Recordatorios: $e'));
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
     }

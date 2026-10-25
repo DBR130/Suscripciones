@@ -9,6 +9,7 @@ import '../models/resumen.dart';
 import '../models/suscripcion.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/recordatorios_service.dart';
 import '../services/suscripcion_service.dart';
 import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
@@ -25,10 +26,14 @@ class DashboardPage extends StatefulWidget {
     super.key,
     required this.authService,
     required this.suscripcionService,
+    this.recordatorios,
   });
 
   final AuthService authService;
   final SuscripcionService suscripcionService;
+
+  /// null en los tests; en web no programa nada.
+  final RecordatoriosService? recordatorios;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -62,6 +67,10 @@ class _DashboardPageState extends State<DashboardPage> {
         _suscripciones = resultados[1] as List<Suscripcion>;
         _error = null;
       });
+      // Al abrir la app y al volver de otra pantalla: reprograma los avisos.
+      widget.recordatorios
+          ?.reprogramar(_suscripciones!, _resumen!.diasAnticipacion)
+          .catchError((Object e) => debugPrint('Recordatorios: $e'));
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
     }
@@ -108,7 +117,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
-              child: _cuerpo(pronto, despues, tarjeta, diasGlobales),
+              child: _cuerpo(pronto, despues, tarjeta, diasGlobales, porCobrar(suscripciones, hoy)),
             ),
           ],
         ),
@@ -121,6 +130,7 @@ class _DashboardPageState extends State<DashboardPage> {
     List<Suscripcion> despues,
     Widget Function(Suscripcion) tarjeta,
     int diasGlobales,
+    String notaPorCobrar,
   ) {
     if (_error != null && _suscripciones == null) {
       return Column(
@@ -163,7 +173,7 @@ class _DashboardPageState extends State<DashboardPage> {
           _TituloSeccion(
             titulo: 'Próximos 7 días',
             cantidad: pronto.length,
-            nota: _porCobrar(pronto),
+            nota: notaPorCobrar,
           ),
           ...pronto.map(tarjeta),
           const SizedBox(height: 11),
@@ -189,16 +199,24 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  /// "$65.800 por cobrar" (las pruebas gratis no suman).
-  String _porCobrar(List<Suscripcion> lista) {
-    final porMoneda = <String, double>{};
-    for (final s in lista.where((s) => !s.esPruebaGratis)) {
-      porMoneda[s.moneda] = (porMoneda[s.moneda] ?? 0) + s.monto;
-    }
-    if (porMoneda.isEmpty) return '';
-    final textos = porMoneda.entries.map((e) => Formato.moneda(e.value, e.key));
-    return '${textos.join(' + ')} por cobrar';
+}
+
+/// "$65.800 + US$20,00 por cobrar": lo que se cobra en los próximos 7 días,
+/// por moneda. Incluye las pruebas gratis cuyo primer cobro cae en ese rango
+/// y los cobros con fecha vencida (siguen pendientes).
+String porCobrar(List<Suscripcion> suscripciones, DateTime hoy, {int dias = 7}) {
+  final porMoneda = <String, double>{};
+  for (final s in suscripciones) {
+    final desde = DateTime.utc(hoy.year, hoy.month, hoy.day);
+    final cobro = DateTime.utc(s.fechaProximoCobro.year, s.fechaProximoCobro.month, s.fechaProximoCobro.day);
+    final faltan = cobro.difference(desde).inDays;
+    // Una prueba con fecha de cobro pasada aún no se ha cobrado: no cuenta.
+    if (faltan > dias || (s.esPruebaGratis && faltan < 0)) continue;
+    porMoneda[s.moneda] = (porMoneda[s.moneda] ?? 0) + s.monto;
   }
+  if (porMoneda.isEmpty) return '';
+  final textos = porMoneda.entries.map((e) => Formato.moneda(e.value, e.key));
+  return '${textos.join(' + ')} por cobrar';
 }
 
 class _Encabezado extends StatelessWidget {

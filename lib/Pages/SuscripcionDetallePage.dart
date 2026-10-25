@@ -6,6 +6,7 @@ import '../Common/Routers.dart';
 import '../models/suscripcion.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/recordatorios_service.dart';
 import '../services/suscripcion_service.dart';
 import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
@@ -23,11 +24,13 @@ class SuscripcionDetallePage extends StatefulWidget {
     required this.id,
     required this.authService,
     required this.suscripcionService,
+    this.recordatorios,
   });
 
   final int id;
   final AuthService authService;
   final SuscripcionService suscripcionService;
+  final RecordatoriosService? recordatorios;
 
   @override
   State<SuscripcionDetallePage> createState() => _SuscripcionDetallePageState();
@@ -81,7 +84,10 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
           suscripcion: s,
           pagos: _detalle!.pagos,
           pagadoTotal: _detalle!.pagadoTotal,
+          cambioPrecio: _detalle!.cambioPrecio,
         ));
+    // Cambió el estado o los días de aviso: reprograma los recordatorios.
+    widget.recordatorios?.sincronizar(widget.suscripcionService);
   }
 
   Future<void> _cambiarEstado(EstadoSuscripcion estado, String mensaje) {
@@ -122,6 +128,7 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
     if (!ok || !mounted) return;
     await _accion(() async {
       await widget.suscripcionService.cambiarEstado(widget.id, EstadoSuscripcion.cancelada);
+      widget.recordatorios?.sincronizar(widget.suscripcionService);
       if (!mounted) return;
       mostrarToast(context, '${s.nombreServicio} quedó en canceladas');
       context.pop();
@@ -247,6 +254,10 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
                     ),
                     const SizedBox(height: 14),
                   ],
+                  if (_detalle!.cambioPrecio != null) ...[
+                    _AvisoAzul(_textoCambio(s, _detalle!.cambioPrecio!)),
+                    const SizedBox(height: 14),
+                  ],
                   _Datos(_detalle!),
                   const SizedBox(height: 14),
                   _Historial(_detalle!),
@@ -306,6 +317,44 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
                   ],
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "El precio subió de $41.900 a $47.900 el 3 oct" (RF08).
+String _textoCambio(Suscripcion s, CambioPrecio c) {
+  final verbo = c.subio ? 'subió' : 'bajó';
+  final cuando = c.fecha == null ? '' : ' el ${Formato.fechaCorta(c.fecha!)}';
+  return 'El precio $verbo de ${Formato.moneda(c.anterior, s.moneda)} a ${Formato.moneda(c.nuevo, s.moneda)}$cuando';
+}
+
+class _AvisoAzul extends StatelessWidget {
+  const _AvisoAzul(this.texto);
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: AppColors.surface2,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.line2),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.trending_up, size: 18, color: AppColors.accentSoft),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              texto,
+              style: const TextStyle(color: AppColors.text2, fontSize: 13, fontWeight: FontWeight.w700, height: 1.45),
             ),
           ),
         ],
