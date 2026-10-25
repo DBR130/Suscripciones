@@ -171,18 +171,40 @@ class Pago {
       );
 }
 
+/// Último cambio de monto de una suscripción (tabla cambios_precio).
+class CambioPrecio {
+  const CambioPrecio({required this.anterior, required this.nuevo, this.fecha});
+
+  final double anterior;
+  final double nuevo;
+  final DateTime? fecha;
+
+  bool get subio => nuevo > anterior;
+
+  factory CambioPrecio.fromJson(Map<String, dynamic> json) {
+    final fecha = json['fecha_cambio'] as String?;
+    return CambioPrecio(
+      anterior: (json['monto_anterior'] as num).toDouble(),
+      nuevo: (json['monto_nuevo'] as num).toDouble(),
+      fecha: fecha == null ? null : DateTime.parse(fecha).toLocal(),
+    );
+  }
+}
+
 /// Respuesta de GET /api/suscripciones/:id: la suscripción, sus 3 últimos
-/// pagos y el total pagado.
+/// pagos, el total pagado y el último cambio de precio (si hubo).
 class DetalleSuscripcion {
   const DetalleSuscripcion({
     required this.suscripcion,
     this.pagos = const [],
     this.pagadoTotal = 0,
+    this.cambioPrecio,
   });
 
   final Suscripcion suscripcion;
   final List<Pago> pagos;
   final double pagadoTotal;
+  final CambioPrecio? cambioPrecio;
 
   factory DetalleSuscripcion.fromJson(Map<String, dynamic> json) =>
       DetalleSuscripcion(
@@ -191,5 +213,8 @@ class DetalleSuscripcion {
             .map((p) => Pago.fromJson(p as Map<String, dynamic>))
             .toList(),
         pagadoTotal: (json['pagado_total'] as num? ?? 0).toDouble(),
+        cambioPrecio: json['ultimo_cambio_precio'] == null
+            ? null
+            : CambioPrecio.fromJson(json['ultimo_cambio_precio'] as Map<String, dynamic>),
       );
 }

@@ -1,3 +1,4 @@
+import '../models/aviso.dart';
 import '../models/resumen.dart';
 import '../models/suscripcion.dart';
 import 'api_client.dart';
@@ -39,6 +40,17 @@ class SuscripcionService {
 
   Future<Suscripcion> cambiarEstado(int id, EstadoSuscripcion estado) async =>
       _leer(await _api.patch('$_ruta/$id/estado', {'estado': estado.valor}));
+
+  /// Avisos de la pestaña Avisos y los días de aviso globales.
+  Future<({List<Aviso> avisos, int dias})> avisos() async {
+    final json = await _api.get('/api/avisos');
+    return (
+      avisos: (json['avisos'] as List)
+          .map((a) => Aviso.fromJson(a as Map<String, dynamic>))
+          .toList(),
+      dias: json['dias_anticipacion_recordatorio'] as int,
+    );
+  }
 
   Future<Resumen> resumen() async =>
       Resumen.fromJson(await _api.get('/api/resumen'));

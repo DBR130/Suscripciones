@@ -1,3 +1,4 @@
+import 'package:flutter_suscripciones/models/aviso.dart';
 import 'package:flutter_suscripciones/models/resumen.dart';
 import 'package:flutter_suscripciones/models/suscripcion.dart';
 import 'package:flutter_suscripciones/services/api_client.dart';
@@ -6,14 +7,23 @@ import 'package:flutter_suscripciones/services/suscripcion_service.dart';
 /// SuscripcionService falso: guarda las suscripciones en memoria.
 /// Si [error] tiene valor, crear y actualizar fallan con ese mensaje.
 class FakeSuscripcionService implements SuscripcionService {
-  FakeSuscripcionService({List<Suscripcion>? iniciales, this.error, this.pagos = const []})
-      : suscripciones = [...?iniciales];
+  FakeSuscripcionService({
+    List<Suscripcion>? iniciales,
+    this.error,
+    this.pagos = const [],
+    this.cambioPrecio,
+    this.listaAvisos = const [],
+  }) : suscripciones = [...?iniciales];
 
   final List<Suscripcion> suscripciones;
   final String? error;
 
-  /// Pagos que devuelve [obtener] para cualquier suscripción.
+  /// Pagos y cambio de precio que devuelve [obtener] para cualquier suscripción.
   final List<Pago> pagos;
+  final CambioPrecio? cambioPrecio;
+
+  /// Lo que devuelve [avisos].
+  final List<Aviso> listaAvisos;
 
   /// Última suscripción recibida en crear/actualizar.
   Suscripcion? ultimaGuardada;
@@ -51,7 +61,11 @@ class FakeSuscripcionService implements SuscripcionService {
         suscripcion: _buscar(id),
         pagos: pagos,
         pagadoTotal: pagos.fold(0, (t, p) => t + p.monto),
+        cambioPrecio: cambioPrecio,
       );
+
+  @override
+  Future<({List<Aviso> avisos, int dias})> avisos() async => (avisos: listaAvisos, dias: 3);
 
   @override
   Future<Suscripcion> crear(Suscripcion suscripcion) async {

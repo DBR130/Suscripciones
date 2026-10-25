@@ -32,6 +32,22 @@ class Formato {
     return (moneda == 'USD' ? _usd : _cop).format(monto);
   }
 
+  static const List<String> _mesesLargos = [
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+  ];
+
+  /// "20 de septiembre"
+  static String fechaLarga(DateTime fecha) =>
+      '${fecha.day} de ${_mesesLargos[fecha.month - 1]}';
+
+  /// "hoy", "mañana" o "en 3 días" (para avisos).
+  static String enDias(int dias) => switch (dias) {
+        0 => 'hoy',
+        1 => 'mañana',
+        _ => 'en $dias días',
+      };
+
   /// "20 sep"
   static String fechaCorta(DateTime fecha) =>
       '${fecha.day} ${_meses[fecha.month - 1]}';
