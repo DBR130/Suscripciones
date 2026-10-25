@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../utils/validators.dart';
-import '../widgets/app_marca.dart';
+import '../widgets/app_feedback.dart';
 import '../widgets/app_text_field.dart';
+import '../widgets/auth_layout.dart';
 
+/// Registro (pantalla 02 del diseño, modo "Crea tu cuenta"). Al terminar
+/// continúa a la preferencia de recordatorio (pantalla 06).
 class RegistroPage extends StatefulWidget {
   const RegistroPage({super.key, required this.authService});
 
@@ -27,7 +29,7 @@ class _RegistroPageState extends State<RegistroPage> {
   final _confirmarCtrl = TextEditingController();
 
   bool _loading = false;
-  bool _verPassword = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -38,14 +40,9 @@ class _RegistroPageState extends State<RegistroPage> {
     super.dispose();
   }
 
-  String? _validarConfirmacion(String? value) {
-    if (value == null || value.isEmpty) return 'Confirma tu contraseña';
-    if (value != _passCtrl.text) return 'Las contraseñas no coinciden';
-    return null;
-  }
-
   Future<void> _submit() async {
     FocusScope.of(context).unfocus(); // cierra el teclado
+    setState(() => _error = null);
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
@@ -56,153 +53,69 @@ class _RegistroPageState extends State<RegistroPage> {
         _passCtrl.text,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cuenta creada. Bienvenido, ${usuario.nombre}')),
-      );
-      // El registro deja la sesión iniciada: se va directo al resumen.
-      context.go(Routers.dashboard);
+      mostrarToast(context, 'Hola, ${primerNombre(usuario.nombre)}');
+      // El registro deja la sesión iniciada; sigue la preferencia de avisos.
+      context.go(Routers.preferencias);
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.mensaje)),
-      );
+      setState(() {
+        _loading = false;
+        _error = e.mensaje; // banner rojo con el mensaje del servidor
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const AppMarca(),
-                    const SizedBox(height: 32),
-                    const Text(
-                      'Crea tu cuenta',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.text,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.6,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Registra tus suscripciones y recibe avisos '
-                      'antes de cada cobro.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.muted,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-                    AppTextField(
-                      controller: _nombreCtrl,
-                      label: 'Nombre',
-                      icon: Icons.person_outline,
-                      keyboardType: TextInputType.name,
-                      textInputAction: TextInputAction.next,
-                      validator: Validators.nombre,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _emailCtrl,
-                      label: 'Correo electrónico',
-                      hint: 'tu@correo.com',
-                      icon: Icons.email_outlined,
-                      keyboardType: TextInputType.emailAddress,
-                      textInputAction: TextInputAction.next,
-                      validator: Validators.email,
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _passCtrl,
-                      label: 'Contraseña',
-                      icon: Icons.lock_outline,
-                      obscureText: !_verPassword,
-                      textInputAction: TextInputAction.next,
-                      validator: Validators.password,
-                      suffixIcon: IconButton(
-                        tooltip: _verPassword
-                            ? 'Ocultar contraseña'
-                            : 'Mostrar contraseña',
-                        icon: Icon(
-                          _verPassword
-                              ? Icons.visibility_off_outlined
-                              : Icons.visibility_outlined,
-                        ),
-                        onPressed: () =>
-                            setState(() => _verPassword = !_verPassword),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    AppTextField(
-                      controller: _confirmarCtrl,
-                      label: 'Confirmar contraseña',
-                      icon: Icons.lock_outline,
-                      obscureText: !_verPassword,
-                      textInputAction: TextInputAction.done,
-                      validator: _validarConfirmacion,
-                      onFieldSubmitted: (_) {
-                        if (!_loading) _submit();
-                      },
-                    ),
-                    const SizedBox(height: 28),
-                    FilledButton(
-                      onPressed: _loading ? null : _submit,
-                      child: _loading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text('Crear cuenta'),
-                    ),
-                    const SizedBox(height: 16),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        const Text(
-                          '¿Ya tienes cuenta?',
-                          style: TextStyle(color: AppColors.muted),
-                        ),
-                        TextButton(
-                          // go: el login queda sobre la bienvenida (ver Routers).
-                          onPressed: () => context.go(Routers.login),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.accent,
-                            textStyle: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          child: const Text('Inicia sesión'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+    return AuthLayout(
+      formKey: _formKey,
+      titulo: 'Crea tu cuenta',
+      subtitulo: 'Con tu correo empezamos a ordenar tus cobros.',
+      error: _error,
+      cargando: _loading,
+      boton: 'Crear cuenta',
+      botonCargando: 'Creando cuenta…',
+      onEnviar: _submit,
+      enlace: '¿Ya tienes cuenta? Inicia sesión',
+      // go: el login queda sobre la bienvenida (ver Routers).
+      onEnlace: () => context.go(Routers.login),
+      campos: [
+        AppTextField(
+          controller: _nombreCtrl,
+          label: 'Nombre',
+          hint: 'Tu nombre',
+          keyboardType: TextInputType.name,
+          textInputAction: TextInputAction.next,
+          validator: Validators.nombre,
         ),
-      ),
+        AppTextField(
+          controller: _emailCtrl,
+          label: 'Correo',
+          hint: 'tucorreo@ejemplo.com',
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          validator: Validators.email,
+        ),
+        AppTextField(
+          controller: _passCtrl,
+          label: 'Contraseña',
+          hint: 'mínimo 6 caracteres',
+          obscureText: true,
+          textInputAction: TextInputAction.next,
+          validator: Validators.password,
+        ),
+        AppTextField(
+          controller: _confirmarCtrl,
+          label: 'Confirmar contraseña',
+          hint: 'repite la contraseña',
+          obscureText: true,
+          textInputAction: TextInputAction.done,
+          validator: (v) => v != _passCtrl.text ? 'Las contraseñas no coinciden' : null,
+          onFieldSubmitted: (_) {
+            if (!_loading) _submit();
+          },
+        ),
+      ],
     );
   }
 }

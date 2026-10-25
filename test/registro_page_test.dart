@@ -15,11 +15,21 @@ void main() {
             path: '/',
             builder: (_, _) => RegistroPage(authService: authService),
           ),
-          GoRoute(path: '/resumen', builder: (_, _) => const Text('RESUMEN')),
+          GoRoute(
+            path: '/preferencias',
+            builder: (_, _) => const Scaffold(body: Text('PREFERENCIAS')),
+          ),
         ]),
       );
 
   Finder campo(int i) => find.byType(TextFormField).at(i);
+
+  Future<void> abrir(WidgetTester tester, AuthService auth) async {
+    tester.view.physicalSize = const Size(1080, 2600);
+    tester.view.devicePixelRatio = 2.5;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app(auth));
+  }
 
   Future<void> crearCuenta(WidgetTester tester) async {
     final boton = find.text('Crear cuenta');
@@ -27,18 +37,21 @@ void main() {
     await tester.tap(boton);
   }
 
-  testWidgets('valida, registra y navega al resumen', (tester) async {
+  testWidgets('valida, registra y sigue a la preferencia de avisos', (tester) async {
     final auth = FakeAuthService();
-    await tester.pumpWidget(app(auth));
+    await abrir(tester, auth);
+
+    expect(find.text('Crea tu cuenta'), findsOneWidget);
+    expect(find.text('Con tu correo empezamos a ordenar tus cobros.'), findsOneWidget);
+    expect(find.text('¿Ya tienes cuenta? Inicia sesión'), findsOneWidget);
 
     await crearCuenta(tester);
     await tester.pump();
     expect(find.text('Ingresa tu nombre'), findsOneWidget);
     expect(find.text('Ingresa tu correo electrónico'), findsOneWidget);
     expect(find.text('Ingresa tu contraseña'), findsOneWidget);
-    expect(find.text('Confirma tu contraseña'), findsOneWidget);
 
-    await tester.enterText(campo(0), 'Ana');
+    await tester.enterText(campo(0), 'Ana María');
     await tester.enterText(campo(1), 'ana@correo.com');
     await tester.enterText(campo(2), '123456');
     await tester.enterText(campo(3), '654321');
@@ -50,16 +63,15 @@ void main() {
     await tester.enterText(campo(3), '123456');
     await crearCuenta(tester);
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Creando cuenta…'), findsOneWidget);
     await tester.pumpAndSettle(const Duration(seconds: 3));
-    expect(find.text('RESUMEN'), findsOneWidget);
-    expect(auth.ultimaLlamada, ['Ana', 'ana@correo.com', '123456']);
+    expect(find.text('PREFERENCIAS'), findsOneWidget);
+    expect(find.text('Hola, Ana'), findsOneWidget);
+    expect(auth.ultimaLlamada, ['Ana María', 'ana@correo.com', '123456']);
   });
 
-  testWidgets('muestra el error si el correo ya existe', (tester) async {
-    await tester.pumpWidget(
-      app(FakeAuthService(error: 'Ya existe una cuenta con ese correo')),
-    );
+  testWidgets('muestra en el banner el error si el correo ya existe', (tester) async {
+    await abrir(tester, FakeAuthService(error: 'Ya existe una cuenta con ese correo'));
     await tester.enterText(campo(0), 'Ana');
     await tester.enterText(campo(1), 'ana@correo.com');
     await tester.enterText(campo(2), '123456');
@@ -68,6 +80,6 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
 
     expect(find.text('Ya existe una cuenta con ese correo'), findsOneWidget);
-    expect(find.text('RESUMEN'), findsNothing);
+    expect(find.text('PREFERENCIAS'), findsNothing);
   });
 }

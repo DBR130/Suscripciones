@@ -69,7 +69,7 @@ void main() {
 
     await tester.tap(find.text('Ya tengo cuenta'));
     await tester.pumpAndSettle();
-    expect(find.text('Iniciar sesión'), findsOneWidget); // LoginPage
+    expect(find.text('Hola de nuevo'), findsOneWidget); // LoginPage
 
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -81,7 +81,7 @@ void main() {
 
     await tester.tap(find.text('Ya tengo cuenta'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Regístrate'));
+    await tester.tap(find.text('No tengo cuenta, quiero registrarme'));
     await tester.pumpAndSettle();
     expect(find.text('Crea tu cuenta'), findsOneWidget);
 
