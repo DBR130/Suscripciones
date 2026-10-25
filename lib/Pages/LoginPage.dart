@@ -155,7 +155,8 @@ class _LoginPageState extends State<LoginPage> {
                           style: TextStyle(color: AppColors.muted),
                         ),
                         TextButton(
-                          onPressed: () => context.push(Routers.registro),
+                          // go (no push): registro queda sobre la bienvenida, no sobre el login.
+                          onPressed: () => context.go(Routers.registro),
                           style: TextButton.styleFrom(
                             foregroundColor: AppColors.accent,
                             textStyle: const TextStyle(

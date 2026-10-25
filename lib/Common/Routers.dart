@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../Pages/BienvenidaPage.dart';
 import '../Pages/DashboardPage.dart';
-import '../Pages/HomePage.dart';
 import '../Pages/LoginPage.dart';
 import '../Pages/PerfilPage.dart';
 import '../Pages/RegistroPage.dart';
@@ -46,17 +46,23 @@ class Routers {
     return GoRouter(
       initialLocation: initialLocation,
       routes: [
+        // Login y registro son hijas de la bienvenida: aunque se llegue con
+        // context.go (por ejemplo, al cerrar sesión), quedan encima de ella y
+        // el botón "atrás" de Android vuelve a la bienvenida en vez de cerrar
+        // la app.
         GoRoute(
           path: home,
-          builder: (context, state) => const HomePage(),
-        ),
-        GoRoute(
-          path: login,
-          builder: (context, state) => LoginPage(authService: authService),
-        ),
-        GoRoute(
-          path: registro,
-          builder: (context, state) => RegistroPage(authService: authService),
+          builder: (context, state) => const BienvenidaPage(),
+          routes: [
+            GoRoute(
+              path: 'login',
+              builder: (context, state) => LoginPage(authService: authService),
+            ),
+            GoRoute(
+              path: 'registro',
+              builder: (context, state) => RegistroPage(authService: authService),
+            ),
+          ],
         ),
         // El formulario va fuera del shell (sin pestañas). Estas dos rutas
         // van antes que '/suscripcion/:id' para que "nueva" no se lea como id.

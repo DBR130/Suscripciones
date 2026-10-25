@@ -184,9 +184,8 @@ class _RegistroPageState extends State<RegistroPage> {
                           style: TextStyle(color: AppColors.muted),
                         ),
                         TextButton(
-                          onPressed: () => context.canPop()
-                              ? context.pop()
-                              : context.go(Routers.login),
+                          // go: el login queda sobre la bienvenida (ver Routers).
+                          onPressed: () => context.go(Routers.login),
                           style: TextButton.styleFrom(
                             foregroundColor: AppColors.accent,
                             textStyle: const TextStyle(
