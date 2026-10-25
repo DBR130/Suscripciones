@@ -5,6 +5,20 @@
     "version": "0.2.0",
     "configurations": [
         {
+            // Backend en el mismo PC: la app de escritorio lo ve en localhost.
+            "name": "Windows (localhost)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "windows",
+            "args": ["--dart-define=API_URL=http://localhost:3000"]
+        },
+        {
+            // Sin dart-define: usa http://10.0.2.2:3000 (el PC visto desde el emulador).
+            "name": "Emulador Android",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
             "name": "flutter_suscripciones (Chrome)",
             "request": "launch",
             "type": "dart",
