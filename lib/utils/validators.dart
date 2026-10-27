@@ -3,6 +3,11 @@
 class Validators {
   Validators._();
 
+  static String? nombre(String? value) {
+    if (value == null || value.trim().isEmpty) return 'Ingresa tu nombre';
+    return null;
+  }
+
   static String? email(String? value) {
     final email = value?.trim() ?? '';
     if (email.isEmpty) return 'Ingresa tu correo electrónico';

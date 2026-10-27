@@ -1,41 +1,158 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../Pages/AvisosPage.dart';
+import '../Pages/BienvenidaPage.dart';
 import '../Pages/DashboardPage.dart';
-import '../Pages/HomePage.dart';
 import '../Pages/LoginPage.dart';
+import '../Pages/PerfilPage.dart';
+import '../Pages/PreferenciasPage.dart';
+import '../Pages/RegistroPage.dart';
+import '../Pages/SuscripcionDetallePage.dart';
+import '../Pages/SuscripcionFormPage.dart';
+import '../Pages/SuscripcionesPage.dart';
+import '../models/suscripcion.dart';
+import '../services/auth_service.dart';
+import '../services/recordatorios_service.dart';
+import '../services/suscripcion_service.dart';
+import '../widgets/app_shell.dart';
 
-/// Rutas de la aplicación con go_router.
+/// Rutas de la aplicación con go_router (ver "Navegación" en
+/// design/subtrack-pantallas.md).
 /// Para agregar una vista nueva: crear la constante y registrar su GoRoute.
 class Routers {
   Routers._();
 
   static const String home = '/';
   static const String login = '/login';
-  static const String dashboard = '/resumen';
+  static const String registro = '/registro';
 
-  static final GoRouter router = GoRouter(
-    initialLocation: home,
-    routes: [
-      GoRoute(
-        path: home,
-        builder: (context, state) => const HomePage(),
+  // Con barra de pestañas.
+  static const String dashboard = '/resumen';
+  static const String suscripciones = '/suscripciones';
+  static const String avisos = '/avisos';
+  static const String perfil = '/perfil';
+  static String detalle(int id) => '/suscripcion/$id';
+
+  // Sin barra de pestañas.
+  static const String preferencias = '/preferencias';
+  static const String nuevaSuscripcion = '/suscripcion/nueva';
+  static String editarSuscripcion(int id) => '/suscripcion/$id/editar';
+
+  static int _id(GoRouterState state) => int.tryParse(state.pathParameters['id']!) ?? 0;
+
+  /// Crea el router. [initialLocation] permite abrir directo en el resumen
+  /// cuando ya hay una sesión guardada (ver main.dart).
+  static GoRouter crear(
+    AuthService authService,
+    SuscripcionService suscripcionService, {
+    RecordatoriosService? recordatorios,
+    String initialLocation = home,
+  }) {
+    return GoRouter(
+      initialLocation: initialLocation,
+      routes: [
+        // Login y registro son hijas de la bienvenida: aunque se llegue con
+        // context.go (por ejemplo, al cerrar sesión), quedan encima de ella y
+        // el botón "atrás" de Android vuelve a la bienvenida en vez de cerrar
+        // la app.
+        GoRoute(
+          path: home,
+          builder: (context, state) => const BienvenidaPage(),
+          routes: [
+            GoRoute(
+              path: 'login',
+              builder: (context, state) => LoginPage(authService: authService),
+            ),
+            GoRoute(
+              path: 'registro',
+              builder: (context, state) => RegistroPage(authService: authService),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: preferencias,
+          builder: (context, state) =>
+              PreferenciasPage(authService: authService, recordatorios: recordatorios),
+        ),
+        // El formulario va fuera del shell (sin pestañas). Estas dos rutas
+        // van antes que '/suscripcion/:id' para que "nueva" no se lea como id.
+        GoRoute(
+          path: nuevaSuscripcion,
+          builder: (context, state) =>
+              SuscripcionFormPage(suscripcionService: suscripcionService, recordatorios: recordatorios),
+        ),
+        GoRoute(
+          path: '/suscripcion/:id/editar',
+          builder: (context, state) {
+            // La suscripción llega en "extra" desde el detalle. Si no viene
+            // (por ejemplo, tras reiniciar la app), se muestra el detalle.
+            final suscripcion = state.extra;
+            if (suscripcion is Suscripcion) {
+              return SuscripcionFormPage(
+                suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
+                inicial: suscripcion,
+              );
+            }
+            return SuscripcionDetallePage(
+              id: _id(state),
+              authService: authService,
+              suscripcionService: suscripcionService,
+              recordatorios: recordatorios,
+            );
+          },
+        ),
+        ShellRoute(
+          builder: (context, state, child) => AppShell(child: child),
+          routes: [
+            GoRoute(
+              path: dashboard,
+              builder: (context, state) => DashboardPage(
+                authService: authService,
+                suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
+              ),
+            ),
+            GoRoute(
+              path: suscripciones,
+              builder: (context, state) => SuscripcionesPage(
+                authService: authService,
+                suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
+              ),
+            ),
+            GoRoute(
+              path: avisos,
+              builder: (context, state) => AvisosPage(suscripcionService: suscripcionService),
+            ),
+            GoRoute(
+              path: perfil,
+              builder: (context, state) => PerfilPage(
+                authService: authService,
+                suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
+              ),
+            ),
+            GoRoute(
+              path: '/suscripcion/:id',
+              builder: (context, state) => SuscripcionDetallePage(
+                id: _id(state),
+                authService: authService,
+                suscripcionService: suscripcionService,
+                recordatorios: recordatorios,
+              ),
+            ),
+          ],
+        ),
+      ],
+      // Se muestra cuando se navega a una ruta que no existe.
+      errorBuilder: (context, state) => Scaffold(
+        appBar: AppBar(title: const Text('Error')),
+        body: Center(
+          child: Text('No existe la ruta: ${state.uri}'),
+        ),
       ),
-      GoRoute(
-        path: login,
-        builder: (context, state) => const LoginPage(),
-      ),
-      GoRoute(
-        path: dashboard,
-        builder: (context, state) => const DashboardPage(),
-      ),
-    ],
-    // Se muestra cuando se navega a una ruta que no existe.
-    errorBuilder: (context, state) => Scaffold(
-      appBar: AppBar(title: const Text('Error')),
-      body: Center(
-        child: Text('No existe la ruta: ${state.uri}'),
-      ),
-    ),
-  );
+    );
+  }
 }

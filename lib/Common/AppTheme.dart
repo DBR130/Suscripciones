@@ -12,6 +12,59 @@ class AppColors {
   static const Color accent = Color(0xFF60A5FA); // --accent
   static const Color primary = Color(0xFF2563EB); // --btn-bg / --mark-bg
   static const Color error = Color(0xFFF87171);
+
+  // Colores adicionales de design/SubTrack_Simulacion.html.
+  static const Color link = Color(0xFF7DB3FF);
+  static const Color textSoft = Color(0xFFD6E3FB); // texto de botones secundarios
+  static const Color mutedOnGradient = Color(0xFFA6B6D0);
+  static const Color lineStrong = Color(0xFF2C3B58); // borde de botones/pills
+  static const Color divider = Color(0xFF1E2A40);
+  static const Color panel = Color(0xFF0E1626); // barra inferior fija
+  static const Color chip = Color(0xFF1A263D);
+  static const Color avatar = Color(0xFF1C2942);
+  static const Color cardFlag = Color(0xFF17203A); // tarjeta resaltada
+  static const Color flagBlueBg = Color(0xFF16273F);
+  static const Color flagBlueText = Color(0xFFA9CCFF);
+  static const Color amber = Color(0xFFFBD167); // avisos y acciones de cancelar
+  static const Color amberStrong = Color(0xFFFCD34D);
+  static const Color amberBorder = Color(0x73FBBF24); // rgba(251,191,36,.45)
+  static const Color amberBg = Color(0x21FBBF24); // rgba(251,191,36,.13)
+  static const Color errorSoft = Color(0xFFFCA5A5); // texto del banner de error
+  static const Color errorBg = Color(0x1FF87171); // rgba(248,113,113,.12)
+  static const Color errorLine = Color(0x73F87171); // rgba(248,113,113,.45)
+  static const Color danger = Color(0xFFDC2626); // botón destructivo del diálogo
+
+  // Mismos colores con el nombre del token en design/subtrack-pantallas.md,
+  // para poder copiar la tabla del diseño tal cual.
+  static const Color surface2 = flagBlueBg; // --surface-2
+  static const Color surface3 = avatar; // --surface-3
+  static const Color bar = panel; // --bar
+  static const Color line2 = lineStrong; // --line-2
+  static const Color text2 = textSoft; // --text-2
+  static const Color mutedHero = mutedOnGradient; // --muted-hero
+  static const Color accentSoft = flagBlueText; // --accent-soft
+  static const Color amberLine = amberBorder; // --amber-line
+
+  /// Orbes decorativos detrás del contenido (degradado radial azul).
+  static const Color orbA = Color(0x733B82F6); // rgba(59,130,246,.45)
+  static const Color orbB = Color(0x612563EB); // rgba(37,99,235,.38)
+
+  /// Degradado de la bienvenida: el del hero a 160° (casi vertical, hacia
+  /// abajo y un poco a la derecha).
+  static const LinearGradient bienvenida = LinearGradient(
+    begin: Alignment(-0.34, -0.94),
+    end: Alignment(0.34, 0.94),
+    colors: [Color(0xFF0D1526), Color(0xFF152443), Color(0xFF1E3A6E)],
+    stops: [0, 0.55, 1],
+  );
+
+  /// Degradado de los encabezados (dashboard, detalle, perfil...).
+  static const LinearGradient header = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0xFF0D1526), Color(0xFF152443), Color(0xFF1E3A6E)],
+    stops: [0, 0.55, 1],
+  );
 }
 
 /// Tema de la app: aquí se define una sola vez cómo se ven
@@ -21,7 +74,7 @@ class AppTheme {
 
   static OutlineInputBorder _border(Color color, [double width = 1]) {
     return OutlineInputBorder(
-      borderRadius: BorderRadius.circular(14), // --radius
+      borderRadius: BorderRadius.circular(12), // inputs del diseño
       borderSide: BorderSide(color: color, width: width),
     );
   }
@@ -45,7 +98,7 @@ class AppTheme {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: AppColors.surface,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       labelStyle: const TextStyle(
         color: AppColors.muted,
         fontWeight: FontWeight.w500,
@@ -65,6 +118,7 @@ class AppTheme {
       suffixIconColor: AppColors.muted,
       errorStyle: const TextStyle(
         color: AppColors.error,
+        fontSize: 12,
         fontWeight: FontWeight.w600,
       ),
       enabledBorder: _border(AppColors.line),
@@ -83,10 +137,19 @@ class AppTheme {
         textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
       ),
     ),
-    snackBarTheme: const SnackBarThemeData(
+    // "Toast" del diseño: tarjeta flotante con borde (ver mostrarToast).
+    snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surface,
-      contentTextStyle: TextStyle(color: AppColors.text),
+      contentTextStyle: const TextStyle(
+        color: AppColors.text,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+      ),
       behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: AppColors.lineStrong),
+      ),
     ),
   );
 }

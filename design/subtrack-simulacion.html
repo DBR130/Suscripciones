@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SubTrack · Simulación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!--
+  SubTrack · simulación navegable (versión final para Claude Code)
+  ----------------------------------------------------------------
+  Archivo independiente: no necesita support.js ni ningún build. Ábrelo en el navegador.
+  Referencia de pantallas, componentes, colores y textos: subtrack-pantallas.md (misma carpeta).
+
+  Fuente de datos en la app real:
+   - 02 Login/registro: backend real (AuthService). Aquí se simula la respuesta.
+   - 07, 08, 09, 13 (dashboard, lista, detalle, agregar/editar): backend real (fase de Claude Code).
+   - 04, 05 (escaneo y resultados): DATOS DE EJEMPLO, provisionales.
+   - El resto (avisos, ahorro, guía): datos de ejemplo hasta que exista su endpoint.
+  "Hoy" en la simulación es el 17 sep 2026.
+-->
+<style>
+:root{
+  --page:#080D18; --bg:#0B1220; --surface:#141D2F; --surface-2:#16273F; --surface-3:#1C2942; --bar:#0E1626;
+  --line:#243149; --line-2:#2C3B58; --divider:#1E2A40;
+  --text:#E9EFFA; --text-2:#D6E3FB; --muted:#9AAAC4; --muted-hero:#A6B6D0;
+  --primary:#2563EB; --accent:#60A5FA; --link:#7DB3FF; --accent-soft:#A9CCFF;
+  --amber:#FBD167; --amber-strong:#FCD34D; --amber-line:rgba(251,191,36,.45); --amber-bg:rgba(251,191,36,.13);
+  --error:#F87171; --error-soft:#FCA5A5; --error-bg:rgba(248,113,113,.12); --error-line:rgba(248,113,113,.45);
+  --hero:linear-gradient(140deg,#0D1526 0%,#152443 55%,#1E3A6E 100%);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;background:var(--page)}
+body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;line-height:1.35;color:var(--text)}
+button,input,select{font-family:inherit}
+button{cursor:pointer}
+p{margin:0}
+@keyframes st-in{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes st-up{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes st-scan{0%{transform:scale(.92);opacity:.35}50%{transform:scale(1.04);opacity:1}100%{transform:scale(.92);opacity:.35}}
+@keyframes st-bar{from{width:6%}to{width:100%}}
+@keyframes st-spin{to{transform:rotate(360deg)}}
+
+.page{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:28px 16px 64px;gap:14px}
+.top{width:390px;max-width:100%;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;color:#C7D4EA;font-size:12.5px}
+.top b{display:block;font-size:15px;font-weight:800;letter-spacing:-.01em;margin-bottom:2px}
+.top .dim{opacity:.72}
+
+/* Teléfono */
+.phone{width:390px;max-width:100%;height:844px;background:var(--bg);border-radius:38px;overflow:hidden;overflow:clip;position:relative;display:flex;flex-direction:column;box-shadow:0 26px 64px rgba(10,14,25,.34);isolation:isolate}
+.orb{position:absolute;border-radius:50%;z-index:1;pointer-events:none}
+.orb.a{top:-74px;right:-44px;width:206px;height:206px;background:radial-gradient(circle at 40% 40%,rgba(59,130,246,.45),transparent 70%)}
+.orb.b{top:104px;left:-84px;width:210px;height:210px;background:radial-gradient(circle at 50% 50%,rgba(37,99,235,.38),transparent 70%)}
+.status{display:flex;justify-content:space-between;align-items:center;padding:15px 26px 4px;font-size:12.5px;font-weight:700;color:#F2F6FD;position:relative;z-index:4}
+.status span:last-child{display:flex;gap:5px;align-items:center;opacity:.9}
+.screen{flex:1;display:flex;flex-direction:column;position:relative;z-index:3;min-height:0}
+.screen.pad{padding:26px 24px 24px;overflow-y:auto}
+.screen.clip{overflow:hidden}
+.scroll{flex:1;overflow-y:auto;padding:16px 16px 10px;display:flex;flex-direction:column;gap:14px}
+.footer{padding:12px 16px 20px;border-top:1px solid var(--divider);background:var(--bar);display:flex;flex-direction:column;gap:9px}
+
+/* Marca */
+.brand{font-size:17px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:9px}
+.mark{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;font-style:normal;background:var(--primary);color:#fff;font-size:13px;font-weight:900;flex:none}
+.brand.sm{font-size:16.5px}.brand.sm .mark{width:26px;height:26px;font-size:12px}
+
+/* Encabezado con degradado */
+.hero{background:var(--hero);border-radius:0 0 26px 26px;padding:10px 16px 20px;position:relative}
+.hero-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.eyebrow{font-size:11.5px;font-weight:700;color:var(--muted-hero);letter-spacing:.09em;text-transform:uppercase}
+.h-title{font-size:21px;font-weight:800;letter-spacing:-.025em}
+.h-sub{font-size:12.5px;color:var(--muted-hero);font-weight:600}
+.big{font-size:38px;font-weight:800;letter-spacing:-.025em;font-variant-numeric:tabular-nums;line-height:1.05}
+.glass{padding:16px 16px 15px;border-radius:22px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.36);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 12px 26px rgba(0,0,0,.16);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%)}
+.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;background:var(--surface-3);color:#CFE0FF;border:1px solid var(--line-2)}
+.avatar.lg{width:52px;height:52px;font-size:17px}
+
+/* Botones */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:14px;font-weight:700;padding:14px 18px;border-radius:999px;border:0;width:100%}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary[disabled]{opacity:.6;cursor:default}
+.btn-outline{background:transparent;color:var(--text-2);border:1px solid var(--line-2);font-size:13.5px;padding:13px}
+.btn-dashed{background:transparent;color:var(--text-2);border:1px dashed var(--line-2);font-size:13.5px;padding:13px}
+.btn-amber{background:transparent;color:var(--amber);border:1.5px solid var(--amber-line);font-size:13.5px;padding:13px}
+.btn-ghost{background:transparent;color:var(--muted);font-size:13px;padding:10px}
+.btn-link{background:transparent;color:var(--link);font-size:13px;padding:8px}
+.btn-danger{background:#DC2626;color:#fff}
+.btn-danger-text{background:transparent;color:var(--error);font-size:13px;padding:10px}
+.btn-sm{width:auto;font-size:12.5px;padding:8px 13px;gap:5px}
+.btn-back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:7px 12px 7px 9px;border-radius:999px;background:rgba(255,255,255,.1);color:var(--text-2);border:1px solid rgba(255,255,255,.22)}
+.spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:st-spin .7s linear infinite}
+
+/* Formularios */
+.label{display:block;font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:.09em;text-transform:uppercase;margin-bottom:7px}
+.input{width:100%;font-size:14.5px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 14px;outline:none;color-scheme:dark}
+.input::placeholder{color:rgba(154,170,196,.6)}
+.input:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.input.has-err{border-color:var(--error)}
+.field{display:block}
+.field-err{margin:6px 2px 0;font-size:12px;font-weight:600;color:var(--error)}
+.form{display:flex;flex-direction:column;gap:14px}
+.banner-err{display:flex;gap:9px;align-items:flex-start;font-size:13px;font-weight:600;padding:12px 13px;border-radius:12px;background:var(--error-bg);color:var(--error-soft);border:1px solid var(--error-line);line-height:1.45}
+
+/* Tarjetas */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 1px 2px rgba(16,24,40,.05)}
+.card.flag{background:#17203A;border:2px solid rgba(251,191,36,.55)}
+.list{display:flex;flex-direction:column;gap:11px}
+.row{display:flex;align-items:center;gap:12px}
+.grow{min-width:0;flex:1}
+.name{display:block;font-size:15.5px;font-weight:700;letter-spacing:-.015em}
+.meta{display:block;font-size:12.5px;color:var(--muted);font-weight:500;margin-top:3px}
+.amount{display:block;font-size:15.5px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;text-align:right}
+.per{font-size:11.5px;color:var(--muted);font-weight:600}
+.card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid var(--line)}
+.when{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);font-weight:600}
+.logo{border-radius:12px;color:#fff;display:grid;place-items:center;font-weight:800;flex:none;letter-spacing:-.02em}
+.flagchip{margin:12px 0 0;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:6px 10px;border-radius:9px}
+.flagchip.amber{background:var(--amber-bg);color:var(--amber);border:1.5px dashed rgba(251,191,36,.55)}
+.flagchip.blue{background:var(--surface-2);color:var(--accent-soft);border:1px solid var(--line-2)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:7px 11px;border-radius:999px}
+.chip.amber{background:rgba(251,191,36,.14);color:var(--amber-strong);border:1px solid rgba(251,191,36,.42)}
+.chip.neutral{background:#1A263D;color:var(--text-2);border:1px solid var(--line-2)}
+.provisional{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:5px 9px;border-radius:8px;background:var(--amber-bg);color:var(--amber);border:1.5px dashed rgba(251,191,36,.55)}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:11px;padding:0 2px}
+.sec-h h2{margin:0;font-size:14.5px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:7px}
+.count{font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--primary);color:#fff}
+.sec-note{font-size:12px;color:var(--muted);font-weight:600}
+.facts{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px 14px}
+.fact{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--divider)}
+.fact:last-child{border-bottom:0}
+.fact .k{font-size:12.5px;color:var(--muted);font-weight:600}
+.fact .v{font-size:13px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.sub-h{margin:0 0 9px;padding:0 2px;font-size:13.5px;font-weight:800;letter-spacing:-.01em}
+.setting{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.setting .t{display:block;font-size:13.5px;font-weight:700}
+.setting .d{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-top:2px}
+.notice-amber{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;padding:11px 13px;border-radius:12px;background:var(--amber-bg);color:var(--amber-strong);border:1.5px dashed rgba(251,191,36,.55)}
+.notice-blue{display:flex;gap:9px;align-items:flex-start;font-size:13px;font-weight:700;padding:13px;border-radius:14px;background:var(--surface-2);color:var(--text-2);border:1px solid var(--line-2);line-height:1.45}
+.check{color:var(--accent);flex:none;margin-top:1px}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:34px 18px}
+.empty .ico{width:54px;height:54px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line-2);display:grid;place-items:center;color:var(--link)}
+
+/* Selectores y switch */
+.pills{display:flex;gap:8px}
+.pill{flex:1;font-size:13px;font-weight:800;padding:11px 6px;border-radius:12px;background:transparent;color:var(--text-2);border:1px solid var(--line-2)}
+.pill.on{background:var(--primary);color:#fff;border:0}
+.opt{display:flex;flex-direction:column;gap:3px;text-align:left;padding:13px 14px}
+.opt .l{font-size:15px;font-weight:800;letter-spacing:-.015em}
+.opt .h{font-size:12px;color:var(--muted);font-weight:600}
+.opt.on .h{color:#DCE6F8}
+.switch{width:46px;height:27px;border-radius:99px;padding:3px;flex:none;border:1px solid var(--line-2);background:var(--surface);display:flex;justify-content:flex-start;align-items:center}
+.switch.on{border:0;background:var(--primary);justify-content:flex-end}
+.switch i{display:block;width:21px;height:21px;border-radius:50%;background:#5B6A85}
+.switch.on i{background:#fff}
+.dots{display:flex;gap:7px;margin-bottom:22px}
+.dots span{width:7px;height:7px;border-radius:99px;background:var(--line-2);transition:width .2s}
+.dots span.on{width:22px;background:var(--accent)}
+
+/* Barra de pestañas */
+.tabs{display:flex;justify-content:space-around;padding:11px 6px 20px;background:var(--bar);border-top:1px solid var(--divider);position:relative;z-index:5}
+.tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;font-weight:700;background:transparent;border:0;padding:2px 4px;color:var(--muted)}
+.tab.on{color:var(--link)}
+
+/* Superposiciones */
+.push{position:absolute;top:44px;left:12px;right:12px;z-index:20;text-align:left;animation:st-in .28s ease-out;padding:13px 14px;border-radius:20px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.36);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 12px 26px rgba(0,0,0,.36);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%);color:#F2F6FD;display:flex;gap:11px;align-items:flex-start}
+.toast{position:absolute;left:16px;right:16px;bottom:96px;z-index:25;display:flex;gap:10px;align-items:center;padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line-2);box-shadow:0 12px 26px rgba(0,0,0,.36);font-size:13px;font-weight:600;color:var(--text);animation:st-up .22s ease-out}
+.toast.low{bottom:24px}
+.scrim{position:absolute;inset:0;z-index:30;background:rgba(5,9,18,.72);display:flex;align-items:flex-end;padding:12px}
+.sheet{width:100%;background:var(--surface);border:1px solid var(--line-2);border-radius:22px;padding:20px 18px 16px;display:flex;flex-direction:column;gap:10px;animation:st-up .22s ease-out}
+.sheet .t{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.sheet .b{font-size:13.5px;color:var(--muted);font-weight:500;line-height:1.5;margin-bottom:6px}
+
+/* Controles de la simulación */
+.sim{width:390px;max-width:100%;background:var(--bg);border:1px solid var(--divider);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:11px}
+.sim .btns{display:flex;flex-wrap:wrap;gap:8px}
+.sim button{font-size:12px;font-weight:700;padding:9px 13px;border-radius:999px;background:transparent;color:var(--text-2);border:1px solid var(--line-2)}
+.sim button.warn{color:var(--amber);border:1.5px solid var(--amber-line)}
+.sim select{width:100%;font-size:13px;font-weight:600;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color-scheme:dark}
+.sim .note{font-size:11.5px;color:#C7D4EA;opacity:.7;line-height:1.55}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="top">
+    <span><b>SubTrack · simulación navegable</b><span class="dim">Flat + acentos glass · azul oscuro · MVP v1</span></span>
+    <span class="dim" id="screenName"></span>
+  </div>
+  <div class="phone" id="phone"></div>
+  <div class="sim" id="sim"></div>
+</div>
+
+<script>
+/* ---------- Utilidades ---------- */
+const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const MES_LARGO = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const HOY = new Date(2026, 8, 17); // 17 sep 2026
+const money = n => '$' + Math.round(n).toLocaleString('es-CO');
+const parse = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+const iso = dt => dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
+const daysTo = s => Math.round((parse(s) - HOY) / 864e5);
+const dm = s => { const d = parse(s); return d.getDate() + ' ' + MES[d.getMonth()]; };
+const dmy = s => dm(s) + ' ' + parse(s).getFullYear();
+const mesAnio = s => { const d = parse(s); return MES[d.getMonth()] + ' ' + d.getFullYear(); };
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const initials = n => { const p = String(n).trim().split(/\s+/); return ((p[0] || '')[0] + ((p[1] || '')[0] || (p[0] || '')[1] || '')).toUpperCase(); };
+const subIni = n => { const t = String(n).trim(); return t.length <= 2 ? t : t.slice(0, 2); };
+const perLabel = f => f === 'anual' ? '/año' : f === 'semanal' ? '/semana' : '/mes';
+const freqName = f => f.charAt(0).toUpperCase() + f.slice(1);
+const monthly = s => s.es_prueba ? 0 : (s.frecuencia === 'anual' ? s.monto / 12 : s.frecuencia === 'semanal' ? s.monto * 4.33 : s.monto);
+const monthlyAfterTrial = s => s.frecuencia === 'anual' ? s.monto / 12 : s.frecuencia === 'semanal' ? s.monto * 4.33 : s.monto;
+const fechaClave = s => s.es_prueba && s.fecha_fin_prueba ? s.fecha_fin_prueba : s.fecha_proximo_cobro;
+
+const ICON = {
+  check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg>',
+  alert: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.2"/><circle cx="12" cy="16.5" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  cal: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>',
+  next: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>',
+  back: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  edit: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  bell: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 4 1.5 5.5 1.5 5.5h-15S6 13 6 9z"/><path d="M10 18.5a2.2 2.2 0 004 0"/></svg>',
+  search: '<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="6.6"/><path d="M16 16l4.5 4.5"/></svg>',
+  plus: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  tabHome: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/></svg>',
+  tabList: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>',
+  tabBell: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1112 0c0 4 1.5 5.5 1.5 5.5h-15S6 13 6 9z"/><path d="M10 18.5a2.2 2.2 0 004 0"/></svg>',
+  tabUser: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.6"/><path d="M4.8 20c1.3-3.6 4-5.4 7.2-5.4s5.9 1.8 7.2 5.4"/></svg>'
+};
+
+/* ---------- Datos de ejemplo ----------
+   Mismos campos que la tabla `suscripciones` de la spec (+ categoria, color e historial).
+   En la app real vienen del backend; aquí son fijos. */
+const SEED = [
+  { id: 'dp', ini: 'D+', nombre_servicio: 'Disney+', color: '#113CCF', categoria: 'Streaming · Estándar', monto: 26900, frecuencia: 'mensual', fecha_proximo_cobro: '2026-09-18', desde: '2025-02-18', origen: 'notificacion', estado: 'activa' },
+  { id: 'gf', ini: 'GF', nombre_servicio: 'GeForce NOW', color: '#3F6B00', categoria: 'Cloud gaming · Ultimate', monto: 89900, frecuencia: 'mensual', fecha_proximo_cobro: '2026-09-19', es_prueba: true, fecha_fin_prueba: '2026-09-19', desde: '2026-09-05', origen: 'notificacion', estado: 'activa' },
+  { id: 'nf', ini: 'N', nombre_servicio: 'Netflix', color: '#C1121F', categoria: 'Streaming · Con anuncios', monto: 38900, frecuencia: 'mensual', fecha_proximo_cobro: '2026-09-20', desde: '2024-03-20', origen: 'notificacion', estado: 'activa' },
+  { id: 'sp', ini: 'S', nombre_servicio: 'Spotify', color: '#12833F', categoria: 'Música · Premium individual', monto: 19900, frecuencia: 'mensual', fecha_proximo_cobro: '2026-09-25', desde: '2023-07-25', origen: 'notificacion', estado: 'activa' },
+  { id: 'ic', ini: 'iC', nombre_servicio: 'iCloud+', color: '#2F3437', categoria: 'Almacenamiento · 200 GB', monto: 14900, frecuencia: 'mensual', fecha_proximo_cobro: '2026-09-28', desde: '2022-01-28', origen: 'manual', estado: 'activa' },
+  { id: 'sf', ini: 'SF', nombre_servicio: 'Smart Fit', color: '#8A7A00', categoria: 'Gimnasio · Plan Black', monto: 89900, frecuencia: 'mensual', fecha_proximo_cobro: '2026-09-30', desde: '2025-05-30', origen: 'notificacion', estado: 'activa' },
+  { id: 'ps', ini: 'Ps', nombre_servicio: 'Adobe Photoshop', color: '#0A2F52', categoria: 'Software · Plan fotografía', monto: 47900, monto_anterior: 41900, frecuencia: 'mensual', fecha_proximo_cobro: '2026-10-02', desde: '2024-08-02', origen: 'notificacion', estado: 'activa' },
+  { id: 'cv', ini: 'Cv', nombre_servicio: 'Canva Pro', color: '#0B7285', categoria: 'Diseño · Anual', monto: 199000, frecuencia: 'anual', fecha_proximo_cobro: '2027-01-14', desde: '2025-01-14', origen: 'manual', estado: 'activa' }
+];
+const CANCELADAS_SEED = [{ ini: 'P+', nombre_servicio: 'Paramount+', color: '#0064FF', fecha_cancelacion: '2026-08-12', ahorro_proyectado_anual: 274800 }];
+const PALETA_MANUAL = '#334155';
+
+// Historial de pagos: hacia atrás desde el próximo cobro hasta la fecha "desde".
+function historial(s) {
+  if (s.es_prueba) return [];
+  if (s.pagos) return s.pagos;
+  const out = [];
+  const d = parse(s.fecha_proximo_cobro);
+  const start = parse(s.desde);
+  for (let i = 0; i < 60; i++) {
+    if (s.frecuencia === 'anual') d.setFullYear(d.getFullYear() - 1);
+    else if (s.frecuencia === 'semanal') d.setDate(d.getDate() - 7);
+    else d.setMonth(d.getMonth() - 1);
+    if (d < start) break;
+    const monto = (s.monto_anterior && out.length > 0) ? s.monto_anterior : s.monto;
+    out.push({ fecha_pago: iso(d), monto });
+  }
+  return out;
+}
+
+/* ---------- Estado ---------- */
+const clone = o => JSON.parse(JSON.stringify(o));
+function initialState() {
+  return {
+    screen: 'welcome', stack: [], onb: 0,
+    authMode: 'login',
+    auth: { nombre: '', correo: '', password: '', confirmar: '' }, authErr: {}, authServerErr: '', authLoading: false,
+    user: { nombre: 'Daniela Bustos', correo: 'daniela@correo.com' },
+    perms: true, resumen: true, dias: 3, perSub: {},
+    subs: clone(SEED).map(s => Object.assign(s, { pagos: historial(s) })), cancelled: clone(CANCELADAS_SEED),
+    picked: SEED.map(s => s.id),
+    selected: 'nf', push: null, justCancelled: null,
+    form: blankForm(), formErr: {}, editId: null,
+    modal: null, toast: null
+  };
+}
+function blankForm() { return { nombre_servicio: '', categoria: '', monto: '', frecuencia: 'mensual', fecha_proximo_cobro: '', es_prueba: false, fecha_fin_prueba: '' }; }
+let S = initialState();
+let scanTimer = null, toastTimer = null;
+
+const NAMES = {
+  welcome: '01 Bienvenida', auth: '02 Login / Registro', permisos: '03 Permisos', scan: '04 Escaneo', resultados: '05 Resultados detección',
+  prefs: '06 Preferencia de recordatorio', dashboard: '07 Dashboard', lista: '08 Suscripciones', detalle: '09 Detalle', guia: '10 Guía de cancelación',
+  avisos: '11 Avisos', ahorro: '12 Ahorro', agregar: '13 Agregar / Editar', perfil: '14 Perfil y configuración'
+};
+const TAB_SCREENS = ['dashboard', 'lista', 'avisos', 'ahorro', 'perfil', 'detalle'];
+
+const active = () => S.subs.filter(s => s.estado !== 'cancelada');
+const sorted = () => active().slice().sort((a, b) => daysTo(fechaClave(a)) - daysTo(fechaClave(b)));
+const sel = () => S.subs.find(s => s.id === S.selected) || active()[0] || null;
+
+/* ---------- Piezas reutilizables ---------- */
+const logo = (s, size = 44) => `<span aria-hidden="true" class="logo" style="width:${size}px;height:${size}px;background:${esc(s.color)};font-size:${size >= 52 ? 16 : 13.5}px">${esc(s.ini || subIni(s.nombre_servicio))}</span>`;
+const backBtn = (label = 'Volver', act = 'back') => `<button type="button" class="btn-back" data-act="${act}">${ICON.back} ${label}</button>`;
+const sw = (on, act) => `<button type="button" class="switch ${on ? 'on' : ''}" data-act="${act}" role="switch" aria-checked="${on}"><i></i></button>`;
+const field = (label, f, err, attrs = '') => `
+  <label class="field"><span class="label">${label}</span>
+    <input class="input ${err ? 'has-err' : ''}" data-f="${f}" value="${esc(get(f))}" ${attrs}>
+    ${err ? `<p class="field-err">${esc(err)}</p>` : ''}
+  </label>`;
+const provisional = () => `<span class="provisional">${ICON.alert} Datos de ejemplo · provisional</span>`;
+const DAY_OPTS = [
+  { v: 1, label: '1 día antes', short: '1 día', hint: 'Aviso justo antes del cobro' },
+  { v: 3, label: '3 días antes', short: '3 días', hint: 'Recomendado: alcanzas a cancelar' },
+  { v: 7, label: '7 días antes', short: '7 días', hint: 'Para planear el mes completo' }
+];
+const dayPills = (cur, act) => `<div class="pills">${DAY_OPTS.map(o => `<button type="button" class="pill ${cur === o.v ? 'on' : ''}" data-act="${act}" data-arg="${o.v}">${o.short}</button>`).join('')}</div>`;
+
+function get(path) { const [a, b] = path.split('.'); return S[a][b]; }
+function set(path, v) { const [a, b] = path.split('.'); S[a][b] = v; }
+
+function decorate(s) {
+  const dias = daysTo(fechaClave(s));
+  const trial = !!s.es_prueba;
+  const marked = s.estado === 'marcada_para_cancelar';
+  const dueSoon = dias <= S.dias;
+  let flag = null;
+  if (marked) flag = { cls: 'amber', text: 'Marcada por ti para cancelar' };
+  else if (trial) flag = { cls: 'amber', text: `Prueba gratis: se convierte en ${money(s.monto)}${perLabel(s.frecuencia)} en ${dias} día${dias === 1 ? '' : 's'}` };
+  else if (s.monto_anterior) flag = { cls: 'blue', text: `Subió de ${money(s.monto_anterior)} a ${money(s.monto)} este mes` };
+  else if (dueSoon) flag = { cls: 'blue', text: dias <= 0 ? 'Se cobra hoy' : dias === 1 ? 'Se cobra mañana' : `Se cobra en ${dias} días` };
+  const nextLine = trial ? `Prueba termina ${dm(s.fecha_fin_prueba)}` : `Próximo cobro: ${dm(s.fecha_proximo_cobro)}`;
+  const stateLine = marked ? `Marcada para cancelar · ${dm(fechaClave(s))}`
+    : trial ? `Prueba gratis hasta ${dm(s.fecha_fin_prueba)}`
+    : `${freqName(s.frecuencia)} · próximo ${dm(s.fecha_proximo_cobro)}`;
+  return { s, dias, trial, marked, flag, nextLine, stateLine, cardFlag: trial || marked };
+}
+
+function subCard(d) {
+  const s = d.s;
+  return `<article class="card ${d.cardFlag ? 'flag' : ''}">
+    <div class="row">
+      ${logo(s)}
+      <span class="grow"><span class="name">${esc(s.nombre_servicio)}</span><span class="meta">${esc(s.categoria || freqName(s.frecuencia) + ' · Registro manual')}</span></span>
+      <span style="flex:none"><span class="amount">${money(s.monto)}</span><span class="per">${perLabel(s.frecuencia)}</span></span>
+    </div>
+    ${d.flag ? `<p class="flagchip ${d.flag.cls}">${ICON.alert} ${esc(d.flag.text)}</p>` : ''}
+    <div class="card-foot">
+      <span class="when">${ICON.cal} ${d.nextLine}</span>
+      <button type="button" class="btn btn-primary btn-sm" data-act="open" data-arg="${s.id}">Ver detalle ${ICON.next}</button>
+    </div>
+  </article>`;
+}
+
+/* ---------- Pantallas ---------- */
+const SCREENS = {
+  welcome() {
+    const slides = [
+      ['Todo lo que pagas cada mes, en una sola lista.', 'Monto, frecuencia y próxima fecha de cobro de cada suscripción. Sin tener que revisar el extracto línea por línea.'],
+      ['Te avisamos antes del cobro, no después.', 'Recordatorios antes de cada cobro recurrente, antes de que termine una prueba gratis y cuando un precio cambia.'],
+      ['No adivinamos qué usas. Tú decides.', 'La app nunca marca una suscripción como olvidada. Te da datos reales a tiempo y la decisión de cancelar es siempre tuya.']
+    ];
+    const [t, b] = slides[S.onb];
+    return `<div class="screen" style="padding:34px 24px 26px;background:linear-gradient(160deg,#0D1526 0%,#152443 55%,#1E3A6E 100%)">
+      <p class="brand" style="margin-bottom:30px"><i class="mark">S</i> SubTrack</p>
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:16px">
+        <p style="font-size:31px;font-weight:800;letter-spacing:-.03em;line-height:1.12;text-wrap:pretty">${t}</p>
+        <p style="font-size:14.5px;color:var(--muted-hero);font-weight:500;line-height:1.5;text-wrap:pretty">${b}</p>
+      </div>
+      <div class="dots">${[0, 1, 2].map(i => `<span class="${S.onb === i ? 'on' : ''}"></span>`).join('')}</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button type="button" class="btn btn-primary" data-act="onbNext">${S.onb < 2 ? 'Siguiente' : 'Crear mi cuenta'}</button>
+        <button type="button" class="btn btn-ghost" data-act="toLogin">Ya tengo cuenta</button>
+      </div>
+    </div>`;
+  },
+
+  auth() {
+    const up = S.authMode === 'signup', e = S.authErr;
+    return `<div class="screen pad">
+      <p class="brand" style="margin-bottom:26px"><i class="mark">S</i> SubTrack</p>
+      <p style="margin-bottom:6px;font-size:24px;font-weight:800;letter-spacing:-.025em">${up ? 'Crea tu cuenta' : 'Hola de nuevo'}</p>
+      <p style="margin-bottom:22px;font-size:13.5px;color:var(--muted);font-weight:500">${up ? 'Con tu correo empezamos a ordenar tus cobros.' : 'Entra para ver tus próximos cobros.'}</p>
+      <form class="form" data-submit="submitAuth" novalidate>
+        ${S.authServerErr ? `<p class="banner-err">${ICON.alert} ${esc(S.authServerErr)}</p>` : ''}
+        ${up ? field('Nombre', 'auth.nombre', e.nombre, 'type="text" autocomplete="name" placeholder="Tu nombre"') : ''}
+        ${field('Correo', 'auth.correo', e.correo, 'type="email" autocomplete="email" placeholder="tucorreo@ejemplo.com"')}
+        ${field('Contraseña', 'auth.password', e.password, `type="password" autocomplete="${up ? 'new-password' : 'current-password'}" placeholder="${up ? 'mínimo 6 caracteres' : 'tu contraseña'}"`)}
+        ${up ? field('Confirmar contraseña', 'auth.confirmar', e.confirmar, 'type="password" autocomplete="new-password" placeholder="repite la contraseña"') : ''}
+        <button type="submit" class="btn btn-primary" style="margin-top:4px" ${S.authLoading ? 'disabled' : ''}>${S.authLoading ? '<span class="spinner"></span> ' + (up ? 'Creando cuenta…' : 'Entrando…') : (up ? 'Crear cuenta' : 'Entrar')}</button>
+      </form>
+      <button type="button" class="btn btn-link" style="margin-top:16px" data-act="toggleAuth">${up ? '¿Ya tienes cuenta? Inicia sesión' : 'No tengo cuenta, quiero registrarme'}</button>
+      <p style="margin-top:auto;padding-top:20px;font-size:11px;color:var(--muted);line-height:1.55">Al continuar aceptas el tratamiento de datos descrito en la política de privacidad (Habeas Data). Puedes eliminar tu cuenta y todos tus datos en cualquier momento.</p>
+    </div>`;
+  },
+
+  permisos() {
+    const item = t => `<span style="display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--text-2);font-weight:600;line-height:1.45"><span class="check">${ICON.check}</span> ${t}</span>`;
+    return `<div class="screen pad">
+      <span style="width:46px;height:46px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line-2);display:grid;place-items:center;color:var(--link);margin-bottom:20px">${ICON.bell}</span>
+      <p style="margin-bottom:8px;font-size:24px;font-weight:800;letter-spacing:-.025em;line-height:1.18">Permiso para leer notificaciones de pago</p>
+      <p style="margin-bottom:20px;font-size:13.5px;color:var(--muted);font-weight:500;line-height:1.5">Con este permiso detectamos automáticamente qué suscripciones tienes, cuánto cuestan y cada cuánto se cobran.</p>
+      <div class="card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:14px;padding:15px">
+        ${item('Solo leemos notificaciones que parecen cobros: comercio, monto y fecha.')}
+        ${item('No leemos mensajes personales, chats ni el contenido de otras apps.')}
+        ${item('Puedes revocar el permiso desde Configuración cuando quieras.')}
+      </div>
+      <p style="margin-bottom:20px;font-size:12px;color:var(--muted);font-weight:600;line-height:1.5">En iOS no es posible leer notificaciones de otras apps: allí el registro es manual o por reenvío de correos de cobro.</p>
+      <div style="margin-top:auto;display:flex;flex-direction:column;gap:10px">
+        <button type="button" class="btn btn-primary" data-act="grantPerms">Dar permiso y detectar</button>
+        <button type="button" class="btn btn-amber" data-act="denyPerms">Prefiero agregarlas a mano</button>
+      </div>
+    </div>`;
+  },
+
+  scan() {
+    return `<div class="screen" style="align-items:center;justify-content:center;padding:26px 30px;gap:18px">
+      ${provisional().replace('class="provisional"', 'class="provisional" style="align-self:center"')}
+      <span style="width:96px;height:96px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(37,99,235,.55),transparent 70%);display:grid;place-items:center;animation:st-scan 1.4s ease-in-out infinite;color:var(--accent-soft)">${ICON.search}</span>
+      <p style="font-size:19px;font-weight:800;letter-spacing:-.02em;text-align:center">Revisando tus notificaciones de pago…</p>
+      <p style="font-size:13px;color:var(--muted);font-weight:600;text-align:center;line-height:1.5">Buscamos cobros que se repitan con el mismo monto y comercio.</p>
+      <span style="width:100%;height:6px;border-radius:99px;background:var(--surface);overflow:hidden;margin-top:6px"><span style="display:block;height:100%;border-radius:99px;background:var(--primary);animation:st-bar 1.8s ease-out forwards"></span></span>
+    </div>`;
+  },
+
+  resultados() {
+    const rows = SEED.map(s => {
+      const on = S.picked.includes(s.id);
+      return `<div class="card" style="padding:12px;display:flex;align-items:center;gap:11px">
+        ${logo(s, 38)}
+        <span class="grow"><span class="name" style="font-size:14.5px">${esc(s.nombre_servicio)}</span><span class="meta" style="font-size:12px;margin-top:2px">${money(s.monto)} · ${s.frecuencia} · 3 cobros detectados</span></span>
+        <button type="button" data-act="togglePick" data-arg="${s.id}" style="font-size:11.5px;font-weight:800;padding:8px 11px;border-radius:999px;flex:none;background:${on ? 'var(--surface-2)' : 'transparent'};color:${on ? 'var(--accent-soft)' : 'var(--muted)'};border:1px ${on ? 'solid' : 'dashed'} var(--line-2)">${on ? 'Es mía' : 'Descartada'}</button>
+      </div>`;
+    }).join('');
+    return `<div class="screen clip">
+      <div class="hero" style="padding:14px 20px 18px">
+        <div class="hero-row" style="align-items:flex-start"><p class="eyebrow">Primera detección</p>${provisional()}</div>
+        <p style="margin:7px 0 3px;font-size:27px;font-weight:800;letter-spacing:-.025em">Encontramos ${SEED.length} suscripciones</p>
+        <p style="font-size:13px;color:var(--muted-hero);font-weight:500">Confirma las que sí son tuyas. Puedes descartar el resto.</p>
+      </div>
+      <div class="scroll" style="gap:10px">${rows}</div>
+      <div class="footer"><button type="button" class="btn btn-primary" data-act="go" data-arg="prefs">Confirmar ${S.picked.length} suscripciones</button></div>
+    </div>`;
+  },
+
+  prefs() {
+    return `<div class="screen pad">
+      <p style="margin-bottom:8px;font-size:24px;font-weight:800;letter-spacing:-.025em;line-height:1.18">¿Cuántos días antes te avisamos?</p>
+      <p style="margin-bottom:22px;font-size:13.5px;color:var(--muted);font-weight:500;line-height:1.5">Se aplica a todos los cobros. Después puedes cambiarlo por suscripción.</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${DAY_OPTS.map(o => `<button type="button" class="pill opt ${S.dias === o.v ? 'on' : ''}" data-act="setDias" data-arg="${o.v}"><span class="l">${o.label}</span><span class="h">${o.hint}</span></button>`).join('')}
+      </div>
+      <div class="card setting" style="margin-top:24px">
+        <span class="grow"><span class="t">Resumen mensual</span><span class="d">Cada inicio de mes, con tu gasto total</span></span>
+        ${sw(S.resumen, 'toggleResumen')}
+      </div>
+      <button type="button" class="btn btn-primary" style="margin-top:auto" data-act="finishOnboarding">Ir a mi dashboard</button>
+    </div>`;
+  },
+
+  dashboard() {
+    const list = sorted().map(decorate);
+    const total = active().reduce((t, s) => t + monthly(s), 0);
+    const soon = list.filter(d => d.dias <= 7), later = list.filter(d => d.dias > 7);
+    const trials = list.filter(d => d.trial && d.dias <= 7);
+    const hero = `<div class="hero" style="padding:8px 16px 24px">
+      <div class="hero-row" style="margin-bottom:16px">
+        <p class="brand sm"><i class="mark">S</i> SubTrack</p>
+        <button type="button" class="avatar" data-act="tab" data-arg="perfil" aria-label="Perfil">${esc(initials(S.user.nombre))}</button>
+      </div>
+      <div class="glass">
+        <p class="eyebrow">Gasto en suscripciones · mes</p>
+        <p class="big" style="margin:7px 0 3px">${money(total)}</p>
+        <p style="font-size:13px;color:var(--muted-hero);font-weight:500">${list.length} activa${list.length === 1 ? '' : 's'} · proyección anual ${money(total * 12)}</p>
+        ${list.length ? `<div style="display:flex;gap:7px;margin-top:13px;flex-wrap:wrap">
+          ${trials.length ? `<span class="chip amber">${ICON.alert} ${trials.length === 1 ? `1 prueba gratis termina en ${trials[0].dias} día${trials[0].dias === 1 ? '' : 's'}` : `${trials.length} pruebas gratis terminan esta semana`}</span>` : ''}
+          <span class="chip neutral">Próximo cobro: ${dm(fechaClave(list[0].s))}</span>
+        </div>` : ''}
+      </div>
+    </div>`;
+    if (!list.length) {
+      return `<div class="screen clip">${hero}
+        <div class="scroll"><div class="empty">
+          <span class="ico">${ICON.plus}</span>
+          <p style="font-size:17px;font-weight:800;letter-spacing:-.02em">Aún no tienes suscripciones</p>
+          <p style="font-size:13px;color:var(--muted);font-weight:500;line-height:1.5;max-width:260px">Agrega la primera con su monto y la fecha del próximo cobro. Te avisaremos ${S.dias} días antes.</p>
+          <button type="button" class="btn btn-primary" style="margin-top:8px" data-act="add">Agregar suscripción</button>
+        </div></div></div>`;
+    }
+    const section = (title, items, note) => items.length ? `<section>
+        <div class="sec-h"><h2>${title} <span class="count">${items.length}</span></h2><span class="sec-note">${note}</span></div>
+        <div class="list">${items.map(subCard).join('')}</div>
+      </section>` : '';
+    return `<div class="screen clip">${hero}
+      <div class="scroll" style="padding:18px 16px 8px;gap:22px">
+        ${section('Próximos 7 días', soon, money(soon.reduce((t, d) => t + monthly(d.s), 0)) + ' por cobrar')}
+        ${section('Más adelante', later, 'Ordenadas por cobro')}
+        <button type="button" class="btn btn-dashed" style="margin-bottom:6px" data-act="add">+ Agregar suscripción manualmente</button>
+      </div>
+    </div>`;
+  },
+
+  lista() {
+    const list = sorted().map(decorate);
+    return `<div class="screen clip">
+      <div class="hero" style="padding:10px 18px 16px">
+        <p class="h-title" style="margin-bottom:4px">Suscripciones</p>
+        <p class="h-sub">${list.length} activas · ${S.cancelled.length} canceladas · avisos ${S.dias} días antes</p>
+      </div>
+      <div class="scroll" style="gap:11px">
+        ${list.length ? list.map(d => `<article class="card ${d.cardFlag ? 'flag' : ''}"><div class="row">
+            ${logo(d.s)}
+            <span class="grow"><span class="name" style="font-size:15px">${esc(d.s.nombre_servicio)}</span><span class="meta">${d.stateLine}</span></span>
+            <button type="button" class="btn btn-outline btn-sm" style="padding:8px 12px" data-act="open" data-arg="${d.s.id}">${money(d.s.monto)} ${ICON.next}</button>
+          </div></article>`).join('') : `<div class="empty"><p style="font-size:15px;font-weight:800">Tu lista está vacía</p><p style="font-size:13px;color:var(--muted);font-weight:500">Las suscripciones que agregues aparecerán aquí.</p></div>`}
+        <button type="button" class="btn btn-dashed" style="margin-bottom:6px" data-act="add">+ Agregar suscripción</button>
+      </div>
+    </div>`;
+  },
+
+  detalle() {
+    const s = sel();
+    if (!s) return SCREENS.dashboard();
+    const pagos = historial(s);
+    const pagado = pagos.reduce((t, p) => t + p.monto, 0);
+    const per = S.perSub[s.id] ?? S.dias;
+    return `<div class="screen clip">
+      <div class="hero">
+        <div class="hero-row" style="margin-bottom:16px">${backBtn()}<button type="button" class="btn-back" style="padding:7px 12px" data-act="edit" data-arg="${s.id}">${ICON.edit} Editar</button></div>
+        <div class="row" style="gap:13px">
+          ${logo(s, 52)}
+          <span><span style="display:block;font-size:20px;font-weight:800;letter-spacing:-.025em">${esc(s.nombre_servicio)}</span><span class="h-sub" style="display:block;margin-top:2px">${esc(s.categoria || 'Registro manual')}</span></span>
+        </div>
+        <p style="margin-top:16px;font-size:32px;font-weight:800;letter-spacing:-.025em;font-variant-numeric:tabular-nums">${money(s.monto)} <span style="font-size:14px;font-weight:600;color:var(--muted-hero)">${perLabel(s.frecuencia)}</span></p>
+      </div>
+      <div class="scroll">
+        ${s.estado === 'marcada_para_cancelar' ? `<p class="notice-amber">Tú marcaste esta suscripción para cancelar.</p>` : ''}
+        <div class="facts">
+          <div class="fact"><span class="k">Frecuencia</span><span class="v">${freqName(s.frecuencia)}</span></div>
+          ${s.es_prueba ? `<div class="fact"><span class="k">Fin de la prueba</span><span class="v">${dmy(s.fecha_fin_prueba)}</span></div>` : ''}
+          <div class="fact"><span class="k">${s.es_prueba ? 'Primer cobro' : 'Próximo cobro'}</span><span class="v">${dmy(s.fecha_proximo_cobro)}</span></div>
+          <div class="fact"><span class="k">Pagado en total</span><span class="v">${money(pagado)}</span></div>
+          <div class="fact"><span class="k">Desde</span><span class="v">${mesAnio(s.desde)}</span></div>
+          <div class="fact"><span class="k">Origen</span><span class="v">${s.origen === 'manual' ? 'Registro manual' : 'Detección por notificación'}</span></div>
+        </div>
+        <div>
+          <p class="sub-h">Historial de pagos</p>
+          <div class="facts">${pagos.length ? pagos.slice(0, 3).map(p => `<div class="fact"><span class="k">${s.frecuencia === 'anual' ? dmy(p.fecha_pago) : dm(p.fecha_pago)}</span><span class="v">${money(p.monto)}</span></div>`).join('')
+            : `<div class="fact"><span class="k">${s.es_prueba ? 'Sin pagos aún: está en prueba gratis' : 'Sin pagos registrados aún'}</span><span class="v">${money(0)}</span></div>`}</div>
+        </div>
+        <div class="card">
+          <p style="margin-bottom:4px;font-size:13.5px;font-weight:700">Recordatorio de esta suscripción</p>
+          <p style="margin-bottom:12px;font-size:12px;color:var(--muted);font-weight:600">Sobrescribe tu preferencia global</p>
+          ${dayPills(per, 'setPerSub')}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:6px">
+          <button type="button" class="btn btn-amber" data-act="go" data-arg="guia">Cancelar esta suscripción</button>
+          <button type="button" class="btn btn-outline" style="font-size:13px;padding:12px" data-act="toggleMark">${s.estado === 'marcada_para_cancelar' ? 'Quitar marca de "quiero cancelar"' : 'Marcar como "quiero cancelar"'}</button>
+        </div>
+      </div>
+    </div>`;
+  },
+
+  guia() {
+    const s = sel();
+    if (!s) return SCREENS.dashboard();
+    const steps = [
+      `Abre ${esc(s.nombre_servicio)} en el navegador e inicia sesión con el correo de la suscripción.`,
+      'Entra a Cuenta → Suscripción y planes. En móvil el menú está detrás del avatar.',
+      'Toca "Cancelar suscripción" y rechaza la oferta de descuento si aparece.',
+      'Guarda el correo de confirmación: es tu comprobante si vuelven a cobrarte.'
+    ];
+    return `<div class="screen clip">
+      <div class="hero">
+        <div style="margin-bottom:14px">${backBtn()}</div>
+        <p class="h-title" style="margin-bottom:5px">Cómo cancelar ${esc(s.nombre_servicio)}</p>
+        <p class="h-sub">4 pasos · unos 3 minutos</p>
+      </div>
+      <div class="scroll" style="gap:11px">
+        ${steps.map((t, i) => `<div class="card" style="display:flex;gap:12px;align-items:flex-start">
+          <span style="width:26px;height:26px;border-radius:9px;background:var(--surface-3);border:1px solid var(--line-2);color:#CFE0FF;display:grid;place-items:center;font-size:12.5px;font-weight:800;flex:none">${i + 1}</span>
+          <span style="font-size:13.5px;font-weight:600;color:var(--text-2);line-height:1.5">${t}</span></div>`).join('')}
+        <p style="margin-top:4px;font-size:12px;color:var(--muted);font-weight:600;line-height:1.5">El catálogo de guías se actualiza desde el servidor: si el proveedor cambia su flujo, no hace falta publicar una nueva versión de la app.</p>
+      </div>
+      <div class="footer">
+        <button type="button" class="btn btn-primary" data-act="confirmCancel">Ya cancelé, confirmar</button>
+        <button type="button" class="btn btn-ghost" data-act="back">Lo haré después</button>
+      </div>
+    </div>`;
+  },
+
+  avisos() {
+    const avisos = [
+      { tipo: 'Fin de prueba gratis', fecha: 'hoy 9:00', titulo: 'Tu prueba de GeForce NOW termina en 2 días', cuerpo: `El 19 de septiembre pasa a ${money(89900)}/mes.`, id: 'gf' },
+      { tipo: 'Próximo cobro', fecha: 'hoy 8:00', titulo: 'Disney+ se cobra mañana', cuerpo: `${money(26900)} el 18 de septiembre.`, id: 'dp' },
+      { tipo: 'Cambio de precio', fecha: 'ayer', titulo: 'Adobe Photoshop subió de precio', cuerpo: `De ${money(41900)} a ${money(47900)}/mes.`, id: 'ps' },
+      { tipo: 'Próximo cobro', fecha: '14 sep', titulo: 'Netflix se cobra en 3 días', cuerpo: `${money(38900)} el 20 de septiembre.`, id: 'nf' },
+      { tipo: 'Resumen mensual', fecha: '1 sep', titulo: `En agosto pagaste ${money(279000)} en suscripciones`, cuerpo: 'Tu lista completa está en el dashboard.', id: null }
+    ];
+    return `<div class="screen clip">
+      <div class="hero" style="padding:10px 18px 16px">
+        <p class="h-title" style="margin-bottom:4px">Avisos</p>
+        <p class="h-sub">Recordatorios enviados · ${S.dias} días antes de cada cobro</p>
+      </div>
+      <div class="scroll" style="gap:11px">
+        ${avisos.map(a => `<button type="button" class="card" style="display:block;width:100%;text-align:left;color:var(--text)" data-act="${a.id ? 'open' : 'tab'}" data-arg="${a.id || 'dashboard'}">
+          <span style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+            <span style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">${a.tipo}</span>
+            <span style="font-size:11px;color:var(--muted);font-weight:700">${a.fecha}</span></span>
+          <span style="display:block;font-size:14px;font-weight:700;letter-spacing:-.015em;margin-top:6px">${a.titulo}</span>
+          <span style="display:block;font-size:12.5px;color:var(--muted);font-weight:500;margin-top:3px;line-height:1.45">${a.cuerpo}</span>
+        </button>`).join('')}
+      </div>
+    </div>`;
+  },
+
+  ahorro() {
+    const savings = S.cancelled.reduce((t, c) => t + c.ahorro_proyectado_anual, 0);
+    const total = active().reduce((t, s) => t + monthly(s), 0);
+    const vals = [318, 302, 295, 288, 279, Math.round(total / 1000)];
+    const max = Math.max(...vals);
+    return `<div class="screen clip">
+      <div class="hero" style="padding:10px 16px 22px">
+        <div style="margin-bottom:16px">${backBtn('Dashboard', 'tabDash')}</div>
+        <p class="eyebrow">Ahorro proyectado al año</p>
+        <p style="margin:7px 0 3px;font-size:36px;font-weight:800;letter-spacing:-.025em;font-variant-numeric:tabular-nums">${money(savings)}</p>
+        <p style="font-size:13px;color:var(--muted-hero);font-weight:500">${S.cancelled.length} suscripciones canceladas · ${money(savings / 12)} menos al mes</p>
+      </div>
+      <div class="scroll" style="padding:16px 16px 8px">
+        ${S.justCancelled ? `<p class="notice-blue"><span class="check" style="color:var(--link)">${ICON.check}</span> ${esc(S.justCancelled)} quedó en canceladas. Sumamos el ahorro proyectado y apagamos sus recordatorios.</p>` : ''}
+        <div>
+          <p class="sub-h">Evolución del gasto mensual</p>
+          <div class="card" style="padding:16px 14px 12px;display:flex;align-items:flex-end;gap:9px;height:150px">
+            ${['abr', 'may', 'jun', 'jul', 'ago', 'sep'].map((m, i) => `<span style="flex:1;display:flex;flex-direction:column;align-items:center;gap:7px;justify-content:flex-end;height:100%">
+              <span style="display:block;width:100%;border-radius:8px 8px 3px 3px;height:${Math.max(4, Math.round(vals[i] / max * 100))}%;background:${i === 5 ? 'var(--primary)' : '#1E2E4A'};border:${i === 5 ? '0' : '1px solid var(--line)'}"></span>
+              <span style="font-size:10.5px;color:var(--muted);font-weight:700">${m}</span></span>`).join('')}
+          </div>
+        </div>
+        <div>
+          <p class="sub-h">Canceladas</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            ${S.cancelled.map(c => `<div class="card" style="padding:13px;display:flex;align-items:center;gap:11px">
+              ${logo(c, 38)}
+              <span class="grow"><span class="name" style="font-size:14.5px">${esc(c.nombre_servicio)}</span><span class="meta" style="font-size:12px;margin-top:2px">Cancelada el ${dm(c.fecha_cancelacion)}</span></span>
+              <span style="text-align:right;flex:none"><span style="display:block;font-size:14px;font-weight:800;color:var(--link);font-variant-numeric:tabular-nums">+${money(c.ahorro_proyectado_anual)}</span><span style="font-size:11px;color:var(--muted);font-weight:600">al año</span></span>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  },
+
+  agregar() {
+    const editing = !!S.editId, e = S.formErr, f = S.form;
+    return `<div class="screen clip">
+      <div class="hero" style="padding:10px 16px 18px">
+        <div style="margin-bottom:14px">${backBtn()}</div>
+        <p class="h-title">${editing ? 'Editar suscripción' : 'Agregar suscripción'}</p>
+      </div>
+      <form class="scroll" style="padding:18px 20px 10px" data-submit="saveSub" id="subForm" novalidate>
+        ${field('Servicio', 'form.nombre_servicio', e.nombre_servicio, 'type="text" placeholder="ej. HBO Max" maxlength="100"')}
+        ${field('Plan o categoría (opcional)', 'form.categoria', null, 'type="text" placeholder="ej. Streaming · Estándar" maxlength="100"')}
+        ${field('Monto (COP)', 'form.monto', e.monto, 'type="number" inputmode="numeric" min="0" placeholder="24900"')}
+        <span class="field"><span class="label">Frecuencia</span>
+          <div class="pills">${['mensual', 'anual', 'semanal'].map(x => `<button type="button" class="pill ${f.frecuencia === x ? 'on' : ''}" data-act="setFreq" data-arg="${x}">${freqName(x)}</button>`).join('')}</div>
+        </span>
+        ${field(f.es_prueba ? 'Primer cobro (al terminar la prueba)' : 'Próximo cobro', 'form.fecha_proximo_cobro', e.fecha_proximo_cobro, 'type="date"')}
+        <div class="card setting">
+          <span class="grow"><span class="t">Es una prueba gratis</span><span class="d">Activa el aviso de fin de prueba</span></span>
+          ${sw(f.es_prueba, 'toggleTrial')}
+        </div>
+        ${f.es_prueba ? field('Fin de la prueba', 'form.fecha_fin_prueba', e.fecha_fin_prueba, 'type="date"') : ''}
+      </form>
+      <div class="footer">
+        <button type="submit" form="subForm" class="btn btn-primary">${editing ? 'Guardar cambios' : 'Guardar suscripción'}</button>
+        ${editing ? `<button type="button" class="btn btn-danger-text" data-act="askDelete">Eliminar suscripción</button>` : ''}
+      </div>
+    </div>`;
+  },
+
+  perfil() {
+    const savings = S.cancelled.reduce((t, c) => t + c.ahorro_proyectado_anual, 0);
+    return `<div class="screen clip">
+      <div class="hero" style="padding:12px 18px 22px;display:flex;align-items:center;gap:13px">
+        <span class="avatar lg">${esc(initials(S.user.nombre))}</span>
+        <span class="grow"><span style="display:block;font-size:18px;font-weight:800;letter-spacing:-.02em">${esc(S.user.nombre)}</span>
+          <span class="h-sub" style="display:block;margin-top:2px">${esc(S.user.correo)} · Colombia (COP)</span></span>
+      </div>
+      <div class="scroll">
+        <div class="card">
+          <p style="margin-bottom:4px;font-size:13.5px;font-weight:700">Avisarme antes de cada cobro</p>
+          <p style="margin-bottom:12px;font-size:12px;color:var(--muted);font-weight:600">Preferencia global</p>
+          ${dayPills(S.dias, 'setDias')}
+        </div>
+        <div class="facts">
+          <div class="fact setting" style="padding:13px 0"><span class="grow"><span class="t">Permiso de notificaciones</span><span class="d">${S.perms ? 'Activo · detección automática encendida' : 'Desactivado · solo registro manual'}</span></span>${sw(S.perms, 'togglePerms')}</div>
+          <div class="fact setting" style="padding:13px 0"><span class="grow"><span class="t">Resumen mensual</span><span class="d">Cada 1 del mes</span></span>${sw(S.resumen, 'toggleResumen')}</div>
+          <button type="button" class="fact" style="width:100%;text-align:left;align-items:center;padding:15px 0;background:transparent;border-left:0;border-right:0;border-top:0;color:var(--text);font-size:13.5px;font-weight:700" data-act="go" data-arg="ahorro">Historial y ahorro <span style="color:var(--link)">${money(savings)} ›</span></button>
+          <button type="button" class="fact" style="width:100%;text-align:left;align-items:center;padding:15px 0;background:transparent;border:0;color:var(--text);font-size:13.5px;font-weight:700" data-act="add">Agregar suscripción manual <span style="color:var(--muted)">›</span></button>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:6px">
+          <button type="button" class="btn btn-outline" style="font-size:13px;padding:12px" data-act="logout">Cerrar sesión</button>
+          <button type="button" class="btn btn-amber" style="font-size:13px;padding:12px" data-act="askDeleteAccount">Eliminar cuenta y todos mis datos</button>
+        </div>
+      </div>
+    </div>`;
+  }
+};
+
+/* ---------- Render ---------- */
+function render() {
+  const sc = SCREENS[S.screen] ? S.screen : 'dashboard';
+  const tabs = TAB_SCREENS.includes(sc);
+  const tabOn = { dashboard: sc === 'dashboard', lista: sc === 'lista' || sc === 'detalle', avisos: sc === 'avisos', perfil: sc === 'perfil' || sc === 'ahorro' };
+  const tab = (k, icon, label) => `<button type="button" class="tab ${tabOn[k] ? 'on' : ''}" data-act="tab" data-arg="${k}">${icon} ${label}</button>`;
+  document.getElementById('phone').innerHTML = `
+    <span aria-hidden="true" class="orb a"></span><span aria-hidden="true" class="orb b"></span>
+    <div class="status"><span>9:41</span><span>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 19.2l3.2-3.9a5 5 0 00-6.4 0zM6.3 12.4l1.6 1.9a7.5 7.5 0 018.2 0l1.6-1.9a10 10 0 00-11.4 0zM3.4 8.9L5 10.8a12.5 12.5 0 0114 0l1.6-1.9a15 15 0 00-17.2 0z"/></svg>
+      <svg width="22" height="12" viewBox="0 0 26 12" fill="none"><rect x="1" y="1" width="20" height="10" rx="3" stroke="currentColor" stroke-width="1.4" opacity=".6"/><rect x="3" y="3" width="14" height="6" rx="1.6" fill="currentColor"/><path d="M23 4.4v3.2c1-.3 1.6-.9 1.6-1.6S24 4.7 23 4.4z" fill="currentColor" opacity=".6"/></svg>
+    </span></div>
+    ${S.push ? `<button type="button" class="push" data-act="openPush">
+      <i class="mark" style="font-size:12px">S</i>
+      <span style="min-width:0"><span style="display:block;font-size:12.5px;font-weight:800;letter-spacing:-.01em">${esc(S.push.t)}</span>
+      <span style="display:block;font-size:12.5px;color:#DCE6F8;margin-top:2px">${esc(S.push.b)}</span>
+      <span style="display:block;font-size:11px;color:var(--muted-hero);margin-top:5px;font-weight:700">SubTrack · ahora</span></span>
+    </button>` : ''}
+    ${SCREENS[sc]()}
+    ${tabs ? `<nav class="tabs">${tab('dashboard', ICON.tabHome, 'Resumen')}${tab('lista', ICON.tabList, 'Suscripciones')}${tab('avisos', ICON.tabBell, 'Avisos')}${tab('perfil', ICON.tabUser, 'Perfil')}</nav>` : ''}
+    ${S.toast ? `<div class="toast ${tabs ? '' : 'low'}" role="status"><span class="check">${ICON.check}</span> ${esc(S.toast)}</div>` : ''}
+    ${S.modal ? `<div class="scrim" data-act="closeModal"><div class="sheet" role="dialog" aria-modal="true" data-stop>
+      <p class="t">${esc(S.modal.t)}</p><p class="b">${esc(S.modal.b)}</p>
+      <button type="button" class="btn btn-danger" data-act="${S.modal.act}">${esc(S.modal.cta)}</button>
+      <button type="button" class="btn btn-ghost" data-act="closeModal">No, volver</button>
+    </div></div>` : ''}`;
+  document.getElementById('screenName').textContent = NAMES[sc];
+  renderSim();
+}
+
+function renderSim() {
+  document.getElementById('sim').innerHTML = `
+    <p class="label" style="margin:0">Controles de la simulación</p>
+    <select data-sim="jump" aria-label="Ir a pantalla">${Object.entries(NAMES).map(([k, v]) => `<option value="${k}" ${S.screen === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+    <div class="btns">
+      <button type="button" data-act="simPush" data-arg="cobro">Push: próximo cobro</button>
+      <button type="button" data-act="simPush" data-arg="prueba">Push: fin de prueba</button>
+      <button type="button" data-act="simPush" data-arg="precio">Push: cambio de precio</button>
+      <button type="button" data-act="simPush" data-arg="deteccion">Push: nueva detección</button>
+      <button type="button" data-act="simEmpty">Lista vacía</button>
+      <button type="button" class="warn" data-act="reset">Reiniciar demo</button>
+    </div>
+    <p class="note">Login: cualquier correo válido entra. Con la contraseña <b>incorrecta</b> se ve el error del servidor; al registrarte con <b>existe@correo.com</b>, el de correo duplicado. Escaneo y resultados usan datos de ejemplo provisionales. Ninguna pantalla etiqueta una suscripción como no usada: los avisos son por fecha, monto y cambio de precio.</p>`;
+}
+
+/* ---------- Navegación y acciones ---------- */
+// Navegación con pila: goTo apila la pantalla actual; reset la vacía (pestañas, login, etc.).
+function goTo(screen, reset) {
+  if (scanTimer && screen !== 'scan') { clearTimeout(scanTimer); scanTimer = null; }
+  if (reset) S.stack = [];
+  else if (S.screen !== screen) S.stack.push(S.screen);
+  show(screen);
+}
+function show(screen) {
+  S.screen = screen; S.push = null; S.modal = null;
+  render();
+  const sc = document.querySelector('#phone .scroll, #phone .screen.pad'); if (sc) sc.scrollTop = 0;
+}
+function toast(msg) {
+  S.toast = msg; render();
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; render(); }, 2400);
+}
+function openForm(id) {
+  S.editId = id || null; S.formErr = {};
+  if (id) {
+    const s = S.subs.find(x => x.id === id);
+    S.form = { nombre_servicio: s.nombre_servicio, categoria: s.categoria || '', monto: String(s.monto), frecuencia: s.frecuencia, fecha_proximo_cobro: s.fecha_proximo_cobro, es_prueba: !!s.es_prueba, fecha_fin_prueba: s.fecha_fin_prueba || '' };
+  } else {
+    S.form = blankForm();
+  }
+  goTo('agregar');
+}
+function validateAuth() {
+  const a = S.auth, e = {}, up = S.authMode === 'signup';
+  if (up && !a.nombre.trim()) e.nombre = 'Ingresa tu nombre';
+  const c = a.correo.trim();
+  if (!c) e.correo = 'Ingresa tu correo electrónico';
+  else if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c)) e.correo = 'Correo no válido';
+  if (!a.password) e.password = 'Ingresa tu contraseña';
+  else if (up && a.password.length < 6) e.password = 'Mínimo 6 caracteres';
+  if (up && a.confirmar !== a.password) e.confirmar = 'Las contraseñas no coinciden';
+  return e;
+}
+function validateSub() {
+  const f = S.form, e = {};
+  if (!f.nombre_servicio.trim()) e.nombre_servicio = 'Ingresa el nombre del servicio';
+  if (!(Number(f.monto) > 0)) e.monto = 'Ingresa un monto mayor a 0';
+  if (!f.fecha_proximo_cobro) e.fecha_proximo_cobro = 'Elige la fecha del próximo cobro';
+  if (f.es_prueba && !f.fecha_fin_prueba) e.fecha_fin_prueba = 'Elige cuándo termina la prueba';
+  return e;
+}
+
+const ACT = {
+  go: k => goTo(k),
+  tab: k => goTo(k, true),
+  tabDash: () => goTo('dashboard', true),
+  back: () => show(S.stack.pop() || 'dashboard'),
+  open: id => { S.selected = id; goTo('detalle'); },
+  add: () => openForm(null),
+  edit: id => openForm(id),
+  onbNext: () => { if (S.onb < 2) { S.onb++; render(); } else { S.authMode = 'signup'; S.authErr = {}; S.authServerErr = ''; goTo('auth'); } },
+  toLogin: () => { S.authMode = 'login'; S.authErr = {}; S.authServerErr = ''; goTo('auth'); },
+  toggleAuth: () => { S.authMode = S.authMode === 'signup' ? 'login' : 'signup'; S.authErr = {}; S.authServerErr = ''; render(); },
+  submitAuth: () => {
+    S.authServerErr = '';
+    S.authErr = validateAuth();
+    if (Object.keys(S.authErr).length) return render();
+    S.authLoading = true; render();
+    setTimeout(() => {
+      S.authLoading = false;
+      const up = S.authMode === 'signup', correo = S.auth.correo.trim().toLowerCase();
+      if (!up && S.auth.password === 'incorrecta') { S.authServerErr = 'Correo o contraseña incorrectos'; return render(); }
+      if (up && correo === 'existe@correo.com') { S.authServerErr = 'Ya existe una cuenta con ese correo'; return render(); }
+      if (up) S.user = { nombre: S.auth.nombre.trim(), correo };
+      else S.user = { nombre: S.user.nombre, correo };
+      S.auth = { nombre: '', correo: '', password: '', confirmar: '' };
+      goTo(up ? 'permisos' : 'dashboard', 'dashboard');
+      toast('Hola, ' + S.user.nombre.split(' ')[0]);
+    }, 900);
+  },
+  grantPerms: () => { S.perms = true; goTo('scan'); scanTimer = setTimeout(() => { scanTimer = null; if (S.screen === 'scan') goTo('resultados'); }, 1900); },
+  denyPerms: () => { S.perms = false; S.form = blankForm(); S.editId = null; S.formErr = {}; goTo('agregar'); },
+  togglePerms: () => { S.perms = !S.perms; render(); },
+  togglePick: id => { S.picked = S.picked.includes(id) ? S.picked.filter(x => x !== id) : S.picked.concat(id); render(); },
+  setDias: v => { S.dias = Number(v); render(); },
+  setPerSub: v => { S.perSub[S.selected] = Number(v); render(); },
+  toggleResumen: () => { S.resumen = !S.resumen; render(); },
+  finishOnboarding: () => goTo('dashboard', 'dashboard'),
+  toggleMark: () => { const s = sel(); s.estado = s.estado === 'marcada_para_cancelar' ? 'activa' : 'marcada_para_cancelar'; render(); },
+  confirmCancel: () => {
+    const s = sel();
+    s.estado = 'cancelada';
+    S.cancelled.unshift({ ini: s.ini, nombre_servicio: s.nombre_servicio, color: s.color, fecha_cancelacion: iso(HOY), ahorro_proyectado_anual: Math.round(monthlyAfterTrial(s) * 12) });
+    S.justCancelled = s.nombre_servicio;
+    goTo('ahorro', 'dashboard');
+  },
+  setFreq: f => { S.form.frecuencia = f; render(); },
+  toggleTrial: () => { S.form.es_prueba = !S.form.es_prueba; delete S.formErr.fecha_fin_prueba; render(); },
+  saveSub: () => {
+    S.formErr = validateSub();
+    if (Object.keys(S.formErr).length) return render();
+    const f = S.form;
+    const data = { nombre_servicio: f.nombre_servicio.trim(), categoria: f.categoria.trim(), monto: Number(f.monto), frecuencia: f.frecuencia, fecha_proximo_cobro: f.fecha_proximo_cobro, es_prueba: f.es_prueba, fecha_fin_prueba: f.es_prueba ? f.fecha_fin_prueba : null };
+    if (S.editId) {
+      const s = S.subs.find(x => x.id === S.editId);
+      if (s.monto !== data.monto) delete s.monto_anterior;
+      if (s.nombre_servicio !== data.nombre_servicio) delete s.ini;
+      Object.assign(s, data);
+      S.editId = null;
+      ACT.back();
+      toast('Cambios guardados');
+    } else {
+      const id = 'u' + Date.now();
+      S.subs.push(Object.assign({ id, color: PALETA_MANUAL, desde: iso(HOY), origen: 'manual', estado: 'activa', pagos: [] }, data));
+      // En el onboarding (rechazó permisos) sigue a la preferencia de recordatorio; si no, vuelve a donde estaba.
+      if (S.stack[S.stack.length - 1] === 'permisos') goTo('prefs'); else ACT.back();
+      toast(data.nombre_servicio + ' se agregó a tu lista');
+    }
+  },
+  askDelete: () => { const s = S.subs.find(x => x.id === S.editId); S.modal = { t: `¿Eliminar ${s.nombre_servicio}?`, b: 'Se borra de tu lista junto con su historial de pagos y sus recordatorios. Esto no cancela el servicio con el proveedor y no se puede deshacer.', cta: 'Eliminar suscripción', act: 'doDelete' }; render(); },
+  doDelete: () => { const name = S.subs.find(x => x.id === S.editId).nombre_servicio; S.subs = S.subs.filter(x => x.id !== S.editId); S.editId = null; S.selected = null; goTo('dashboard', 'dashboard'); toast(name + ' se eliminó de tu lista'); },
+  askDeleteAccount: () => { S.modal = { t: '¿Eliminar tu cuenta?', b: 'Borramos tu cuenta, tus suscripciones, el historial y los recordatorios. Esto no se puede deshacer.', cta: 'Eliminar cuenta y datos', act: 'doDeleteAccount' }; render(); },
+  doDeleteAccount: () => { S = initialState(); S.authMode = 'signup'; goTo('welcome'); },
+  logout: () => { S.authMode = 'login'; S.authErr = {}; S.authServerErr = ''; goTo('auth', 'dashboard'); },
+  closeModal: () => { S.modal = null; render(); },
+  openPush: () => { const id = S.push.id; S.push = null; ACT.open(id); },
+  simPush: kind => {
+    const map = {
+      cobro: { id: 'nf', t: 'Netflix se cobra en 3 días', b: `${money(38900)} el 20 de septiembre. Si ya no la quieres, este es el momento.` },
+      prueba: { id: 'gf', t: 'Tu prueba de GeForce NOW termina en 2 días', b: `El 19 de septiembre pasa a ${money(89900)}/mes.` },
+      precio: { id: 'ps', t: 'Adobe Photoshop subió de precio', b: `De ${money(41900)} a ${money(47900)}/mes desde este cobro.` },
+      deteccion: { id: 'sf', t: '¿Tienes una suscripción a Smart Fit?', b: `Detectamos 3 cobros de ${money(89900)} con la misma periodicidad.` }
+    };
+    const p = map[kind];
+    if (!S.subs.some(s => s.id === p.id && s.estado !== 'cancelada')) return toast('Esa suscripción ya no está en la lista');
+    S.push = p; render();
+  },
+  simEmpty: () => { S.subs = []; S.selected = null; goTo('dashboard', 'dashboard'); },
+  reset: () => { clearTimeout(scanTimer); S = initialState(); render(); }
+};
+
+/* ---------- Eventos (delegados) ---------- */
+document.addEventListener('click', ev => {
+  const el = ev.target.closest('[data-act]');
+  if (!el) return;
+  if (el.classList.contains('scrim') && ev.target.closest('[data-stop]')) return;
+  ev.preventDefault();
+  const fn = ACT[el.dataset.act];
+  if (fn) fn(el.dataset.arg);
+});
+document.addEventListener('submit', ev => {
+  const f = ev.target.closest('[data-submit]');
+  if (!f) return;
+  ev.preventDefault();
+  ACT[f.dataset.submit]();
+});
+document.addEventListener('input', ev => {
+  const el = ev.target;
+  if (el.dataset.f) {
+    set(el.dataset.f, el.value);
+    const [group, key] = el.dataset.f.split('.');
+    const errs = group === 'auth' ? S.authErr : S.formErr;
+    if (errs[key]) {
+      delete errs[key];
+      el.classList.remove('has-err');
+      const msg = el.parentElement.querySelector('.field-err'); if (msg) msg.remove();
+    }
+  }
+});
+document.addEventListener('change', ev => {
+  if (ev.target.dataset.sim === 'jump') {
+    const k = ev.target.value;
+    if ((k === 'detalle' || k === 'guia') && !sel()) return toast('No hay suscripciones para mostrar');
+    if (k === 'detalle' || k === 'guia') S.selected = sel().id;
+    if (k === 'agregar') return openForm(null);
+    if (k === 'scan') return ACT.grantPerms();
+    goTo(k, TAB_SCREENS.includes(k) ? k : 'dashboard');
+  }
+});
+
+render();
+</script>
+</body>
+</html>

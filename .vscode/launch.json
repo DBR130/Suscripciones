@@ -5,6 +5,30 @@
     "version": "0.2.0",
     "configurations": [
         {
+            // Backend en el mismo PC: la app de escritorio lo ve en localhost.
+            "name": "Windows (localhost)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "windows",
+            "args": ["--dart-define=API_URL=http://localhost:3000"]
+        },
+        {
+            // Xiaomi por USB. Antes de lanzar, en una terminal:
+            //   adb reverse tcp:3000 tcp:3000
+            // así el celular ve el backend del PC en su propio localhost:3000.
+            "name": "Celular USB (localhost)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "25080RABDG",
+            "args": ["--dart-define=API_URL=http://localhost:3000"]
+        },
+        {
+            // Sin dart-define: usa http://10.0.2.2:3000 (el PC visto desde el emulador).
+            "name": "Emulador Android",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
             "name": "flutter_suscripciones (Chrome)",
             "request": "launch",
             "type": "dart",
