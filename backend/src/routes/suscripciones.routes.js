@@ -3,6 +3,7 @@ import { Router } from 'express';
 import {
   actualizar, cambiarEstado, crear, eliminar, listar, obtener,
 } from '../controllers/suscripciones.controller.js';
+import { guiaDeSuscripcion } from '../controllers/guias.controller.js';
 import { verificarToken } from '../middlewares/auth.js';
 import { validarEstado, validarSuscripcion } from '../middlewares/validaciones.js';
 
@@ -18,5 +19,6 @@ router.get('/:id', obtener);
 router.put('/:id', validarSuscripcion, actualizar);
 router.delete('/:id', eliminar);
 router.patch('/:id/estado', validarEstado, cambiarEstado);
+router.get('/:id/guia', guiaDeSuscripcion);
 
 export default router;

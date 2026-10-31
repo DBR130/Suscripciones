@@ -1,0 +1,253 @@
+[
+  {
+    "nombre_servicio": "Netflix",
+    "alias": [],
+    "duracion_minutos": 3,
+    "enlace_directo": "https://www.netflix.com/cancelplan",
+    "pasos": [
+      "Abre netflix.com en el navegador e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta (menú del perfil) y busca la opción para cancelar la membresía.",
+      "Confirma la cancelación. Puedes seguir viendo hasta el final del periodo que ya pagaste.",
+      "Si pagas a través de Google Play, App Store o tu operador de celular, la cancelación se hace desde allí.",
+      "Guarda el correo de confirmación: es tu comprobante si vuelven a cobrarte."
+    ]
+  },
+  {
+    "nombre_servicio": "Spotify",
+    "alias": ["Spotify Premium"],
+    "duracion_minutos": 3,
+    "enlace_directo": "https://www.spotify.com/account/overview/",
+    "pasos": [
+      "Abre spotify.com en el navegador e inicia sesión. Desde la app no se puede cancelar.",
+      "En tu cuenta, entra a la sección de tu plan o suscripción.",
+      "Elige cambiar de plan o cancelar Premium y confirma. Tu cuenta pasa al plan gratuito.",
+      "Si pagas a través de Google Play, App Store o tu operador de celular, la cancelación se hace desde allí.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "Disney+",
+    "alias": ["Disney Plus", "Disney"],
+    "duracion_minutos": 3,
+    "enlace_directo": "https://www.disneyplus.com/account",
+    "pasos": [
+      "Abre disneyplus.com en el navegador e inicia sesión.",
+      "Entra a tu cuenta y elige la suscripción que quieres cancelar.",
+      "Elige cancelar la suscripción y confirma. Sigue activa hasta el final del periodo pagado.",
+      "Si pagas a través de Google Play, App Store u otro proveedor (como tu operador), cancela desde allí.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "Max",
+    "alias": ["HBO Max", "HBO"],
+    "duracion_minutos": 3,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre el sitio de Max en el navegador e inicia sesión con la cuenta de la suscripción.",
+      "Entra a la configuración de tu cuenta y busca la sección de suscripción.",
+      "Elige cancelar la suscripción y confirma.",
+      "Si pagas a través de Google Play, App Store o tu operador de celular, la cancelación se hace desde allí.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "Prime Video",
+    "alias": ["Amazon Prime Video", "Amazon Prime", "Prime"],
+    "duracion_minutos": 4,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre el sitio de Prime Video (o de Amazon, si es Amazon Prime) e inicia sesión.",
+      "Entra a tu cuenta y busca la sección de membresías o suscripciones.",
+      "Elige finalizar la membresía y confirma. Amazon puede mostrarte varias pantallas antes de terminar.",
+      "Si pagas a través de Google Play, App Store o tu operador de celular, la cancelación se hace desde allí.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "YouTube Premium",
+    "alias": ["YouTube", "YouTube Music", "YouTube Music Premium"],
+    "duracion_minutos": 2,
+    "enlace_directo": "https://www.youtube.com/paid_memberships",
+    "pasos": [
+      "Abre youtube.com/paid_memberships en el navegador con la cuenta de Google de la suscripción.",
+      "Busca tu membresía y elige desactivarla o cancelarla.",
+      "Confirma la cancelación. Mantienes los beneficios hasta el final del periodo pagado.",
+      "Si te suscribiste desde un iPhone, la cancelación se hace en la App Store."
+    ]
+  },
+  {
+    "nombre_servicio": "Apple",
+    "alias": ["iCloud", "iCloud+", "Apple Music", "Apple TV+", "Apple TV", "Apple One", "Apple Arcade"],
+    "duracion_minutos": 2,
+    "enlace_directo": "https://support.apple.com/HT202039",
+    "pasos": [
+      "En el iPhone o iPad, abre Ajustes y toca tu nombre.",
+      "Entra a Suscripciones y elige la que quieres cancelar.",
+      "Toca Cancelar suscripción y confirma.",
+      "Para bajar de plan en iCloud+, se hace desde Ajustes, en la sección de iCloud.",
+      "En Android (Apple Music o Apple TV), la suscripción se cancela desde la cuenta dentro de la app."
+    ]
+  },
+  {
+    "nombre_servicio": "Google One",
+    "alias": ["Google Drive", "Almacenamiento de Google"],
+    "duracion_minutos": 2,
+    "enlace_directo": "https://play.google.com/store/account/subscriptions",
+    "pasos": [
+      "En el celular Android, abre Google Play y toca tu foto de perfil.",
+      "Entra a Pagos y suscripciones y luego a Suscripciones.",
+      "Elige Google One y toca Cancelar suscripción.",
+      "Tus archivos no se borran, pero si superas el espacio gratuito no podrás subir más."
+    ]
+  },
+  {
+    "nombre_servicio": "Crunchyroll",
+    "alias": ["Crunchyroll Premium"],
+    "duracion_minutos": 3,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre crunchyroll.com en el navegador e inicia sesión.",
+      "Entra a la configuración de tu cuenta y busca la sección de membresía.",
+      "Elige cancelar la membresía y confirma.",
+      "Si pagas a través de Google Play o App Store, la cancelación se hace desde allí.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "Paramount+",
+    "alias": ["Paramount Plus", "Paramount"],
+    "duracion_minutos": 3,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre el sitio de Paramount+ en el navegador e inicia sesión.",
+      "Entra a tu cuenta y busca la sección de suscripción.",
+      "Elige cancelar la suscripción y confirma.",
+      "Si pagas a través de Google Play, App Store u otro proveedor, la cancelación se hace desde allí.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "ChatGPT Plus",
+    "alias": ["ChatGPT", "OpenAI", "ChatGPT Pro"],
+    "duracion_minutos": 2,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre ChatGPT en el navegador e inicia sesión con la cuenta de la suscripción.",
+      "Entra a Configuración (desde tu perfil) y busca la sección de cuenta o suscripción.",
+      "Elige administrar o cancelar el plan y confirma.",
+      "Si te suscribiste desde la app del celular, la cancelación se hace en Google Play o App Store."
+    ]
+  },
+  {
+    "nombre_servicio": "Canva Pro",
+    "alias": ["Canva"],
+    "duracion_minutos": 3,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre canva.com en el navegador e inicia sesión.",
+      "Entra a la configuración de tu cuenta y busca la sección de facturación y planes.",
+      "Elige cancelar la suscripción y confirma. Canva puede ofrecerte pausarla en lugar de cancelarla.",
+      "Si pagas a través de Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Microsoft 365",
+    "alias": ["Office 365", "Microsoft Office", "Office", "OneDrive"],
+    "duracion_minutos": 3,
+    "enlace_directo": "https://account.microsoft.com/services",
+    "pasos": [
+      "Abre account.microsoft.com/services e inicia sesión con tu cuenta Microsoft.",
+      "Busca Microsoft 365 en la lista de suscripciones y entra a administrar.",
+      "Elige cancelar la suscripción o desactivar la facturación periódica y confirma.",
+      "Si pagas a través de Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Adobe",
+    "alias": ["Adobe Photoshop", "Photoshop", "Adobe Creative Cloud", "Creative Cloud", "Lightroom", "Adobe Acrobat", "Acrobat"],
+    "duracion_minutos": 5,
+    "enlace_directo": "https://account.adobe.com/plans",
+    "pasos": [
+      "Abre account.adobe.com/plans e inicia sesión con tu Adobe ID.",
+      "Elige el plan que quieres cancelar y entra a administrarlo.",
+      "Sigue los pasos para cancelar el plan y rechaza las ofertas si no te interesan.",
+      "Revisa las condiciones antes de confirmar: algunos planes anuales que se pagan cada mes cobran una tarifa si se cancelan antes de tiempo.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "Xbox Game Pass",
+    "alias": ["Game Pass", "Xbox", "PC Game Pass"],
+    "duracion_minutos": 3,
+    "enlace_directo": "https://account.microsoft.com/services",
+    "pasos": [
+      "Abre account.microsoft.com/services e inicia sesión con la cuenta Microsoft de tu Xbox.",
+      "Busca Game Pass en la lista de suscripciones y entra a administrar.",
+      "Elige cancelar la suscripción o desactivar la facturación periódica y confirma.",
+      "Guarda el correo de confirmación."
+    ]
+  },
+  {
+    "nombre_servicio": "PlayStation Plus",
+    "alias": ["PS Plus", "PlayStation"],
+    "duracion_minutos": 3,
+    "enlace_directo": null,
+    "pasos": [
+      "En la consola o en el sitio de PlayStation, inicia sesión con tu cuenta.",
+      "Entra a la configuración de la cuenta y busca la sección de suscripciones.",
+      "Elige PlayStation Plus y desactiva la renovación automática.",
+      "Mantienes los beneficios hasta el final del periodo pagado."
+    ]
+  },
+  {
+    "nombre_servicio": "GeForce NOW",
+    "alias": ["GeForce", "NVIDIA GeForce NOW"],
+    "duracion_minutos": 3,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre el sitio de GeForce NOW en el navegador e inicia sesión con la cuenta de la membresía.",
+      "Entra a la configuración de tu cuenta y busca la sección de membresía.",
+      "Elige cancelar la membresía o la renovación automática y confirma.",
+      "Si la contrataste con un socio o tu operador, la cancelación se hace con ese proveedor."
+    ]
+  },
+  {
+    "nombre_servicio": "Smart Fit",
+    "alias": ["SmartFit"],
+    "duracion_minutos": 10,
+    "enlace_directo": null,
+    "pasos": [
+      "Revisa tu contrato: algunos planes tienen permanencia mínima o piden aviso con anticipación.",
+      "Solicita la cancelación desde la app o el sitio de Smart Fit, o en la recepción de tu sede.",
+      "Pide un número de solicitud o una constancia por escrito.",
+      "Revisa tu extracto el mes siguiente para confirmar que no te volvieron a cobrar."
+    ]
+  },
+  {
+    "nombre_servicio": "Rappi Pro",
+    "alias": ["Rappi Prime", "Rappi"],
+    "duracion_minutos": 2,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre la app de Rappi e inicia sesión.",
+      "Entra a tu perfil y busca la sección de Rappi Pro.",
+      "Elige cancelar la suscripción o la renovación automática y confirma.",
+      "Si no encuentras la opción, escribe al soporte desde la misma app."
+    ]
+  },
+  {
+    "nombre_servicio": "Otro servicio",
+    "es_generica": true,
+    "alias": [],
+    "duracion_minutos": 5,
+    "enlace_directo": "https://play.google.com/store/account/subscriptions",
+    "pasos": [
+      "Busca en el correo de la suscripción el sitio del proveedor e inicia sesión en tu cuenta.",
+      "En la configuración de la cuenta, busca una sección de suscripción, membresía, plan o facturación, y la opción para cancelar.",
+      "Si te suscribiste desde el celular, cancela en Google Play (Pagos y suscripciones) o en la App Store (Ajustes > tu nombre > Suscripciones).",
+      "Si no encuentras cómo cancelar, escribe al soporte del proveedor y guarda su respuesta.",
+      "Como último recurso, contacta a tu banco para no autorizar más cobros de ese comercio."
+    ]
+  }
+]
