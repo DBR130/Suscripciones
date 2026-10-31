@@ -5,8 +5,10 @@ import cors from 'cors';
 import express from 'express';
 
 import { manejarErrores, noEncontrado } from './middlewares/errorHandler.js';
+import ahorroRoutes from './routes/ahorro.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import avisosRoutes from './routes/avisos.routes.js';
+import guiasRoutes from './routes/guias.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import resumenRoutes from './routes/resumen.routes.js';
 import suscripcionesRoutes from './routes/suscripciones.routes.js';
@@ -25,6 +27,8 @@ app.use('/api/suscripciones', suscripcionesRoutes);
 app.use('/api/resumen', resumenRoutes);
 app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/avisos', avisosRoutes);
+app.use('/api/guias', guiasRoutes);
+app.use('/api/ahorro', ahorroRoutes);
 
 // Estos dos van al final: primero 404 para rutas desconocidas y luego el
 // manejador de errores.

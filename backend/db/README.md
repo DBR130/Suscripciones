@@ -9,6 +9,7 @@ numerados en `db/migraciones/` que se aplican en orden y una sola vez.
 | `002_modelo_completo.sql` | Preferencias del usuario, estados de la suscripción, pruebas gratis y tablas `historial_pagos`, `cancelaciones`, `guias_cancelacion`, `notificaciones_enviadas` |
 | `003_categoria.sql` | Columna opcional `categoria` en `suscripciones`, limitada a las categorías del diseño |
 | `004_cobros_y_precios.sql` | `UNIQUE (suscripcion_id, fecha_pago)` en `historial_pagos` y tabla `cambios_precio` |
+| `005_guias_cancelacion.sql` | Columnas `alias`, `duracion_minutos`, `actualizada_en` y `es_generica` en `guias_cancelacion`; `pasos` pasa a JSONB |
 
 La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
 
@@ -39,6 +40,13 @@ La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
    + 002_modelo_completo.sql
    + 003_categoria.sql
    + 004_cobros_y_precios.sql
+   + 005_guias_cancelacion.sql
+   ```
+
+5. Carga el catálogo de guías de cancelación:
+
+   ```bash
+   npm run db:guias
    ```
 
 ## Actualizar una base que ya existe
@@ -56,6 +64,44 @@ sin ejecutarse y luego se aplica la `002`. No se borran datos.
 
 Cada migración corre dentro de una **transacción**: si algo falla, no queda a
 medias y la base sigue como estaba.
+
+## Catálogo de guías de cancelación
+
+Las guías están en `db/guias.json`, no en el código de la app. Para
+actualizarlas (por ejemplo, si un proveedor cambia sus pasos):
+
+1. Edita `db/guias.json`. Cada guía tiene:
+
+   | Campo | Qué es |
+   |---|---|
+   | `nombre_servicio` | Nombre principal, único (`"Netflix"`) |
+   | `alias` | Otros nombres con que el usuario lo escribe (`["HBO Max", "HBO"]`) |
+   | `duracion_minutos` | Tiempo aproximado (`3`) |
+   | `enlace_directo` | Página oficial de cuenta o ayuda (`https://...`) o `null` |
+   | `pasos` | Arreglo de textos, en orden (3 a 5) |
+   | `es_generica` | `true` solo en "Otro servicio", la que se usa si no hay coincidencia |
+
+2. Corre `npm run db:guias`. Inserta las nuevas y actualiza las que
+   cambiaron; las que no cambiaron no se tocan. Correrlo varias veces da el
+   mismo resultado. Una guía que quites del JSON **no** se borra de la BD.
+
+La app busca la guía comparando el nombre de la suscripción con
+`nombre_servicio` y `alias`, sin mayúsculas ni tildes, y acepta el plan en
+el nombre ("Netflix Estándar" → Netflix). Si no encuentra ninguna, usa la
+genérica. Los cambios se ven en la app sin publicar otra versión (RNF08).
+
+## Usuario de demostración
+
+```bash
+npm run db:demo
+```
+
+Crea (o reinicia) **solo** el usuario `demo@subtrack.co` / `Demo1234`, con 8
+suscripciones activas (una en USD, una prueba gratis que termina en 2 días,
+una con cobro mañana, una marcada para cancelar), 2 canceladas con su ahorro,
+6 meses de historial de pagos y un cambio de precio reciente. Las fechas se
+calculan desde hoy, así que conviene correrlo el día de la demostración.
+Ningún otro usuario se modifica.
 
 ## Agregar una migración nueva
 

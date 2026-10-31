@@ -85,6 +85,8 @@ Ver [db/README.md](db/README.md).
 npm run dev     # se reinicia solo al guardar cambios
 npm start       # modo normal
 npm test        # pruebas (usan la base subtrack_test, no la real)
+npm run db:guias  # carga o actualiza el catálogo de guías de cancelación
+npm run db:demo   # crea o reinicia el usuario demo@subtrack.co / Demo1234
 ```
 
 Debe aparecer `API de SubTrack escuchando en http://0.0.0.0:3000`.
@@ -244,6 +246,34 @@ Datos de la pestaña Avisos:
 Cada aviso trae `suscripcion_id`, `nombre_servicio`, `monto`, `moneda`,
 `fecha` (del cobro, fin de prueba o cambio) y `fecha_aviso` (cuándo salió el
 recordatorio). Van del más reciente al más antiguo.
+
+### Guías de cancelación y ahorro
+
+| Método y ruta | Respuesta |
+|---|---|
+| `GET /api/guias` | `{"guias":[{"id","nombre_servicio","alias"}]}` (sin la genérica) |
+| `GET /api/suscripciones/:id/guia` | `{"suscripcion":{"id","nombre_servicio"},"guia":{"nombre_servicio","pasos":[...],"enlace_directo","duracion_minutos","alias","actualizada_en","es_generica"},"es_generica":false}`. Sin coincidencia, devuelve "Otro servicio" con `es_generica: true`. `404` si la suscripción es de otro usuario |
+| `GET /api/ahorro` | Ver abajo |
+
+`GET /api/ahorro`:
+
+```json
+{
+  "totales": [{ "moneda": "COP", "ahorro_anual": 465600, "ahorro_mensual": 38800, "cantidad": 2 }],
+  "cantidad_canceladas": 2,
+  "canceladas": [{ "id": 9, "nombre_servicio": "Paramount+", "categoria": "Streaming",
+                   "moneda": "COP", "fecha_cancelacion": "2026-10-11", "ahorro_proyectado_anual": 262800 }],
+  "evolucion": [{ "moneda": "COP", "meses": [{ "mes": "2026-05", "total": 0 }, "... 6 meses"] }]
+}
+```
+
+- Las canceladas van de la más reciente a la más antigua.
+- `evolucion`: gasto de los últimos 6 meses (incluye el actual) según
+  `historial_pagos`, una serie por moneda; los meses sin pagos van con 0.
+
+El catálogo se edita en `db/guias.json` y se carga con `npm run db:guias`; el
+usuario de demostración se crea con `npm run db:demo` (ver
+[db/README.md](db/README.md)).
 
 ### Cobros automáticos y cambios de precio
 
