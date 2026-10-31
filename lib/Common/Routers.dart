@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../Pages/AhorroPage.dart';
+import '../deteccion/depuracion_deteccion_page.dart';
+import '../deteccion/lector_notificaciones.dart';
 import '../Pages/AvisosPage.dart';
 import '../Pages/BienvenidaPage.dart';
 import '../Pages/DashboardPage.dart';
@@ -39,6 +41,7 @@ class Routers {
 
   // Sin barra de pestañas.
   static const String preferencias = '/preferencias';
+  static const String depuracionDeteccion = '/depuracion/deteccion';
   static const String nuevaSuscripcion = '/suscripcion/nueva';
   static String editarSuscripcion(int id) => '/suscripcion/$id/editar';
   static String cancelar(int id) => '/suscripcion/$id/cancelar';
@@ -51,8 +54,10 @@ class Routers {
     AuthService authService,
     SuscripcionService suscripcionService, {
     RecordatoriosService? recordatorios,
+    LectorNotificaciones? lector,
     String initialLocation = home,
   }) {
+    final lectorNotificaciones = lector ?? LectorNotificaciones();
     return GoRouter(
       initialLocation: initialLocation,
       routes: [
@@ -73,6 +78,14 @@ class Routers {
               builder: (context, state) => RegistroPage(authService: authService),
             ),
           ],
+        ),
+        // Solo tiene contenido en modo debug (detección, hito 1).
+        GoRoute(
+          path: depuracionDeteccion,
+          builder: (context, state) => DepuracionDeteccionPage(
+            lector: lectorNotificaciones,
+            recordatorios: recordatorios,
+          ),
         ),
         GoRoute(
           path: preferencias,

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'Common/AppTheme.dart';
 import 'Common/Routers.dart';
+import 'deteccion/lector_notificaciones.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/recordatorios_service.dart';
@@ -31,6 +32,10 @@ Future<void> main() async {
   await recordatorios.inicializar();
   final abiertaDesdeAviso = await recordatorios.suscripcionQueAbrioLaApp();
 
+  // Lector de notificaciones (detección): si MIUI lo detuvo, pide reconectarlo.
+  final lector = LectorNotificaciones();
+  lector.reconectarSiHaceFalta();
+
   // Si hay un token guardado y el servidor lo acepta, se abre directo el resumen.
   final haySesion = await authService.haySesionActiva();
 
@@ -38,6 +43,7 @@ Future<void> main() async {
     authService,
     suscripcionService,
     recordatorios: recordatorios,
+    lector: lector,
     initialLocation: haySesion ? Routers.dashboard : Routers.home,
   );
   // Si el token vence mientras se usa la app, se vuelve al login.

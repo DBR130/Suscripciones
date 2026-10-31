@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,6 +15,7 @@ import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/guia_xiaomi.dart';
 
 /// Perfil y configuración (pantalla 14 del diseño, pestaña 4): días de
 /// anticipación, recordatorios en el celular, cerrar sesión y eliminar la
@@ -261,7 +263,7 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
         ),
         if (_xiaomi) ...[
           const SizedBox(height: 14),
-          _GuiaXiaomi(
+          GuiaXiaomi(
             onInicioAutomatico: _rec!.abrirInicioAutomatico,
             onAjustes: _rec!.abrirAjustesApp,
           ),
@@ -379,6 +381,16 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                         colorDetalle: AppColors.muted,
                         onTap: () => context.push(Routers.nuevaSuscripcion),
                       ),
+                      // Solo en modo debug y en Android: lector de notificaciones (hito 1).
+                      if (kDebugMode && _rec != null) ...[
+                        const Divider(height: 1, color: AppColors.divider),
+                        _FilaEnlace(
+                          texto: 'Depuración: detección',
+                          detalle: '›',
+                          colorDetalle: AppColors.muted,
+                          onTap: () => context.push(Routers.depuracionDeteccion),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -426,43 +438,6 @@ class _FilaInterruptor extends StatelessWidget {
       subtitle: Text(
         descripcion,
         style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-}
-
-/// HyperOS/MIUI cierra las apps en segundo plano y puede bloquear los
-/// avisos programados. Estos dos ajustes lo evitan.
-class _GuiaXiaomi extends StatelessWidget {
-  const _GuiaXiaomi({required this.onInicioAutomatico, required this.onAjustes});
-
-  final VoidCallback onInicioAutomatico;
-  final VoidCallback onAjustes;
-
-  @override
-  Widget build(BuildContext context) {
-    const estiloPaso = TextStyle(color: AppColors.text2, fontSize: 13, fontWeight: FontWeight.w600, height: 1.45);
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'En Xiaomi, activa esto para que lleguen los avisos',
-            style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          const Text('1. Inicio automático: actívalo para SubTrack.', style: estiloPaso),
-          const SizedBox(height: 6),
-          const Text(
-            '2. Ahorro de batería: en los ajustes de la app, entra a "Ahorro de batería" '
-            'y elige "Sin restricciones".',
-            style: estiloPaso,
-          ),
-          const SizedBox(height: 12),
-          AppBotonSecundario(texto: 'Abrir Inicio automático', onPressed: onInicioAutomatico),
-          const SizedBox(height: 9),
-          AppBotonSecundario(texto: 'Abrir ajustes de la app', onPressed: onAjustes),
-        ],
       ),
     );
   }
