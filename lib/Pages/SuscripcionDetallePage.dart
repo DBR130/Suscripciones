@@ -114,25 +114,22 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
     if (mounted) _cargar();
   }
 
-  /// La guía de cancelación (pantalla 10) llega en otra fase; por ahora se
-  /// confirma directamente que ya se canceló con el proveedor.
+  /// Abre la guía de cancelación (pantalla 10). Si allí confirma, la guía
+  /// lleva a Ahorro; si vuelve con "Lo haré después", se recarga el detalle.
   Future<void> _cancelar() async {
-    final s = _s!;
+    await context.push(Routers.cancelar(widget.id));
+    if (mounted) _cargar();
+  }
+
+  Future<void> _reactivar() async {
     final ok = await confirmarAccion(
       context,
-      titulo: '¿Ya cancelaste ${s.nombreServicio}?',
-      texto: 'Márcala como cancelada solo si ya la cancelaste con el proveedor. '
-          'Deja de sumar en tu gasto y apagamos sus recordatorios.',
-      boton: 'Sí, ya la cancelé',
+      titulo: '¿Reactivar ${_s!.nombreServicio}?',
+      texto: 'Vuelve a sumar en tu gasto, quitamos su ahorro y reprogramamos sus recordatorios.',
+      boton: 'Reactivar suscripción',
+      peligro: false,
     );
-    if (!ok || !mounted) return;
-    await _accion(() async {
-      await widget.suscripcionService.cambiarEstado(widget.id, EstadoSuscripcion.cancelada);
-      widget.recordatorios?.sincronizar(widget.suscripcionService);
-      if (!mounted) return;
-      mostrarToast(context, '${s.nombreServicio} quedó en canceladas');
-      context.pop();
-    });
+    if (ok && mounted) await _cambiarEstado(EstadoSuscripcion.activa, 'Suscripción reactivada');
   }
 
   @override
@@ -292,7 +289,7 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
                       texto: 'Reactivar suscripción',
                       onPressed: _ocupado
                           ? null
-                          : () => _cambiarEstado(EstadoSuscripcion.activa, 'Suscripción reactivada'),
+                          : _reactivar,
                     )
                   else ...[
                     AppBotonSecundario(

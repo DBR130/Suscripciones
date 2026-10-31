@@ -3,11 +3,13 @@ import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
+import '../models/ahorro.dart';
 import '../models/usuario.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 import '../services/recordatorios_service.dart';
 import '../services/suscripcion_service.dart';
+import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
@@ -39,6 +41,7 @@ class PerfilPage extends StatefulWidget {
 class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
   Usuario? _usuario;
   int? _dias;
+  Ahorro? _ahorro;
   bool _guardando = false;
 
   // Recordatorios (solo Android).
@@ -57,6 +60,30 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _cargar();
     _cargarRecordatorios();
+    _cargarAhorro();
+  }
+
+  Future<void> _cargarAhorro() async {
+    try {
+      final ahorro = await widget.suscripcionService?.ahorro();
+      if (mounted && ahorro != null) setState(() => _ahorro = ahorro);
+    } on ApiException {
+      // No es crítico: la fila muestra solo la flecha.
+    }
+  }
+
+  Future<void> _abrirAhorro() async {
+    await context.push(Routers.ahorro);
+    if (mounted) _cargarAhorro();
+  }
+
+  /// "$465.600 ›" (o "$465.600 + US$119,88 ›" si hay en dos monedas).
+  String get _textoAhorro {
+    final totales = _ahorro?.totales ?? const <TotalAhorro>[];
+    final monto = totales.isEmpty
+        ? Formato.moneda(0, 'COP')
+        : totales.map((t) => Formato.moneda(t.anual, t.moneda)).join(' + ');
+    return '$monto ›';
   }
 
   @override
@@ -335,22 +362,24 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                 ],
                 AppCard(
                   padding: const EdgeInsets.symmetric(horizontal: 14),
-                  child: InkWell(
-                    onTap: () => context.push(Routers.nuevaSuscripcion),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 15),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Agregar suscripción manual',
-                              style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                          Text('›', style: TextStyle(color: AppColors.muted, fontSize: 16)),
-                        ],
+                  child: Column(
+                    children: [
+                      if (widget.suscripcionService != null) ...[
+                        _FilaEnlace(
+                          texto: 'Historial y ahorro',
+                          detalle: _textoAhorro,
+                          colorDetalle: AppColors.link,
+                          onTap: _abrirAhorro,
+                        ),
+                        const Divider(height: 1, color: AppColors.divider),
+                      ],
+                      _FilaEnlace(
+                        texto: 'Agregar suscripción manual',
+                        detalle: '›',
+                        colorDetalle: AppColors.muted,
+                        onTap: () => context.push(Routers.nuevaSuscripcion),
                       ),
-                    ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -434,6 +463,49 @@ class _GuiaXiaomi extends StatelessWidget {
           const SizedBox(height: 9),
           AppBotonSecundario(texto: 'Abrir ajustes de la app', onPressed: onAjustes),
         ],
+      ),
+    );
+  }
+}
+
+/// Fila tocable con texto a la izquierda y un detalle a la derecha.
+class _FilaEnlace extends StatelessWidget {
+  const _FilaEnlace({
+    required this.texto,
+    required this.detalle,
+    required this.colorDetalle,
+    required this.onTap,
+  });
+
+  final String texto;
+  final String detalle;
+  final Color colorDetalle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                texto,
+                style: const TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Text(
+                detalle,
+                textAlign: TextAlign.right,
+                style: TextStyle(color: colorDetalle, fontSize: 13.5, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

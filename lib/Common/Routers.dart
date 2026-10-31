@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../Pages/AhorroPage.dart';
 import '../Pages/AvisosPage.dart';
 import '../Pages/BienvenidaPage.dart';
 import '../Pages/DashboardPage.dart';
+import '../Pages/GuiaCancelacionPage.dart';
 import '../Pages/LoginPage.dart';
 import '../Pages/PerfilPage.dart';
 import '../Pages/PreferenciasPage.dart';
@@ -32,12 +34,14 @@ class Routers {
   static const String suscripciones = '/suscripciones';
   static const String avisos = '/avisos';
   static const String perfil = '/perfil';
+  static const String ahorro = '/ahorro';
   static String detalle(int id) => '/suscripcion/$id';
 
   // Sin barra de pestañas.
   static const String preferencias = '/preferencias';
   static const String nuevaSuscripcion = '/suscripcion/nueva';
   static String editarSuscripcion(int id) => '/suscripcion/$id/editar';
+  static String cancelar(int id) => '/suscripcion/$id/cancelar';
 
   static int _id(GoRouterState state) => int.tryParse(state.pathParameters['id']!) ?? 0;
 
@@ -83,6 +87,14 @@ class Routers {
               SuscripcionFormPage(suscripcionService: suscripcionService, recordatorios: recordatorios),
         ),
         GoRoute(
+          path: '/suscripcion/:id/cancelar',
+          builder: (context, state) => GuiaCancelacionPage(
+            id: _id(state),
+            suscripcionService: suscripcionService,
+            recordatorios: recordatorios,
+          ),
+        ),
+        GoRoute(
           path: '/suscripcion/:id/editar',
           builder: (context, state) {
             // La suscripción llega en "extra" desde el detalle. Si no viene
@@ -125,6 +137,14 @@ class Routers {
             GoRoute(
               path: avisos,
               builder: (context, state) => AvisosPage(suscripcionService: suscripcionService),
+            ),
+            GoRoute(
+              path: ahorro,
+              // "extra": nombre de la suscripción recién cancelada (desde la guía).
+              builder: (context, state) => AhorroPage(
+                suscripcionService: suscripcionService,
+                recienCancelada: state.extra is String ? state.extra as String : null,
+              ),
             ),
             GoRoute(
               path: perfil,

@@ -23,6 +23,9 @@ class AppShell extends StatelessWidget {
     if (ruta == Routers.suscripciones) {
       return ubicacion.startsWith(Routers.suscripciones) || ubicacion.startsWith('/suscripcion/');
     }
+    if (ruta == Routers.perfil) {
+      return ubicacion.startsWith(Routers.perfil) || ubicacion.startsWith(Routers.ahorro);
+    }
     return ubicacion.startsWith(ruta);
   }
 

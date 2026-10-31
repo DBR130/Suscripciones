@@ -58,13 +58,16 @@ class BannerError extends StatelessWidget {
   }
 }
 
-/// Hoja inferior de confirmación del diseño (título, texto, botón rojo y
-/// "No, volver"). Devuelve true si el usuario confirma.
+/// Hoja inferior de confirmación del diseño (título, texto, botón y
+/// "No, volver"). El botón es rojo si [peligro] (borrar, eliminar); si no,
+/// usa el color principal (por ejemplo, para reactivar). Devuelve true si el
+/// usuario confirma.
 Future<bool> confirmarAccion(
   BuildContext context, {
   required String titulo,
   required String texto,
   required String boton,
+  bool peligro = true,
 }) async {
   final ok = await showModalBottomSheet<bool>(
     context: context,
@@ -75,6 +78,7 @@ Future<bool> confirmarAccion(
       titulo: titulo,
       texto: texto,
       boton: boton,
+      peligro: peligro,
       onConfirmar: () async => Navigator.pop(context, true),
     ),
   );
@@ -115,6 +119,7 @@ class _HojaConfirmacion extends StatefulWidget {
     required this.titulo,
     required this.texto,
     required this.boton,
+    this.peligro = true,
     this.onConfirmar,
     this.pedirContrasena = false,
     this.accion,
@@ -124,6 +129,7 @@ class _HojaConfirmacion extends StatefulWidget {
   final String titulo;
   final String texto;
   final String boton;
+  final bool peligro;
   final Future<void> Function()? onConfirmar;
   final bool pedirContrasena;
   final Future<void> Function(String password)? accion;
@@ -226,10 +232,12 @@ class _HojaConfirmacionState extends State<_HojaConfirmacion> {
                 const SizedBox(height: 16),
                 FilledButton(
                   onPressed: _ocupado ? null : _confirmar,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.danger,
-                    disabledBackgroundColor: AppColors.danger.withValues(alpha: 0.6),
-                  ),
+                  style: widget.peligro
+                      ? FilledButton.styleFrom(
+                          backgroundColor: AppColors.danger,
+                          disabledBackgroundColor: AppColors.danger.withValues(alpha: 0.6),
+                        )
+                      : null,
                   child: _ocupado
                       ? const SizedBox(
                           width: 18,
