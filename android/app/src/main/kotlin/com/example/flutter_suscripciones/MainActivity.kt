@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import com.example.flutter_suscripciones.deteccion.CanalDeteccion
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -12,6 +13,8 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Canales del lector de notificaciones (paquete deteccion/).
+        CanalDeteccion.registrar(this, flutterEngine)
         // Canal que usa RecordatoriosService (lib/services/recordatorios_service.dart)
         // para saber el fabricante y abrir ajustes del sistema.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "subtrack/sistema")
