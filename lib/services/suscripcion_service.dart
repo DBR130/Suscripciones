@@ -1,4 +1,6 @@
+import '../models/ahorro.dart';
 import '../models/aviso.dart';
+import '../models/guia.dart';
 import '../models/resumen.dart';
 import '../models/suscripcion.dart';
 import 'api_client.dart';
@@ -51,6 +53,13 @@ class SuscripcionService {
       dias: json['dias_anticipacion_recordatorio'] as int,
     );
   }
+
+  /// La guía de cancelación que corresponde a la suscripción (o la genérica).
+  Future<GuiaDeSuscripcion> guia(int id) async =>
+      GuiaDeSuscripcion.fromJson(await _api.get('$_ruta/$id/guia'));
+
+  /// Ahorro por canceladas y gasto de los últimos 6 meses.
+  Future<Ahorro> ahorro() async => Ahorro.fromJson(await _api.get('/api/ahorro'));
 
   Future<Resumen> resumen() async =>
       Resumen.fromJson(await _api.get('/api/resumen'));

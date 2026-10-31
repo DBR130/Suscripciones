@@ -1,4 +1,6 @@
+import 'package:flutter_suscripciones/models/ahorro.dart';
 import 'package:flutter_suscripciones/models/aviso.dart';
+import 'package:flutter_suscripciones/models/guia.dart';
 import 'package:flutter_suscripciones/models/resumen.dart';
 import 'package:flutter_suscripciones/models/suscripcion.dart';
 import 'package:flutter_suscripciones/services/api_client.dart';
@@ -13,7 +15,15 @@ class FakeSuscripcionService implements SuscripcionService {
     this.pagos = const [],
     this.cambioPrecio,
     this.listaAvisos = const [],
+    this.guiaFija,
+    this.ahorroFijo,
   }) : suscripciones = [...?iniciales];
+
+  /// Guía que devuelve [guia] (por defecto, una genérica de 3 pasos).
+  final Guia? guiaFija;
+
+  /// Lo que devuelve [ahorro] (por defecto, sin canceladas).
+  final Ahorro? ahorroFijo;
 
   final List<Suscripcion> suscripciones;
   final String? error;
@@ -63,6 +73,22 @@ class FakeSuscripcionService implements SuscripcionService {
         pagadoTotal: pagos.fold(0, (t, p) => t + p.monto),
         cambioPrecio: cambioPrecio,
       );
+
+  @override
+  Future<GuiaDeSuscripcion> guia(int id) async {
+    final g = guiaFija ??
+        const Guia(nombreServicio: 'Otro servicio', pasos: ['Uno', 'Dos', 'Tres'], esGenerica: true);
+    return GuiaDeSuscripcion(
+      suscripcionId: id,
+      nombreServicio: _buscar(id).nombreServicio,
+      guia: g,
+      esGenerica: g.esGenerica,
+    );
+  }
+
+  @override
+  Future<Ahorro> ahorro() async =>
+      ahorroFijo ?? const Ahorro(totales: [], canceladas: [], evolucion: []);
 
   @override
   Future<({List<Aviso> avisos, int dias})> avisos() async => (avisos: listaAvisos, dias: 3);
