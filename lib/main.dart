@@ -32,9 +32,12 @@ Future<void> main() async {
   await recordatorios.inicializar();
   final abiertaDesdeAviso = await recordatorios.suscripcionQueAbrioLaApp();
 
-  // Lector de notificaciones (detección): si MIUI lo detuvo, pide reconectarlo.
+  // Lector de notificaciones (detección): si MIUI lo detuvo, pide reconectarlo
+  // y recupera de la barra lo que llegó mientras estaba detenido. Lo mismo
+  // cada vez que la app vuelve a primer plano.
   final lector = LectorNotificaciones();
-  lector.reconectarSiHaceFalta();
+  lector.sincronizar();
+  WidgetsBinding.instance.addObserver(_SincronizarAlVolver(lector));
 
   // Si hay un token guardado y el servidor lo acepta, se abre directo el resumen.
   final haySesion = await authService.haySesionActiva();
@@ -66,6 +69,18 @@ Future<void> main() async {
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => router.push(Routers.detalle(abiertaDesdeAviso)),
     );
+  }
+}
+
+/// Sincroniza el lector cada vez que la app vuelve a primer plano.
+class _SincronizarAlVolver with WidgetsBindingObserver {
+  _SincronizarAlVolver(this.lector);
+
+  final LectorNotificaciones lector;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) lector.sincronizar();
   }
 }
 

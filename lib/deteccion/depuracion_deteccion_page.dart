@@ -82,6 +82,10 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
 
   Future<void> _actualizar() async {
     await widget.lector.reconectarSiHaceFalta();
+    final recuperadas = await widget.lector.recuperarActivas();
+    if (mounted && recuperadas != null && recuperadas > 0) {
+      mostrarToast(context, 'Se recuperaron $recuperadas de la barra de notificaciones');
+    }
     final estado = await widget.lector.estado();
     final config = await widget.lector.configuracion();
     final cola = await widget.lector.leerCola();
@@ -96,12 +100,7 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
   Future<void> _cambiarDescubrimiento(bool activo) async {
     final resultado = await widget.lector.cambiarModoDescubrimiento(activo);
     if (!mounted) return;
-    setState(() => _estado = EstadoLector(
-          permiso: _estado.permiso,
-          conectado: _estado.conectado,
-          esDebug: _estado.esDebug,
-          modoDescubrimiento: resultado,
-        ));
+    setState(() => _estado = _estado.conDescubrimiento(resultado));
   }
 
   Future<void> _vaciar() async {
@@ -200,7 +199,15 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FilaDato('Acceso a notificaciones', e.permiso ? 'Concedido' : 'No concedido'),
-          FilaDato('Servicio', e.conectado ? 'Conectado' : 'Desconectado'),
+          FilaDato('Servicio ahora', e.conectado ? 'Conectado' : 'Desconectado'),
+          FilaDato('Última conexión', _horaONunca(e.ultimaConexion)),
+          FilaDato('Última desconexión', _horaONunca(e.ultimaDesconexion)),
+          FilaDato(
+            'Última notificación recibida',
+            e.ultimaNotificacion == null
+                ? 'Ninguna'
+                : '${_hora(e.ultimaNotificacion!)} (${e.ultimoResultado ?? '?'})',
+          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: e.modoDescubrimiento,
@@ -304,6 +311,8 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
     );
   }
 }
+
+String _horaONunca(DateTime? d) => d == null ? 'Nunca' : _hora(d);
 
 String _hora(DateTime d) {
   String dos(int n) => n.toString().padLeft(2, '0');

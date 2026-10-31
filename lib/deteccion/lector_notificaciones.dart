@@ -41,6 +41,28 @@ class LectorNotificaciones {
     }
   }
 
+  /// Revisa las notificaciones activas de la barra y guarda en la cola las de
+  /// apps permitidas que falten (sin duplicar). Recupera lo que llegó mientras
+  /// el servicio estaba detenido. Devuelve cuántas se guardaron, o null si el
+  /// servicio no está conectado (en ese caso lo hace solo al conectarse).
+  Future<int?> recuperarActivas() async {
+    if (!disponible) return null;
+    try {
+      final n = await metodos.invokeMethod<int>('recuperarActivas');
+      return n == null || n < 0 ? null : n;
+    } on PlatformException catch (e) {
+      debugPrint('No se pudieron recuperar las notificaciones activas: $e');
+      return null;
+    }
+  }
+
+  /// Al abrir la app y al volver a primer plano: reconecta el servicio si
+  /// hace falta y recupera lo que haya en la barra.
+  Future<void> sincronizar() async {
+    await reconectarSiHaceFalta();
+    await recuperarActivas();
+  }
+
   /// Notificaciones guardadas mientras la app estaba cerrada (más viejas primero).
   Future<List<NotificacionCapturada>> leerCola() async {
     if (!disponible) return const [];

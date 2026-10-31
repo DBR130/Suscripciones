@@ -95,6 +95,10 @@ class EstadoLector {
     required this.conectado,
     required this.esDebug,
     required this.modoDescubrimiento,
+    this.ultimaConexion,
+    this.ultimaDesconexion,
+    this.ultimaNotificacion,
+    this.ultimoResultado,
   });
 
   /// El usuario dio el "Acceso a notificaciones".
@@ -105,6 +109,27 @@ class EstadoLector {
   final bool esDebug;
   final bool modoDescubrimiento;
 
+  /// Horas guardadas por el servicio (sobreviven si Android mata el proceso).
+  final DateTime? ultimaConexion;
+  final DateTime? ultimaDesconexion;
+
+  /// Última notificación que recibió el servicio, de cualquier app.
+  final DateTime? ultimaNotificacion;
+
+  /// "guardada", "repetida", "descartada" o "app no permitida".
+  final String? ultimoResultado;
+
+  EstadoLector conDescubrimiento(bool activo) => EstadoLector(
+        permiso: permiso,
+        conectado: conectado,
+        esDebug: esDebug,
+        modoDescubrimiento: activo,
+        ultimaConexion: ultimaConexion,
+        ultimaDesconexion: ultimaDesconexion,
+        ultimaNotificacion: ultimaNotificacion,
+        ultimoResultado: ultimoResultado,
+      );
+
   static const noDisponible =
       EstadoLector(permiso: false, conectado: false, esDebug: false, modoDescubrimiento: false);
 
@@ -113,7 +138,14 @@ class EstadoLector {
         conectado: mapa['conectado'] as bool? ?? false,
         esDebug: mapa['es_debug'] as bool? ?? false,
         modoDescubrimiento: mapa['modo_descubrimiento'] as bool? ?? false,
+        ultimaConexion: _fecha(mapa['ultima_conexion']),
+        ultimaDesconexion: _fecha(mapa['ultima_desconexion']),
+        ultimaNotificacion: _fecha(mapa['ultima_notificacion']),
+        ultimoResultado: mapa['ultimo_resultado'] as String?,
       );
+
+  static DateTime? _fecha(Object? milisegundos) =>
+      milisegundos == null ? null : DateTime.fromMillisecondsSinceEpoch((milisegundos as num).toInt());
 }
 
 /// Apps permitidas y palabras de cobro (res/raw/deteccion_apps.json).

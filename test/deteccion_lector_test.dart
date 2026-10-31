@@ -25,16 +25,31 @@ void main() {
   late List<MethodCall> llamadas;
   late List<Map<String, Object?>> cola;
   late bool descubrimiento;
+  late int recuperables;
 
   setUp(() {
     llamadas = [];
     cola = [Map.of(notificacion)];
     descubrimiento = false;
+    recuperables = 0;
     mensajero.setMockMethodCallHandler(metodos, (call) async {
       llamadas.add(call);
       switch (call.method) {
         case 'estado':
-          return {'permiso': true, 'conectado': true, 'es_debug': true, 'modo_descubrimiento': descubrimiento};
+          return {
+            'permiso': true,
+            'conectado': true,
+            'es_debug': true,
+            'modo_descubrimiento': descubrimiento,
+            'ultima_conexion': DateTime(2026, 10, 31, 8, 5).millisecondsSinceEpoch,
+            'ultima_desconexion': null,
+            'ultima_notificacion': DateTime(2026, 10, 31, 9, 15, 30).millisecondsSinceEpoch,
+            'ultimo_resultado': 'guardada',
+          };
+        case 'recuperarActivas':
+          return recuperables;
+        case 'reconectar':
+          return null;
         case 'leerCola':
           return cola;
         case 'borrarDeCola':
@@ -93,6 +108,27 @@ void main() {
       });
     });
 
+    test('lee las horas de conexión y de la última notificación', () async {
+      final estado = await lector().estado();
+      expect(estado.ultimaConexion, DateTime(2026, 10, 31, 8, 5));
+      expect(estado.ultimaDesconexion, isNull);
+      expect(estado.ultimaNotificacion, DateTime(2026, 10, 31, 9, 15, 30));
+      expect(estado.ultimoResultado, 'guardada');
+    });
+
+    test('recuperarActivas: cuántas se guardaron, o null si el servicio no está conectado', () async {
+      final l = lector();
+      recuperables = 2;
+      expect(await l.recuperarActivas(), 2);
+      recuperables = -1; // el servicio está desconectado
+      expect(await l.recuperarActivas(), isNull);
+    });
+
+    test('sincronizar reconecta y luego recupera de la barra', () async {
+      await lector().sincronizar();
+      expect(llamadas.map((c) => c.method), ['reconectar', 'recuperarActivas']);
+    });
+
     test('fuera de Android no llama a la parte nativa', () async {
       final l = LectorNotificaciones(disponible: false);
       expect((await l.estado()).permiso, isFalse);
@@ -136,7 +172,8 @@ void main() {
   });
 
   testWidgets('la pantalla de depuración muestra estado, apps, cola y eventos en vivo', (tester) async {
-    tester.view.physicalSize = const Size(1080, 4000);
+    // Alta para que toda la lista (incluida la cola) quede construida.
+    tester.view.physicalSize = const Size(1080, 6000);
     tester.view.devicePixelRatio = 2.5;
     addTearDown(tester.view.reset);
 
@@ -161,6 +198,10 @@ void main() {
     expect(find.text('Depuración: detección'), findsOneWidget);
     expect(find.text('Concedido'), findsOneWidget);
     expect(find.text('Conectado'), findsOneWidget);
+    expect(find.text('Última conexión'), findsOneWidget);
+    expect(find.text('31/10 08:05:00'), findsOneWidget);
+    expect(find.text('Nunca'), findsOneWidget); // última desconexión
+    expect(find.text('31/10 09:15:30 (guardada)'), findsOneWidget);
     expect(find.text('com.android.shell · Shell (simulación con adb)'), findsOneWidget);
     expect(find.textContaining('Todavía no hay apps reales'), findsOneWidget);
     expect(find.text('Cola guardada (1)'), findsOneWidget);
@@ -187,5 +228,18 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
     expect(descubrimiento, isFalse);
+  });
+
+  testWidgets('al actualizar, avisa cuántas notificaciones recuperó de la barra', (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 2.5;
+    addTearDown(tester.view.reset);
+    recuperables = 3;
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: DepuracionDeteccionPage(lector: lector()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Se recuperaron 3 de la barra de notificaciones'), findsOneWidget);
   });
 }
