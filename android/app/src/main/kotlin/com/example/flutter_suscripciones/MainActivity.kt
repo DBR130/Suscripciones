@@ -28,6 +28,12 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        // Al cerrar la app, el lector deja de enviar eventos a un Flutter que ya no existe.
+        CanalDeteccion.liberar()
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
     // Pantalla "Información de la app": permisos, notificaciones y batería.
     private fun abrirAjustesApp(): Boolean = abrir(
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))

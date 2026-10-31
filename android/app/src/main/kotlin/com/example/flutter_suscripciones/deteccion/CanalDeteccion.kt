@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
+import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -33,16 +34,24 @@ object CanalDeteccion {
                         "conectado" to LectorNotificacionesService.conectado,
                         "es_debug" to ConfiguracionDeteccion.esDebug(contexto),
                         "modo_descubrimiento" to LectorNotificacionesService.modoDescubrimiento,
-                    )
+                    ) + RegistroDeteccion.leer(contexto)
                 )
                 "abrirAjustesAcceso" -> result.success(abrirAjustesAcceso(activity, componente))
                 "reconectar" -> {
                     // Si Android (o MIUI) detuvo el servicio, le pide volver a conectarlo.
                     if (permisoConcedido(activity, componente) && !LectorNotificacionesService.conectado) {
-                        NotificationListenerService.requestRebind(componente)
+                        Log.i(TAG, "App abierta con el servicio desconectado: se pide reconexión")
+                        try {
+                            NotificationListenerService.requestRebind(componente)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "No se pudo pedir la reconexión", e)
+                        }
                     }
                     result.success(null)
                 }
+                // Recupera de la barra lo que llegó con el servicio detenido.
+                // -1 = el servicio no está conectado (se hará solo al conectarse).
+                "recuperarActivas" -> result.success(LectorNotificacionesService.recuperarActivasSiConectado() ?: -1)
                 "leerCola" -> result.success(ColaNotificaciones.leer(contexto).map { aMapa(it) })
                 "borrarDeCola" -> {
                     ColaNotificaciones.borrar(contexto, call.argument<List<String>>("ids").orEmpty())
@@ -79,8 +88,19 @@ object CanalDeteccion {
                 private val principal = Handler(Looper.getMainLooper())
 
                 override fun onListen(arguments: Any?, sink: EventChannel.EventSink) {
-                    // El EventSink solo se puede usar desde el hilo principal.
-                    LectorNotificacionesService.oyente = { evento -> principal.post { sink.success(evento) } }
+                    // El EventSink solo se puede usar desde el hilo principal. Si
+                    // Flutter ya no está (app cerrada), el error se atrapa aquí: un
+                    // evento en vivo nunca debe tumbar el proceso ni el servicio.
+                    LectorNotificacionesService.oyente = { evento ->
+                        principal.post {
+                            try {
+                                sink.success(evento)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Flutter no está escuchando; se descarta el evento en vivo", e)
+                                LectorNotificacionesService.oyente = null
+                            }
+                        }
+                    }
                 }
 
                 override fun onCancel(arguments: Any?) {
@@ -88,6 +108,11 @@ object CanalDeteccion {
                 }
             }
         )
+    }
+
+    /** Lo llama MainActivity cuando se destruye el motor de Flutter. */
+    fun liberar() {
+        LectorNotificacionesService.oyente = null
     }
 
     /** true si el usuario dio a SubTrack el "Acceso a notificaciones". */

@@ -1,6 +1,7 @@
 package com.example.flutter_suscripciones.deteccion
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -27,12 +28,16 @@ object ColaNotificaciones {
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
-    /** Agrega una notificación. Devuelve false si ya estaba (misma app y mismo texto). */
+    /**
+     * Agrega una notificación. Devuelve false si ya estaba: misma huella (la
+     * misma notificación leída otra vez desde la barra) o misma app y texto.
+     */
     fun agregar(context: Context, notificacion: JSONObject): Boolean = synchronized(lock) {
         val lista = leerInterno(context)
         val repetida = lista.any {
-            it.optString("paquete") == notificacion.optString("paquete") &&
-                it.optString("texto") == notificacion.optString("texto")
+            it.optString("id") == notificacion.optString("id") ||
+                (it.optString("paquete") == notificacion.optString("paquete") &&
+                    it.optString("texto") == notificacion.optString("texto"))
         }
         if (repetida) return false
         lista.add(notificacion)
@@ -68,6 +73,11 @@ object ColaNotificaciones {
         val f = archivo(context)
         val temporal = File(f.parentFile, "cola.json.tmp")
         temporal.writeText(JSONArray(lista).toString(), Charsets.UTF_8)
-        temporal.renameTo(f) // reemplazo atómico: nunca queda un archivo a medias
+        val ok = temporal.renameTo(f) // reemplazo atómico: nunca queda un archivo a medias
+        if (ok) {
+            Log.i(TAG, "Cola escrita: ${lista.size} notificaciones")
+        } else {
+            Log.e(TAG, "No se pudo escribir la cola en ${f.absolutePath}")
+        }
     }
 }
