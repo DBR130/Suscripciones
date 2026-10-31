@@ -39,7 +39,9 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 
 | Archivo | Qué hace |
 |---|---|
-| `LectorNotificacionesService.kt` | Servicio que Android ejecuta aunque la app esté cerrada. Recibe cada notificación (`onNotificationPosted`), aplica los filtros y guarda las que parecen cobros. Toma el texto largo (`EXTRA_BIG_TEXT`), el último mensaje si la app usa MessagingStyle (Google Mensajes) o el texto corto. Ignora resúmenes de grupo y notificaciones fijas. |
+| `LectorNotificacionesService.kt` | Servicio que Android ejecuta aunque la app esté cerrada. Recibe cada notificación (`onNotificationPosted`), aplica los filtros y guarda las que parecen cobros. Toma el texto largo (`EXTRA_BIG_TEXT`), el último mensaje si la app usa MessagingStyle (Google Mensajes) o el texto corto. Ignora resúmenes de grupo y notificaciones fijas. Al conectarse revisa las notificaciones activas de la barra (`getActiveNotifications`) y al desconectarse pide reconexión (`requestRebind`). |
+| `RegistroDeteccion.kt` | Horas de la última conexión, desconexión y notificación (SharedPreferences) y logs con el tag `SubTrackDeteccion`. |
+| `ReconexionReceiver.kt` | Al reiniciar el celular o actualizar la app, pide reconectar el lector. |
 | `FiltroCobros.kt` | Decide si un texto "parece un cobro": debe tener un monto **y** una palabra de cobro, y no tener palabras excluidas. Compara sin tildes ni mayúsculas. |
 | `ColaNotificaciones.kt` | Cola en `filesDir/deteccion/cola.json` (almacenamiento interno: solo esta app puede leerlo). Máximo 200 entradas, se borran solas a los 30 días, no guarda dos veces el mismo texto de la misma app y escribe de forma atómica. |
 | `ConfiguracionDeteccion.kt` | Lee la configuración de `res/raw/deteccion_apps.json`. |
@@ -53,9 +55,10 @@ solo después de que el usuario lo autoriza en Ajustes.
 
 | Método | Devuelve |
 |---|---|
-| `estado` | `{permiso, conectado, es_debug, modo_descubrimiento}` |
+| `estado` | `{permiso, conectado, es_debug, modo_descubrimiento, ultima_conexion, ultima_desconexion, ultima_notificacion, ultimo_resultado}` (horas en milisegundos) |
 | `abrirAjustesAcceso` | Abre el ajuste de SubTrack en "Acceso a notificaciones" (Android 11+) o la lista general |
 | `reconectar` | Si hay permiso pero el servicio está desconectado, pide a Android reconectarlo (`requestRebind`) |
+| `recuperarActivas` | Revisa las notificaciones activas de la barra y guarda las que falten. Devuelve cuántas guardó, o `-1` si el servicio no está conectado |
 | `leerCola` | Lista de `{id, paquete, app, titulo, texto, recibida_en}` |
 | `borrarDeCola` `{ids}` / `vaciarCola` | Quita las procesadas / todas |
 | `configuracion` | Apps permitidas y palabras de cobro |
@@ -91,8 +94,90 @@ y en modo descubrimiento también `{tipo: descartada, paquete, titulo, motivo}` 
 | `notificacion_capturada.dart` | Modelos: notificación capturada, evento en vivo, estado y configuración. |
 | `depuracion_deteccion_page.dart` | Pantalla "Depuración: detección" (solo debug): estado, apps permitidas, eventos en vivo, cola y comando de simulación. Se abre desde Perfil. |
 
-Al abrir la app, `main.dart` llama a `reconectarSiHaceFalta()` por si MIUI
-detuvo el servicio.
+Al abrir la app y cada vez que vuelve a primer plano, `main.dart` llama a
+`sincronizar()`: pide reconectar el servicio si está detenido y recupera las
+notificaciones activas de la barra.
+
+## Problema encontrado en la primera prueba (hito 1) y solución
+
+**Síntoma (Xiaomi, Android 16).** Con la app abierta en la pantalla de
+depuración, el pago simulado quedaba en la cola. Con la app en segundo plano
+o cerrada desde recientes, la notificación aparecía en el celular pero no
+quedaba en la cola, ni siquiera al tocar "Actualizar".
+
+**Diagnóstico (revisión del código, sin acceso al celular):**
+
+1. El guardado ya era 100 % nativo: `onNotificationPosted` escribe la cola
+   antes de avisar a Flutter y no usa el motor de Flutter. El problema no era
+   que el guardado dependiera de la pantalla.
+2. **Error que podía matar el servicio.** El aviso en vivo se enviaba al hilo
+   principal fuera del `try/catch`. Al cerrar la app, el motor de Flutter se
+   destruye pero nadie quitaba el oyente: la siguiente notificación podía
+   llamar a un `EventSink` muerto, lanzar una excepción en el hilo principal
+   y **cerrar el proceso completo, servicio incluido**. MIUI no siempre lo
+   vuelve a iniciar hasta que se abre la app.
+3. **MIUI/HyperOS al quitar la app de recientes** suele forzar su cierre.
+   Android desconecta el lector de una app detenida y **no le vuelve a
+   entregar** las notificaciones publicadas mientras estuvo desconectado.
+4. **Duplicados a propósito.** La cola no guarda dos veces el mismo texto de
+   la misma app: si una prueba repite el texto de otra, queda como "repetida".
+
+**Solución:**
+
+- El aviso en vivo nunca puede lanzar una excepción: está protegido en el
+  servicio y en el canal, y `MainActivity.cleanUpFlutterEngine` quita el
+  oyente al cerrar la app.
+- **Recuperación desde la barra:** al conectarse el servicio, al abrir la app
+  y al volver a primer plano se leen las notificaciones activas
+  (`getActiveNotifications`) de las apps permitidas y se agregan a la cola sin
+  duplicar (misma huella, o misma app y texto). Así se recupera lo que llegó
+  mientras el servicio estaba detenido, **siempre que siga en la barra** (si
+  el usuario la borró antes de abrir la app, se pierde).
+- **Reconexión:** `requestRebind` al abrir la app, al volver a primer plano,
+  cuando el servicio se desconecta y tras reiniciar el celular o actualizar
+  la app (`ReconexionReceiver`).
+- **Diagnóstico visible:** la pantalla de depuración muestra si el servicio
+  está conectado ahora y las horas de la última conexión, desconexión y
+  notificación recibida (con su resultado). Además hay logs con el tag
+  `SubTrackDeteccion`.
+
+### Ver los logs (PowerShell)
+
+```powershell
+# Limpiar lo anterior y ver solo los logs del lector, con hora:
+adb logcat -c
+adb logcat -v time -s SubTrackDeteccion:V
+
+# Igual, pero mostrando también si la app se cierra por un error:
+adb logcat -v time -s SubTrackDeteccion:V AndroidRuntime:E
+```
+
+`-s` deja en silencio todo lo demás y muestra solo los tags indicados. Se
+detiene con Ctrl+C. Mensajes que deben aparecer:
+
+| Log | Significa |
+|---|---|
+| `Servicio conectado` | Android conectó el lector |
+| `Notificaciones activas revisadas: N, guardadas: M` | Recuperación desde la barra |
+| `Recibida de com.android.shell: guardada` | Pago guardado en la cola |
+| `Recibida de ...: repetida` | Ya estaba en la cola (mismo texto) |
+| `Recibida de ...: descartada (no tiene palabras de cobro)` | No parecía un cobro |
+| `Recibida de ...: app no permitida` | App fuera de la lista (no se lee su texto) |
+| `Cola escrita: N notificaciones` | Se guardó el archivo de la cola |
+| `Servicio desconectado: se pide reconexión` | Android o MIUI detuvo el lector |
+
+Los logs con el paquete de cada notificación solo salen en compilaciones
+debug y **nunca incluyen el texto** de la notificación.
+
+### Comandos útiles de diagnóstico
+
+```powershell
+# ¿El sistema tiene el lector conectado? (buscar la línea con LectorNotificacionesService)
+adb shell dumpsys notification | Select-String LectorNotificacionesService
+
+# Dar el acceso a notificaciones desde el PC (solo para pruebas)
+adb shell cmd notification allow_listener com.example.flutter_suscripciones/com.example.flutter_suscripciones.deteccion.LectorNotificacionesService
+```
 
 ## Privacidad (RNF01, Habeas Data)
 
@@ -192,7 +277,8 @@ adb shell "cmd notification cancel pago1"
 | Caso | Resultado esperado |
 |---|---|
 | Pago simulado con la app **abierta** en la pantalla de depuración | Aparece en "En vivo" como **GUARDADA** y en "Cola guardada" |
-| Pago simulado con la app **cerrada** (deslízala fuera de recientes) | Al abrirla y entrar a la pantalla, está en "Cola guardada" |
+| Pago simulado con la app **en segundo plano** (botón de inicio) | Al volver, está en "Cola guardada". En logcat: `Recibida de com.android.shell: guardada` |
+| Pago simulado con la app **cerrada** (deslízala fuera de recientes) | Al abrirla, está en "Cola guardada": la guardó el servicio, o se recuperó de la barra al abrir (log `Notificaciones activas revisadas`). Si borraste la notificación de la barra antes de abrir la app y el servicio estaba detenido, se pierde |
 | "Recibiste…" o código de verificación | No queda en la cola. Con modo descubrimiento: **DESCARTADA** con el motivo |
 | Mismo texto enviado dos veces con otra etiqueta | Queda una sola vez en la cola |
 | Notificación de WhatsApp o Gmail con modo descubrimiento | **APP NO PERMITIDA**: paquete y título, sin texto |
