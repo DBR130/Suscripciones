@@ -51,6 +51,11 @@ class _AhorroPageState extends State<AhorroPage> {
     }
   }
 
+  Future<void> _abrirDetalle(int id) async {
+    await context.push(Routers.detalle(id));
+    if (mounted) _cargar(); // por si la reactivó
+  }
+
   @override
   Widget build(BuildContext context) {
     final ahorro = _ahorro;
@@ -103,7 +108,8 @@ class _AhorroPageState extends State<AhorroPage> {
                       )
                     else
                       for (final c in ahorro.canceladas) ...[
-                        _FilaCancelada(c),
+                        // Tocarla abre el detalle, donde se puede reactivar.
+                        _FilaCancelada(c, onTap: () => _abrirDetalle(c.id)),
                         const SizedBox(height: 10),
                       ],
                   ],
@@ -255,56 +261,63 @@ class GraficaGasto extends StatelessWidget {
 }
 
 class _FilaCancelada extends StatelessWidget {
-  const _FilaCancelada(this.cancelada);
+  const _FilaCancelada(this.cancelada, {required this.onTap});
 
   final Cancelada cancelada;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final c = cancelada;
     return AppCard(
-      padding: const EdgeInsets.all(13),
-      child: Row(
-        children: [
-          LogoServicio(c.nombreServicio, size: 38),
-          const SizedBox(width: 11),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  c.nombreServicio,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: AppColors.text, fontSize: 14.5, fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Cancelada el ${Formato.fechaCorta(c.fecha)}',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(13),
+          child: Row(
             children: [
-              Text(
-                '+${Formato.moneda(c.ahorroAnual, c.moneda)}',
-                style: const TextStyle(
-                  color: AppColors.link,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  fontFeatures: [FontFeature.tabularFigures()],
+              LogoServicio(c.nombreServicio, size: 38),
+              const SizedBox(width: 11),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      c.nombreServicio,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: AppColors.text, fontSize: 14.5, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Cancelada el ${Formato.fechaCorta(c.fecha)}',
+                      style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w500),
+                    ),
+                  ],
                 ),
               ),
-              const Text(
-                'al año',
-                style: TextStyle(color: AppColors.muted, fontSize: 11, fontWeight: FontWeight.w600),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '+${Formato.moneda(c.ahorroAnual, c.moneda)}',
+                    style: const TextStyle(
+                      color: AppColors.link,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const Text(
+                    'al año',
+                    style: TextStyle(color: AppColors.muted, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }

@@ -497,7 +497,10 @@ class _FilaEnlace extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            Flexible(
+            // El texto de la izquierda usa el espacio libre; el detalle va a la
+            // derecha y, si es muy largo (dos monedas), se parte en líneas.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 170),
               child: Text(
                 detalle,
                 textAlign: TextAlign.right,

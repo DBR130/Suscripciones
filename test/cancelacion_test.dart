@@ -189,7 +189,13 @@ void main() {
         ],
       ),
     );
-    await tester.pumpWidget(MaterialApp(theme: AppTheme.dark, home: AhorroPage(suscripcionService: service)));
+    await tester.pumpWidget(MaterialApp.router(
+      theme: AppTheme.dark,
+      routerConfig: GoRouter(routes: [
+        GoRoute(path: '/', builder: (_, _) => AhorroPage(suscripcionService: service)),
+        GoRoute(path: '/suscripcion/:id', builder: (_, s) => Text('DETALLE ${s.pathParameters['id']}')),
+      ]),
+    ));
     await tester.pumpAndSettle();
 
     expect(find.text(r'$465.600'), findsOneWidget);
@@ -205,6 +211,11 @@ void main() {
     expect(find.text(r'+$262.800'), findsOneWidget);
     expect(find.text('Cancelada el 11 oct'), findsOneWidget);
     expect(find.text(r'+US$120,00'), findsOneWidget);
+
+    // Tocar una cancelada abre su detalle (allí se reactiva).
+    await tester.tap(find.text('Paramount+'));
+    await tester.pumpAndSettle();
+    expect(find.text('DETALLE 1'), findsOneWidget);
   });
 
   testWidgets('Ahorro vacío', (tester) async {
