@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,6 +14,12 @@ import 'services/suscripcion_service.dart';
 Future<void> main() async {
   // Necesario para usar plugins (secure storage, notificaciones) antes de runApp.
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Licencia de la fuente Inter (SIL OFL): aparece en la pantalla de licencias.
+  LicenseRegistry.addLicense(() async* {
+    final texto = await rootBundle.loadString('assets/fonts/OFL.txt');
+    yield LicenseEntryWithLineBreaks(['Inter'], texto);
+  });
 
   // Un solo ApiClient (URL base y token) compartido por todos los servicios.
   final api = ApiClient();

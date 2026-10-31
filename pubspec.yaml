@@ -69,6 +69,23 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/
+    - assets/fonts/OFL.txt
+
+  # Fuente Inter del diseño, incluida en la app (no se descarga en tiempo de
+  # ejecución). Licencia SIL OFL 1.1: assets/fonts/OFL.txt.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

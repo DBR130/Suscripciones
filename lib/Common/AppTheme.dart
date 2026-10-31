@@ -81,6 +81,8 @@ class AppTheme {
 
   static final ThemeData dark = ThemeData(
     brightness: Brightness.dark,
+    // Inter, incluida en assets/fonts (ver pubspec.yaml).
+    fontFamily: 'Inter',
     scaffoldBackgroundColor: AppColors.bg,
     colorScheme: const ColorScheme.dark(
       primary: AppColors.primary,
