@@ -240,6 +240,10 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
                 ? 'Ninguna'
                 : '${_hora(e.ultimaNotificacion!)} (${e.ultimoResultado ?? '?'})',
           ),
+          FilaDato(
+            'App de SMS predeterminada',
+            e.appSmsPaquete == null ? 'Ninguna' : '${e.appSmsNombre ?? e.appSmsPaquete} (${e.appSmsPaquete})',
+          ),
           if (e.ultimaReconexion != null)
             FilaDato('Reconexión forzada', '${_hora(e.ultimaReconexion!)} (${e.resultadoReconexion ?? '?'})'),
           SwitchListTile(
@@ -298,7 +302,7 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
           ),
           const SizedBox(height: 2),
           const Text(
-            'android/app/src/main/res/raw/deteccion_apps.json',
+            'android/app/src/main/res/raw/deteccion_apps.json, más la app de SMS predeterminada',
             style: TextStyle(color: AppColors.muted, fontSize: 11.5, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 10),

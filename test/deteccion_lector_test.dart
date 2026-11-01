@@ -51,6 +51,8 @@ void main() {
             'ultima_desconexion': null,
             'ultima_notificacion': DateTime(2026, 10, 31, 9, 15, 30).millisecondsSinceEpoch,
             'ultimo_resultado': 'guardada',
+            'app_sms_paquete': 'com.truecaller',
+            'app_sms_nombre': 'Truecaller',
           };
         case 'recuperarActivas':
           return recuperables;
@@ -271,6 +273,19 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Se recuperaron 3 de la barra de notificaciones'), findsOneWidget);
+  });
+
+  testWidgets('muestra la app de SMS predeterminada detectada', (tester) async {
+    tester.view.physicalSize = const Size(1080, 4000);
+    tester.view.devicePixelRatio = 2.5;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: DepuracionDeteccionPage(lector: lector()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('App de SMS predeterminada'), findsOneWidget);
+    expect(find.text('Truecaller (com.truecaller)'), findsOneWidget);
   });
 
   group('ruta de depuración', () {

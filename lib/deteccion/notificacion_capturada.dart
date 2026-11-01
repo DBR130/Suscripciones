@@ -98,6 +98,8 @@ class EstadoLector {
     this.ultimoResultado,
     this.ultimaReconexion,
     this.resultadoReconexion,
+    this.appSmsPaquete,
+    this.appSmsNombre,
   });
 
   /// El usuario dio el "Acceso a notificaciones".
@@ -122,6 +124,11 @@ class EstadoLector {
   final DateTime? ultimaReconexion;
   final String? resultadoReconexion;
 
+  /// App de SMS predeterminada del usuario (Truecaller, Mensajes de Samsung...).
+  /// El lector la permite aunque no esté en la lista fija.
+  final String? appSmsPaquete;
+  final String? appSmsNombre;
+
   EstadoLector conDescubrimiento(bool activo) => EstadoLector(
         permiso: permiso,
         conectado: conectado,
@@ -133,6 +140,8 @@ class EstadoLector {
         ultimoResultado: ultimoResultado,
         ultimaReconexion: ultimaReconexion,
         resultadoReconexion: resultadoReconexion,
+        appSmsPaquete: appSmsPaquete,
+        appSmsNombre: appSmsNombre,
       );
 
   static const noDisponible =
@@ -149,6 +158,8 @@ class EstadoLector {
         ultimoResultado: mapa['ultimo_resultado'] as String?,
         ultimaReconexion: _fecha(mapa['ultima_reconexion']),
         resultadoReconexion: mapa['resultado_reconexion'] as String?,
+        appSmsPaquete: mapa['app_sms_paquete'] as String?,
+        appSmsNombre: mapa['app_sms_nombre'] as String?,
       );
 
   static DateTime? _fecha(Object? milisegundos) =>
