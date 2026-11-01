@@ -1,7 +1,6 @@
 package com.example.flutter_suscripciones.deteccion
 
 import android.app.Notification
-import android.content.ComponentName
 import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
@@ -73,13 +72,10 @@ class LectorNotificacionesService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         conectado = false
         RegistroDeteccion.marcarDesconexion(this)
-        RegistroDeteccion.log(this, "Servicio desconectado: se pide reconexión")
-        // Le pide a Android que lo vuelva a conectar (si el permiso sigue activo).
-        try {
-            requestRebind(ComponentName(this, LectorNotificacionesService::class.java))
-        } catch (e: Exception) {
-            RegistroDeteccion.log(this, "No se pudo pedir la reconexión", e)
-        }
+        RegistroDeteccion.log(this, "Servicio desconectado: se intenta reconectar")
+        // Si el permiso sigue activo, intenta reconectarlo (si el usuario quitó
+        // el acceso, ReconexionLector no hace nada).
+        ReconexionLector.reconectar(this, "servicio desconectado")
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {

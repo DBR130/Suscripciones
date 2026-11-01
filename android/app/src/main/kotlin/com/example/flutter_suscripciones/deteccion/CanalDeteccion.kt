@@ -7,7 +7,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.service.notification.NotificationListenerService
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -23,13 +22,13 @@ object CanalDeteccion {
 
     fun registrar(activity: Activity, engine: FlutterEngine) {
         val contexto = activity.applicationContext
-        val componente = ComponentName(contexto, LectorNotificacionesService::class.java)
+        val componente = ReconexionLector.componente(contexto)
 
         MethodChannel(engine.dartExecutor.binaryMessenger, METODOS).setMethodCallHandler { call, result ->
             when (call.method) {
                 "estado" -> result.success(
                     mapOf(
-                        "permiso" to permisoConcedido(activity, componente),
+                        "permiso" to ReconexionLector.permisoConcedido(contexto),
                         "conectado" to LectorNotificacionesService.conectado,
                         "es_debug" to ConfiguracionDeteccion.esDebug(contexto),
                         "modo_descubrimiento" to LectorNotificacionesService.modoDescubrimiento,
@@ -37,14 +36,14 @@ object CanalDeteccion {
                 )
                 "abrirAjustesAcceso" -> result.success(abrirAjustesAcceso(activity, componente))
                 "reconectar" -> {
-                    // Si Android (o MIUI) detuvo el servicio, le pide volver a conectarlo.
-                    if (permisoConcedido(activity, componente) && !LectorNotificacionesService.conectado) {
-                        RegistroDeteccion.log(contexto, "App abierta con el servicio desconectado: se pide reconexión")
-                        try {
-                            NotificationListenerService.requestRebind(componente)
-                        } catch (e: Exception) {
-                            RegistroDeteccion.log(contexto, "No se pudo pedir la reconexión", e)
-                        }
+                    // Permiso concedido pero lector desconectado (MIUI lo detuvo, o
+                    // Android no lo reenlazó tras actualizar la app): reconexión
+                    // escalonada, ver ReconexionLector. Responde enseguida; Flutter
+                    // consulta "estado" para saber si funcionó.
+                    if (!LectorNotificacionesService.conectado) {
+                        val motivo = call.argument<String>("motivo") ?: "desde la app"
+                        RegistroDeteccion.log(contexto, "App con el lector desconectado ($motivo): se intenta reconectar")
+                        ReconexionLector.reconectar(contexto, motivo)
                     }
                     result.success(null)
                 }
@@ -114,13 +113,6 @@ object CanalDeteccion {
     /** Lo llama MainActivity cuando se destruye el motor de Flutter. */
     fun liberar() {
         LectorNotificacionesService.oyente = null
-    }
-
-    /** true si el usuario dio a SubTrack el "Acceso a notificaciones". */
-    private fun permisoConcedido(activity: Activity, componente: ComponentName): Boolean {
-        val habilitados = Settings.Secure.getString(activity.contentResolver, "enabled_notification_listeners")
-            ?: return false
-        return habilitados.split(":").any { ComponentName.unflattenFromString(it) == componente }
     }
 
     private fun abrirAjustesAcceso(activity: Activity, componente: ComponentName): Boolean {

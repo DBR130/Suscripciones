@@ -31,6 +31,13 @@ object RegistroDeteccion {
             .putString("ultimo_resultado", resultado)
             .apply()
 
+    /** Último intento de reconexión forzada y su resultado (pantalla de depuración). */
+    fun marcarReconexion(context: Context, resultado: String) =
+        prefs(context).edit()
+            .putLong("ultima_reconexion", System.currentTimeMillis())
+            .putString("resultado_reconexion", resultado)
+            .apply()
+
     fun leer(context: Context): Map<String, Any?> {
         val p = prefs(context)
         fun hora(clave: String): Long? = p.getLong(clave, 0L).takeIf { it > 0 }
@@ -39,6 +46,8 @@ object RegistroDeteccion {
             "ultima_desconexion" to hora("ultima_desconexion"),
             "ultima_notificacion" to hora("ultima_notificacion"),
             "ultimo_resultado" to p.getString("ultimo_resultado", null),
+            "ultima_reconexion" to hora("ultima_reconexion"),
+            "resultado_reconexion" to p.getString("resultado_reconexion", null),
         )
     }
 
