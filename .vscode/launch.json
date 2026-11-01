@@ -23,6 +23,17 @@
             "args": ["--dart-define=API_URL=http://localhost:3000"]
         },
         {
+            // Xiaomi contra el backend en Render (sin USB ni el PC encendido).
+            // Cambia TU-SERVICIO por el nombre real del servicio en Render
+            // (ver docs/despliegue.md). La primera petición puede tardar
+            // cerca de 1 minuto si el servidor estaba dormido.
+            "name": "Celular (nube)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "25080RABDG",
+            "args": ["--dart-define=API_URL=https://TU-SERVICIO.onrender.com"]
+        },
+        {
             // Sin dart-define: usa http://10.0.2.2:3000 (el PC visto desde el emulador).
             "name": "Emulador Android",
             "request": "launch",

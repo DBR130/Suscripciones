@@ -1,11 +1,15 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- The INTERNET permission is required for development. Specifically,
          the Flutter tool needs it to communicate with the running application
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Solo en debug: permite HTTP sin cifrar para hablar con el backend
-         local (http://10.0.2.2:3000 o la IP del PC), que no tiene HTTPS.
-         Las compilaciones release no heredan esta opción. -->
-    <application android:usesCleartextTraffic="true"/>
+         local (http://localhost:3000 por USB, o http://10.0.2.2:3000 en el
+         emulador), que no tiene HTTPS. Reemplaza el "false" del manifest
+         principal; release y profile se quedan solo con HTTPS. -->
+    <application
+        android:usesCleartextTraffic="true"
+        tools:replace="android:usesCleartextTraffic"/>
 </manifest>

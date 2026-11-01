@@ -6,10 +6,14 @@
          (Android 13+ lo pide al usuario) y reprogramarlas al reiniciar. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- usesCleartextTraffic="false": en release solo HTTPS (el backend en
+         Render). El HTTP sin cifrar se permite solo en debug
+         (src/debug/AndroidManifest.xml), para el backend local. -->
     <application
         android:label="flutter_suscripciones"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
