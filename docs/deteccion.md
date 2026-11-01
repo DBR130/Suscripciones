@@ -41,7 +41,8 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 |---|---|
 | `LectorNotificacionesService.kt` | Servicio que Android ejecuta aunque la app esté cerrada. Recibe cada notificación (`onNotificationPosted`), aplica los filtros y guarda las que parecen cobros. Toma el texto largo (`EXTRA_BIG_TEXT`), el último mensaje si la app usa MessagingStyle (Google Mensajes) o el texto corto. Ignora resúmenes de grupo y notificaciones fijas. Al conectarse revisa las notificaciones activas de la barra (`getActiveNotifications`) y al desconectarse pide reconexión (`requestRebind`). |
 | `RegistroDeteccion.kt` | Horas de la última conexión, desconexión y notificación (SharedPreferences) y el único punto de logs (tag `SubTrackDeteccion`, solo en debug). |
-| `ReconexionReceiver.kt` | Al reiniciar el celular o actualizar la app, pide reconectar el lector. |
+| `ReconexionReceiver.kt` | Al reiniciar el celular o actualizar/reinstalar la app (`MY_PACKAGE_REPLACED`), intenta reconectar el lector. |
+| `ReconexionLector.kt` | Reconexión escalonada: `requestRebind` y, si no basta, reiniciar el componente del servicio (ver "Lector desconectado tras reinstalar o actualizar"). |
 | `FiltroCobros.kt` | Decide si un texto "parece un cobro": debe tener un monto **y** una palabra de cobro, y no tener palabras excluidas. Compara sin tildes ni mayúsculas. |
 | `ColaNotificaciones.kt` | Cola en `filesDir/deteccion/cola.json` (almacenamiento interno: solo esta app puede leerlo). Máximo 200 entradas, se borran solas a los 30 días, no guarda dos veces el mismo texto de la misma app y escribe de forma atómica. |
 | `ConfiguracionDeteccion.kt` | Lee la configuración de `res/raw/deteccion_apps.json`. |
@@ -57,7 +58,7 @@ solo después de que el usuario lo autoriza en Ajustes.
 |---|---|
 | `estado` | `{permiso, conectado, es_debug, modo_descubrimiento, ultima_conexion, ultima_desconexion, ultima_notificacion, ultimo_resultado}` (horas en milisegundos) |
 | `abrirAjustesAcceso` | Abre el ajuste de SubTrack en "Acceso a notificaciones" (Android 11+) o la lista general |
-| `reconectar` | Si hay permiso pero el servicio está desconectado, pide a Android reconectarlo (`requestRebind`) |
+| `reconectar` `{motivo}` | Si hay permiso pero el servicio está desconectado, inicia la reconexión escalonada (`ReconexionLector`). Responde enseguida; el resultado se ve en `estado` |
 | `recuperarActivas` | Revisa las notificaciones activas de la barra y guarda las que falten. Devuelve cuántas guardó, o `-1` si el servicio no está conectado |
 | `leerCola` | Lista de `{id, paquete, app, titulo, texto, recibida_en}` |
 | `borrarDeCola` `{ids}` / `vaciarCola` | Quita las procesadas / todas |
@@ -171,7 +172,12 @@ detiene con Ctrl+C. Mensajes que deben aparecer:
 | `Recibida de ...: descartada (no tiene palabras de cobro)` | No parecía un cobro |
 | `Recibida de ...: app no permitida` | App fuera de la lista (no se lee su texto) |
 | `Cola escrita: N notificaciones` | Se guardó el archivo de la cola |
-| `Servicio desconectado: se pide reconexión` | Android o MIUI detuvo el lector |
+| `Servicio desconectado: se intenta reconectar` | Android o MIUI detuvo el lector |
+| `Reconexión (motivo): requestRebind enviado` | Primer intento de reconexión |
+| `Reconexión (motivo): funcionó con requestRebind` | Bastó con el primer intento |
+| `Reconexión (motivo): componente del lector reiniciado (deshabilitar y habilitar)` | Segundo intento, a los 2,5 s |
+| `Reconexión (motivo): conectado tras reiniciar el componente` | El segundo intento funcionó |
+| `Reconexión (motivo): sigue desconectado: hay que apagar y encender el acceso a mano` | Ningún intento funcionó: la app muestra "Detección pausada" |
 
 Los logs solo salen en compilaciones debug (en release no hay ninguno) y
 **nunca incluyen el texto ni el título** de la notificación; de un error solo
@@ -186,6 +192,99 @@ adb shell dumpsys notification | Select-String LectorNotificacionesService
 # Dar el acceso a notificaciones desde el PC (solo para pruebas)
 adb shell cmd notification allow_listener com.example.flutter_suscripciones/com.example.flutter_suscripciones.deteccion.LectorNotificacionesService
 ```
+
+## Lector desconectado tras reinstalar o actualizar (HyperOS)
+
+**Síntoma (Xiaomi, HyperOS, Android 16).** Después de reinstalar la app (APK
+release y luego la debug encima), el permiso seguía concedido pero un SMS real
+no se detectaba. Perfil decía "Activo" aunque la detección no funcionaba.
+
+**Cómo se detectó (logs).** Con `adb logcat -v time -s SubTrackDeteccion:V`
+se repetía `App abierta con el servicio desconectado: se pide reconexión` y
+nunca aparecía `Servicio conectado`. Al apagar y encender el acceso de
+SubTrack en los ajustes, el lector se conectó y detectó el SMS real ("Bancolombia:
+Compraste $19.900,00 en GOOGLE *Crunchyroll…") y lo propuso como suscripción
+mensual de $19.900. El lector y el parser funcionaban; fallaba la reconexión.
+
+**Causa.** Al reinstalar o actualizar una app, Android desenlaza su
+NotificationListenerService y debería volver a enlazarlo solo. HyperOS no
+siempre lo hace, y `requestRebind()` tampoco lo consigue. Le pasaría a un
+usuario real después de cada actualización.
+
+**Solución:**
+
+1. **Reconexión escalonada** (`ReconexionLector.kt`), al abrir la app, al
+   volver a primer plano, al recibir `MY_PACKAGE_REPLACED` o
+   `BOOT_COMPLETED` y al desconectarse el servicio:
+   1. `requestRebind()`.
+   2. Si a los 2,5 s sigue desconectado: **reiniciar el componente** del
+      servicio con `PackageManager.setComponentEnabledSetting` (deshabilitar
+      y volver a habilitar, con `DONT_KILL_APP` porque el servicio vive en el
+      proceso de la app). Android lo trata como un cambio del paquete y vuelve
+      a enlazar el lector, igual que al apagar y encender el acceso. Después,
+      otro `requestRebind()`.
+   3. A los 3 s se anota el resultado en los logs y en la pantalla de
+      depuración ("Reconexión forzada").
+
+   No se reinicia el componente más de una vez cada 15 s. En el receiver se
+   usa `goAsync()` para que Android no mate el proceso a mitad de la secuencia.
+2. **Estado real en la app** (`VigilanteDeteccion`): "permiso concedido" ya no
+   es lo mismo que "detección activa".
+
+   | Permiso | Lector | Estado | Perfil | Dashboard |
+   |---|---|---|---|---|
+   | No | — | Sin permiso | "Desactivado · solo registro manual" | — |
+   | Sí | Conectado | Activa | "Activo · detección automática encendida" | — |
+   | Sí | Desconectado, reconectando (hasta 9 s) | Comprobando | "Comprobando la detección…" | — |
+   | Sí | Sigue desconectado tras los intentos | **Pausada** | "Detección pausada · toca para reactivarla" | Aviso "La detección está pausada…" con el botón **Abrir el ajuste** |
+
+   - El botón del aviso (y tocar el interruptor en Perfil) abre directamente
+     el ajuste de SubTrack en "Acceso a notificaciones", para apagarlo y
+     encenderlo.
+   - La **pantalla 03**, si el permiso ya está dado, primero intenta reconectar
+     ("Comprobando el lector…"). Si conecta, sigue al escaneo; si no, muestra
+     el mismo aviso.
+   - Aun con la detección pausada, la cola guardada antes se sigue enviando al
+     backend.
+
+**Riesgo conocido.** Reiniciar el componente es una técnica usada en la
+práctica, pero no está documentada por Android como garantía. Si en algún
+celular Android quitara el acceso al reiniciarlo, el log lo dice ("Android
+quitó el acceso al reiniciar el componente") y la app muestra "Sin permiso",
+que lleva a la pantalla 03.
+
+### Cómo probarlo en el Xiaomi
+
+1. Instala la app debug, inicia sesión y da el acceso a notificaciones.
+   Perfil debe decir "Activo · detección automática encendida".
+2. En una terminal, deja corriendo los logs:
+
+   ```powershell
+   adb logcat -c
+   adb logcat -v time -s SubTrackDeteccion:V
+   ```
+
+3. Reproduce el problema **reinstalando encima** (en otra terminal, desde la
+   carpeta del proyecto):
+
+   ```powershell
+   flutter build apk --debug
+   adb install -r build\app\outputs\flutter-apk\app-debug.apk
+   ```
+
+   En los logs debe aparecer `Evento del sistema (app actualizada): se intenta
+   reconectar el lector` y, después, `Servicio conectado` (solo, con
+   `requestRebind` o con el reinicio del componente).
+4. Abre la app. Resultado esperado, en este orden de preferencia:
+   - Se reconectó sola: Perfil dice "Activo" y en los logs aparece
+     `Servicio conectado`. En **Perfil → Depuración: detección**, la fila
+     "Reconexión forzada" muestra qué paso funcionó.
+   - No se reconectó: a los pocos segundos Perfil dice "Detección pausada ·
+     toca para reactivarla" y el dashboard muestra el aviso. **Abrir el
+     ajuste** → apaga y enciende SubTrack → al volver, el aviso desaparece y
+     Perfil dice "Activo".
+5. Comprueba que detecta: simula un pago (por ejemplo `real1` de "Cómo
+   probar (hito 4)") o pide que te envíen un SMS de cobro.
 
 ## Parser (hito 2)
 
@@ -786,6 +885,11 @@ resultados.
   lector guarda los cobros aunque la app esté cerrada, pero el envío al backend
   y la notificación del flujo B ocurren al abrir la app (no hay trabajo en
   segundo plano de Flutter).
+- **Después de reinstalar o actualizar la app, HyperOS puede no reconectar el
+  lector.** La app lo intenta sola (`requestRebind` y reinicio del
+  componente). Si no lo logra, avisa "La detección está pausada" y el usuario
+  debe apagar y encender el acceso de SubTrack en los ajustes. Mientras tanto
+  no se detectan cobros nuevos.
 - Los cobros publicados mientras el lector estaba detenido solo se recuperan
   si siguen en la barra de notificaciones.
 - Solo se reconocen los formatos de Bancolombia y Nequi probados con mensajes
