@@ -6,6 +6,7 @@ import express from 'express';
 
 import { manejarErrores, noEncontrado } from './middlewares/errorHandler.js';
 import ahorroRoutes from './routes/ahorro.routes.js';
+import analisisRoutes from './routes/analisis.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import avisosRoutes from './routes/avisos.routes.js';
 import deteccionesRoutes from './routes/detecciones.routes.js';
@@ -30,6 +31,7 @@ app.use('/api/usuarios', usuariosRoutes);
 app.use('/api/avisos', avisosRoutes);
 app.use('/api/guias', guiasRoutes);
 app.use('/api/ahorro', ahorroRoutes);
+app.use('/api/analisis', analisisRoutes);
 app.use('/api/detecciones', deteccionesRoutes);
 
 // Estos dos van al final: primero 404 para rutas desconocidas y luego el

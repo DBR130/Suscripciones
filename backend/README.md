@@ -276,6 +276,34 @@ recordatorio). Van del más reciente al más antiguo.
 - `evolucion`: gasto de los últimos 6 meses (incluye el actual) según
   `historial_pagos`, una serie por moneda; los meses sin pagos van con 0.
 
+### GET /api/analisis
+
+Todo lo de la pestaña Análisis en una sola petición (solo datos del usuario
+del token; no necesita migraciones):
+
+```json
+{
+  "totales": [{ "moneda": "COP", "gasto_mensual": 55800, "proyeccion_anual": 669600, "cantidad": 3 }],
+  "cantidad_activas": 3,
+  "gasto_mensual": [{ "moneda": "COP", "meses": [{ "mes": "2026-06", "total": 0 }, "... 6 meses"] }],
+  "por_categoria": [{ "categoria": "Streaming", "moneda": "COP", "gasto_mensual": 38900, "cantidad": 1 }],
+  "proximos_cobros": [{ "suscripcion_id": 4, "nombre_servicio": "Max", "monto": 19900, "moneda": "COP",
+                        "fecha": "2026-11-04", "dias_restantes": 3, "fin_de_prueba": true }],
+  "mas_caras": [{ "id": 1, "nombre_servicio": "Netflix", "categoria": "Streaming", "moneda": "COP",
+                  "monto": 38900, "frecuencia": "mensual", "gasto_mensual": 38900 }],
+  "ahorro": { "totales": ["... como en /api/ahorro"], "cantidad_canceladas": 1, "canceladas": ["..."] }
+}
+```
+
+- `gasto_mensual`: lo pagado según `historial_pagos` (igual que
+  `evolucion` de `/api/ahorro`). `totales` y `por_categoria`: como en
+  `/api/resumen`.
+- `proximos_cobros`: de hoy a 30 días. Una semanal aparece varias veces; una
+  prueba gratis aparece el día que termina (`fin_de_prueba: true`) con el
+  monto que empieza a cobrar.
+- `mas_caras`: las 3 de mayor gasto mensual equivalente, sin pruebas gratis.
+  No se convierten monedas: primero las de COP.
+
 El catálogo se edita en `db/guias.json` y se carga con `npm run db:guias`; el
 usuario de demostración se crea con `npm run db:demo` (ver
 [db/README.md](db/README.md)).
