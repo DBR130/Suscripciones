@@ -9,6 +9,7 @@ import 'Common/Routers.dart';
 import 'deteccion/deteccion_service.dart';
 import 'deteccion/lector_notificaciones.dart';
 import 'deteccion/procesador_detecciones.dart';
+import 'deteccion/vigilante_deteccion.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/recordatorios_service.dart';
@@ -44,6 +45,9 @@ Future<void> main() async {
     servicio: deteccionService,
     cargarCatalogo: suscripcionService.catalogoServicios,
   );
+  // Estado real de la detección (permiso + lector conectado), para Perfil,
+  // el dashboard y la pantalla de permisos.
+  final vigilante = VigilanteDeteccion(lector);
 
   // Si hay un token guardado y el servidor lo acepta, se abre directo el resumen.
   // Con el servidor dormido (Render) esto puede tardar cerca de 1 minuto:
@@ -58,6 +62,7 @@ Future<void> main() async {
     lector: lector,
     deteccionService: deteccionService,
     procesador: procesador,
+    vigilante: vigilante,
     initialLocation: haySesion ? Routers.dashboard : Routers.home,
   );
   // Si el token vence mientras se usa la app, se vuelve al login.
@@ -76,7 +81,7 @@ Future<void> main() async {
   // Flujo B: al tocar "¿Tienes una suscripción a…?", los resultados (05).
   recordatorios.onAbrirCandidato = (_) => router.push(Routers.deteccion);
 
-  final deteccion = _DeteccionEnSegundoPlano(api, lector, procesador, recordatorios, router);
+  final deteccion = _DeteccionEnSegundoPlano(api, vigilante, procesador, recordatorios, router);
   WidgetsBinding.instance.addObserver(deteccion);
 
   runApp(MyApp(router: router, despertando: api.despertando));
@@ -96,14 +101,16 @@ Future<void> main() async {
   });
 }
 
-/// Al abrir la app y cada vez que vuelve a primer plano: reconecta el lector
-/// (MIUI lo detiene) y, si hay sesión y permiso, procesa la cola de cobros y
-/// avisa de las suscripciones nuevas que detectó el backend (flujo B).
+/// Al abrir la app y cada vez que vuelve a primer plano: comprueba que el
+/// lector esté conectado (y si no, intenta reconectarlo: MIUI lo detiene y
+/// HyperOS a veces no lo reenlaza tras actualizar la app) y, si hay sesión y
+/// permiso, procesa la cola de cobros y avisa de las suscripciones nuevas que
+/// detectó el backend (flujo B).
 class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
-  _DeteccionEnSegundoPlano(this.api, this.lector, this.procesador, this.recordatorios, this.router);
+  _DeteccionEnSegundoPlano(this.api, this.vigilante, this.procesador, this.recordatorios, this.router);
 
   final ApiClient api;
-  final LectorNotificaciones lector;
+  final VigilanteDeteccion vigilante;
   final ProcesadorDetecciones procesador;
   final RecordatoriosService recordatorios;
   final GoRouter router;
@@ -125,11 +132,12 @@ class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
   Future<void> ejecutar() async {
     try {
       final ruta = router.routerDelegate.currentConfiguration.uri.path;
+      // Reconecta si hace falta y publica el estado (activa / pausada / sin permiso).
+      final estado = await vigilante.verificar(motivo: 'app abierta o en primer plano');
       final haySesion = await api.leerToken() != null;
-      if (_rutasPropias.contains(ruta) || !haySesion || !(await lector.estado()).permiso) {
-        await lector.sincronizar();
-        return;
-      }
+      final conPermiso = estado == EstadoDeteccion.activa || estado == EstadoDeteccion.pausada;
+      if (_rutasPropias.contains(ruta) || !haySesion || !conPermiso) return;
+      // También en pausa: la cola puede tener cobros guardados antes.
       final resultado = await procesador.procesar();
       for (final c in resultado.candidatosNuevos) {
         await recordatorios.avisarCandidato(c);

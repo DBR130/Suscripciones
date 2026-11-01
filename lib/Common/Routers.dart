@@ -10,6 +10,7 @@ import '../deteccion/lector_notificaciones.dart';
 import '../deteccion/permisos_page.dart';
 import '../deteccion/procesador_detecciones.dart';
 import '../deteccion/resultados_deteccion_page.dart';
+import '../deteccion/vigilante_deteccion.dart';
 import '../services/api_client.dart';
 import '../Pages/AvisosPage.dart';
 import '../Pages/BienvenidaPage.dart';
@@ -76,11 +77,13 @@ class Routers {
     LectorNotificaciones? lector,
     DeteccionService? deteccionService,
     ProcesadorDetecciones? procesador,
+    VigilanteDeteccion? vigilante,
     String initialLocation = home,
     bool depuracion = kDebugMode,
   }) {
     final lectorNotificaciones = lector ?? LectorNotificaciones();
     final servicioDeteccion = deteccionService ?? DeteccionService(ApiClient());
+    final vigilanteDeteccion = vigilante ?? VigilanteDeteccion(lectorNotificaciones);
     final procesadorDetecciones = procesador ??
         ProcesadorDetecciones(
           lector: lectorNotificaciones,
@@ -121,7 +124,7 @@ class Routers {
         GoRoute(
           path: permisos,
           builder: (context, state) => PermisosPage(
-            lector: lectorNotificaciones,
+            vigilante: vigilanteDeteccion,
             recordatorios: recordatorios,
             inicio: _inicio(state),
           ),
@@ -189,6 +192,7 @@ class Routers {
                 authService: authService,
                 suscripcionService: suscripcionService,
                 recordatorios: recordatorios,
+                vigilante: vigilanteDeteccion,
               ),
             ),
             GoRoute(
@@ -217,7 +221,7 @@ class Routers {
                 authService: authService,
                 suscripcionService: suscripcionService,
                 recordatorios: recordatorios,
-                lector: lectorNotificaciones,
+                vigilante: vigilanteDeteccion,
               ),
             ),
             GoRoute(

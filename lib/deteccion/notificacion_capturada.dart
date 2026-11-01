@@ -96,6 +96,8 @@ class EstadoLector {
     this.ultimaDesconexion,
     this.ultimaNotificacion,
     this.ultimoResultado,
+    this.ultimaReconexion,
+    this.resultadoReconexion,
   });
 
   /// El usuario dio el "Acceso a notificaciones".
@@ -116,6 +118,10 @@ class EstadoLector {
   /// "guardada", "repetida", "descartada" o "app no permitida".
   final String? ultimoResultado;
 
+  /// Último intento de reconexión forzada (reiniciar el componente) y su resultado.
+  final DateTime? ultimaReconexion;
+  final String? resultadoReconexion;
+
   EstadoLector conDescubrimiento(bool activo) => EstadoLector(
         permiso: permiso,
         conectado: conectado,
@@ -125,6 +131,8 @@ class EstadoLector {
         ultimaDesconexion: ultimaDesconexion,
         ultimaNotificacion: ultimaNotificacion,
         ultimoResultado: ultimoResultado,
+        ultimaReconexion: ultimaReconexion,
+        resultadoReconexion: resultadoReconexion,
       );
 
   static const noDisponible =
@@ -139,6 +147,8 @@ class EstadoLector {
         ultimaDesconexion: _fecha(mapa['ultima_desconexion']),
         ultimaNotificacion: _fecha(mapa['ultima_notificacion']),
         ultimoResultado: mapa['ultimo_resultado'] as String?,
+        ultimaReconexion: _fecha(mapa['ultima_reconexion']),
+        resultadoReconexion: mapa['resultado_reconexion'] as String?,
       );
 
   static DateTime? _fecha(Object? milisegundos) =>

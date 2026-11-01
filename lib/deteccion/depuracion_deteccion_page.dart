@@ -240,6 +240,8 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
                 ? 'Ninguna'
                 : '${_hora(e.ultimaNotificacion!)} (${e.ultimoResultado ?? '?'})',
           ),
+          if (e.ultimaReconexion != null)
+            FilaDato('Reconexión forzada', '${_hora(e.ultimaReconexion!)} (${e.resultadoReconexion ?? '?'})'),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: e.modoDescubrimiento,

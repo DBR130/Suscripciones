@@ -31,11 +31,15 @@ class LectorNotificaciones {
     if (disponible) await metodos.invokeMethod<bool>('abrirAjustesAcceso');
   }
 
-  /// Si hay permiso pero Android/MIUI detuvo el servicio, le pide reconectarse.
-  Future<void> reconectarSiHaceFalta() async {
+  /// Si hay permiso pero Android/MIUI detuvo el servicio, intenta
+  /// reconectarlo: requestRebind y, si no basta, reinicia el componente del
+  /// servicio (ver ReconexionLector.kt). Responde enseguida: para saber si
+  /// funcionó, consultar [estado] (lo hace VigilanteDeteccion).
+  /// [motivo] solo aparece en los logs.
+  Future<void> reconectarSiHaceFalta({String motivo = 'desde la app'}) async {
     if (!disponible) return;
     try {
-      await metodos.invokeMethod<void>('reconectar');
+      await metodos.invokeMethod<void>('reconectar', {'motivo': motivo});
     } on PlatformException catch (e) {
       debugPrint('No se pudo reconectar el lector: $e');
     }
