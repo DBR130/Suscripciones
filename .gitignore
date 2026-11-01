@@ -49,6 +49,9 @@ app.*.map.json
 
 # Backend (Node.js)
 backend/.env
+# Cadena de Neon para correr migraciones contra la nube (ver docs/despliegue.md).
+backend/.env.produccion
+backend/.env.*.local
 backend/node_modules/
 
 # Postman (pruebas locales del backend)

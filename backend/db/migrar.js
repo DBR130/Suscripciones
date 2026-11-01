@@ -16,6 +16,25 @@ const CARPETA = path.join(import.meta.dirname, 'migraciones');
 const PATRON = /^\d{3}_.+\.sql$/;
 const INICIAL = '001_inicial.sql';
 
+/** Archivos de migración, en orden. */
+async function archivosDeMigracion() {
+  return (await fs.readdir(CARPETA)).filter((f) => PATRON.test(f)).sort();
+}
+
+/**
+ * Migraciones que faltan por aplicar, sin aplicar nada. `consultar` ejecuta
+ * una consulta y devuelve {rows} (por ejemplo, query de src/db.js). La usa
+ * el servidor al arrancar para avisar en los logs (src/server.js).
+ */
+export async function migracionesPendientes(consultar) {
+  const tabla = await consultar("SELECT to_regclass('public.schema_migrations') IS NOT NULL AS existe");
+  const aplicadas = new Set();
+  if (tabla.rows[0].existe) {
+    for (const r of (await consultar('SELECT version FROM schema_migrations')).rows) aplicadas.add(r.version);
+  }
+  return (await archivosDeMigracion()).filter((f) => !aplicadas.has(f));
+}
+
 /**
  * Aplica las migraciones pendientes en la BD de `connectionString`.
  * Devuelve la lista de migraciones aplicadas en esta ejecución.
@@ -46,8 +65,7 @@ export async function migrar(connectionString, log = console.log) {
       }
     }
 
-    const archivos = (await fs.readdir(CARPETA)).filter((f) => PATRON.test(f)).sort();
-    const pendientes = archivos.filter((f) => !aplicadas.has(f));
+    const pendientes = (await archivosDeMigracion()).filter((f) => !aplicadas.has(f));
 
     for (const archivo of pendientes) {
       const sql = await fs.readFile(path.join(CARPETA, archivo), 'utf8');
