@@ -218,10 +218,13 @@ El APK release apunta a la URL que le pases al compilar. En PowerShell, desde
 la carpeta del proyecto (cambia la URL por la tuya):
 
 ```powershell
-flutter build apk --release --dart-define=API_URL=https://TU-SERVICIO.onrender.com
+flutter build apk --release --flavor completa --dart-define=API_URL=https://TU-SERVICIO.onrender.com
 ```
 
-El archivo queda en `build\app\outputs\flutter-apk\app-release.apk` (unos 55 MB).
+El archivo queda en `build\app\outputs\flutter-apk\app-completa-release.apk`
+(unos 55 MB). Con `--flavor sinSms` sale la versión sin "Buscar suscripciones
+en mis SMS" (sin READ_SMS): `app-sinsms-release.apk`. Ver "Versiones completa
+y sinSms" en [deteccion.md](deteccion.md).
 
 - **La URL debe ser `https://`.** El APK release solo permite HTTPS
   (`android:usesCleartextTraffic="false"` en el manifest principal); el HTTP
@@ -235,7 +238,7 @@ El archivo queda en `build\app\outputs\flutter-apk\app-release.apk` (unos 55 MB)
 **Instalarlo con el cable (lo más fácil):**
 
 ```powershell
-adb install -r build\app\outputs\flutter-apk\app-release.apk
+adb install -r build\app\outputs\flutter-apk\app-completa-release.apk
 ```
 
 `-r` reemplaza la versión instalada sin borrar sus datos (las dos versiones

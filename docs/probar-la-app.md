@@ -188,6 +188,39 @@ Si vuelve a pausarse seguido, revisa la sección 3 (batería).
 
 ---
 
+## 7. Buscar las suscripciones que ya pagas (opcional)
+
+Las notificaciones solo muestran los cobros **nuevos**. Para encontrar las
+suscripciones que ya pagabas antes de instalar la app:
+
+1. Al final del registro (o en **Perfil → Buscar suscripciones en mis SMS**),
+   la app explica qué va a revisar. Léelo.
+2. Toca **Buscar en mis SMS** y, cuando Android pregunte, **Permitir**.
+3. La app revisa una vez tus SMS de los últimos 6 meses y te muestra las
+   suscripciones que encontró para que confirmes cuáles son tuyas.
+
+Si prefieres no hacerlo, toca **Ahora no** (o **No permitir**): la app sigue
+funcionando igual. Puedes quitar el permiso cuando quieras en **Ajustes →
+Aplicaciones → SubTrack → Permisos → SMS**.
+
+**En Xiaomi:** si la app dice **"No vimos SMS de bancos"**, toca **Abrir los
+permisos de SubTrack**, permite los SMS y, en **Otros permisos**, cualquier
+opción de "SMS de servicio" o "SMS de notificación". Vuelve y toca **Buscar de
+nuevo**. Cuéntanos cómo se llamaba esa opción en tu celular.
+
+## 8. Compartir un SMS con SubTrack
+
+Si un cobro no se detectó, puedes enviárselo a la app sin dar ningún permiso:
+
+1. En tu app de mensajes, **mantén presionado** el SMS del banco.
+2. Toca **Compartir** (o el menú **⋮ → Compartir**) y elige **SubTrack**.
+3. La app muestra el cobro. Toca **Usar este cobro** y confírmalo como
+   suscripción.
+
+Si el mensaje no es un cobro, la app te lo dice y no guarda nada.
+
+---
+
 ## Qué reportar al equipo
 
 - Marca y modelo del celular.

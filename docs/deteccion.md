@@ -10,6 +10,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | 2 | Parser en Dart: comercio, monto, moneda, fecha y banco | **Hecho** |
 | 3 | Backend: pagos detectados y candidatos de suscripción | **Hecho** |
 | 4 | Pantallas 03, 04, 05 y flujo B | **Hecho** |
+| 5 | Historial de SMS (opcional, READ_SMS), "Compartir" y análisis en el celular | **Hecho** |
 
 ## Arquitectura
 
@@ -278,7 +279,7 @@ que lleva a la pantalla 03.
 
    ```powershell
    flutter build apk --debug
-   adb install -r build\app\outputs\flutter-apk\app-debug.apk
+   adb install -r build\app\outputs\flutter-apk\app-completa-debug.apk
    ```
 
    En los logs debe aparecer `Evento del sistema (app actualizada): se intenta
@@ -356,11 +357,11 @@ necesita el Java que trae Android Studio):
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
 cd android
-.\gradlew.bat :app:testDebugUnitTest
+.\gradlew.bat :app:testCompletaDebugUnitTest
 cd ..
 ```
 
-El informe queda en `build/app/reports/tests/testDebugUnitTest/index.html`.
+El informe queda en `build/app/reports/tests/testCompletaDebugUnitTest/index.html`.
 
 **Guía para probadores** (instalar, permisos, batería, SMS de prueba):
 [probar-la-app.md](probar-la-app.md).
@@ -379,6 +380,222 @@ El informe queda en `build/app/reports/tests/testDebugUnitTest/index.html`.
    → App de SMS), vuelve a SubTrack: en logcat aparece `App de SMS
    predeterminada (app abierta): …` con la nueva y la fila de depuración se
    actualiza.
+
+## Tres caminos: notificaciones, historial de SMS y "Compartir" (hito 5)
+
+**Problema.** El escaneo inicial (pantalla 04) solo veía las notificaciones
+que seguían en la barra, así que casi siempre decía "Encontramos 0
+suscripciones" (un probador con Samsung). Y el lector de notificaciones no
+puede leer SMS antiguos: no encontraba suscripciones pagadas antes de
+instalar la app (un probador con DiDi).
+
+**Decisión.** Tres caminos, cada uno con su propio consentimiento:
+
+| Camino | Qué lee | Permiso | Cuándo |
+|---|---|---|---|
+| **1. Lector de notificaciones** (el de siempre) | Las notificaciones nuevas de la app de SMS predeterminada y de la lista fija; solo guarda las que parecen cobros | "Acceso a notificaciones" (pantalla 03) | Siempre, en segundo plano |
+| **2. Historial de SMS** (opcional) | Los SMS **recibidos** de los últimos **6 meses**, desde el proveedor de SMS de Android (funciona con cualquier app de SMS, también Truecaller). Los que no parecen cobros se descartan en la parte nativa | **READ_SMS**, pedido solo si el usuario toca "Buscar en mis SMS" después de una divulgación destacada | Una vez, cuando el usuario lo pide (al final del onboarding o desde Perfil). Se puede repetir sin duplicar |
+| **3. Compartir** | Solo el texto que el usuario comparte a propósito desde su app de mensajes | Ninguno (intent `ACTION_SEND`, `text/plain`) | Cuando el usuario quiera |
+
+No se usa **RECEIVE_SMS**: los cobros nuevos ya llegan por el camino 1.
+
+### Consentimientos
+
+1. **Pantalla 03** (como antes): acceso a notificaciones para los cobros
+   nuevos.
+2. **"¿Buscamos suscripciones que ya pagas?"** (`historial_sms_page.dart`):
+   pantalla aparte y opcional, después de la 03 y en Perfil ("Buscar
+   suscripciones en mis SMS"). Es la divulgación destacada (*prominent
+   disclosure*) que pide Google Play antes del permiso: explica qué se lee
+   (solo los SMS que parecen cobros de bancos), para qué (encontrar
+   suscripciones), qué sale del celular (solo monto, comercio y fecha de las
+   suscripciones encontradas), que es una sola revisión de 6 meses y cómo
+   revocarlo en los ajustes de Android. Botones **Buscar en mis SMS** y
+   **Ahora no**.
+   - Solo "Buscar en mis SMS" muestra el diálogo de Android (READ_SMS).
+   - Si lo rechaza: "Sin problema: seguimos detectando los cobros nuevos" y
+     sigue el escaneo de notificaciones. La app funciona igual.
+   - Si Android ya no pregunta (rechazos anteriores), la pantalla explica
+     cómo darlo en los ajustes y abre los permisos de SubTrack; al volver con
+     el permiso, busca.
+
+### El escaneo del historial
+
+`LectorHistorialSms.kt` (versión completa) consulta
+`Telephony.Sms.Inbox` con `date >= hace 6 meses`, en un hilo aparte. Por cada
+SMS aplica **el mismo filtro de cobro** (`FiltroCobros`); a Flutter solo pasan
+el texto y la fecha de los que parecen cobros. En Flutter pasan por **el mismo
+parser**; si el texto no trae fecha (Nequi), se usa la fecha del propio SMS.
+Progreso en la pantalla 04 ("Revisando tus mensajes del banco…": leyendo,
+analizando, guardando) y resultados en la 05.
+
+**Xiaomi y los SMS de servicio.** Hay reportes de que MIUI/HyperOS oculta a
+las apps los SMS de números cortos (los de los bancos) detrás de un permiso
+propio de Xiaomi, aunque READ_SMS esté concedido. No hay documentación
+oficial y no se pudo confirmar sin el celular, así que se detecta en la
+práctica: la lectura cuenta cuántos SMS vienen de remitentes de empresa
+(números cortos o nombres). Si se leyeron SMS pero **ninguno** de empresa y no
+salió ningún cobro, la pantalla 04 muestra "No vimos SMS de bancos", con un
+botón que abre el editor de permisos de MIUI
+(`miui.intent.action.APP_PERM_EDITOR`; si no existe, la información de la
+app) y "Buscar de nuevo". El log dice `Historial de SMS: N leídos (M de
+empresas), K parecen cobro` (solo cantidades).
+
+### Análisis en el celular (minimización)
+
+El análisis se hace **en el celular** (`analizador_pagos.dart`), con la misma
+regla que el backend. Agrupa por comercio normalizado y moneda, y solo deja
+salir:
+
+- los pagos a **servicios conocidos** del catálogo de guías, y
+- los de comercios con **patrón recurrente**: 2 o más cobros con montos
+  similares (±10 %) y periodicidad semanal (6–8 días), mensual (26–35) o
+  anual (355–375).
+
+Las **compras puntuales** y los SMS que no son cobros **no salen del
+celular**. Se envían en lotes de máximo 100.
+
+Esto aplica a los dos caminos automáticos (notificaciones e historial): los
+dos pasan por el mismo `ProcesadorDetecciones` → parser → almacén local →
+análisis → envío.
+
+### Decisión: las compras normales se quedan en el celular
+
+**Antes**, el flujo en vivo enviaba al backend todo cobro interpretado, y el
+backend guardaba para siempre las compras normales (por ejemplo, DiDi Food)
+porque las necesitaba para notar un patrón recurrente más adelante.
+
+**Ahora** (dos capas):
+
+1. **En el celular**: `AlmacenPagosLocales` guarda los pagos interpretados
+   (solo campos extraídos, nunca el texto), cifrados en el almacenamiento
+   seguro de Android, durante **400 días** (lo justo para ver dos cobros de
+   una suscripción anual), con un tope de 1000, y se borran al cerrar sesión.
+   Así el patrón recurrente se detecta en el celular: cuando llega el segundo
+   cobro mensual de un comercio, salen los dos. Una compra que nunca se
+   repite no sale nunca.
+2. **En el backend** (red de seguridad, migración 007):
+   `purgarComprasNormales` borra los pagos que no están enlazados a una
+   suscripción ni corresponden a un candidato pendiente o confirmado (con los
+   alias del catálogo). Corre al final de cada lote, al descartar un candidato
+   (sus pagos ya no hacen falta) y en una tarea diaria (00:20). La migración
+   007 borra las compras normales que ya estaban guardadas.
+
+**Por qué así y no solo una retención en el backend:** con solo una
+retención, las compras puntuales igual viajarían y se guardarían unos meses
+en el servidor sin ninguna necesidad. Dejarlas en el celular cumple mejor la
+minimización (Ley 1581, finalidad) y lo que exige Google Play para READ_SMS:
+no sacar del celular SMS personales ni datos que no sirven para la función.
+
+### Sin duplicados entre caminos
+
+El mismo cobro puede llegar por la notificación, por el historial o por
+"Compartir":
+
+- **Con fecha en el texto** (Bancolombia): la huella usa la fecha del mensaje,
+  así que coincide por cualquier camino.
+- **Sin fecha en el texto** (Nequi): la notificación usa `postTime` y el
+  historial la fecha del SMS; difieren unos segundos y la huella cambia. Se
+  unifica con una **tolerancia de 5 minutos** para el mismo banco, comercio,
+  monto y moneda:
+  - en el celular, `AnalizadorPagos.mismoCobro` (no se guarda dos veces ni se
+    envía dos veces);
+  - en el backend, el pago llega con `fecha_del_mensaje: false` (columna
+    `fecha_aproximada`) y se responde `repetido` si ya hay uno igual a ±5
+    minutos.
+- Repetir "Buscar suscripciones en mis SMS" no reenvía lo ya enviado.
+
+### Compartir un SMS con SubTrack
+
+`MainActivity` declara un intent-filter `ACTION_SEND` / `text/plain` (en las
+dos versiones). `CanalCompartir.kt` entrega el texto a Flutter
+(`receptor_compartir.dart`), que abre `compartir_page.dart`:
+
+- Si el parser reconoce un cobro, muestra comercio, monto, banco y fecha
+  (si el texto no trae fecha, se puede elegir el día). **Usar este cobro**
+  envía solo los campos extraídos con `compartido: true`:
+  - si ya es una suscripción del usuario, se registra el pago en ella y se
+    abre su detalle;
+  - si no, el backend lo propone como candidato (aunque sea un comercio
+    desconocido con un solo cobro: el usuario dice que es una suscripción) y
+    se abre la pantalla 05 para confirmarlo.
+- Si no es un cobro, explica por qué y ofrece agregarla a mano. No se envía
+  nada.
+- El texto vive solo en memoria; no se guarda en la cola.
+
+### Versiones completa y sinSms
+
+Todo lo de READ_SMS se puede incluir o excluir al compilar con *product
+flavors* (`android/app/build.gradle.kts`):
+
+| | completa | sinSms |
+|---|---|---|
+| Lector de notificaciones, registro manual, "Compartir" | Sí | Sí |
+| "Buscar suscripciones en mis SMS" | Sí | No (Flutter oculta la opción) |
+| `READ_SMS` en el manifest | Sí (`src/completa/AndroidManifest.xml`) | **No** |
+| `LectorHistorialSms.kt` | Lee el proveedor de SMS (`src/completa`) | Vacío (`src/sinSms`) |
+
+Las dos usan el mismo `applicationId` (se instala una u otra). Flutter
+pregunta por el canal `subtrack/historial_sms` si la opción existe, así que el
+código Dart es el mismo en las dos. `pubspec.yaml` tiene
+`default-flavor: completa`: `flutter run` y `flutter build` sin `--flavor`
+compilan la completa.
+
+```powershell
+# Debug en el celular (completa)
+flutter run
+# Debug sin el módulo de SMS
+flutter run --flavor sinSms
+
+# APK release (cambia la URL por la de Render)
+flutter build apk --release --flavor completa --dart-define=API_URL=https://TU-SERVICIO.onrender.com
+flutter build apk --release --flavor sinSms --dart-define=API_URL=https://TU-SERVICIO.onrender.com
+```
+
+Los APK quedan en `build\app\outputs\flutter-apk\`: `app-completa-release.apk`
+y `app-sinsms-release.apk` (en debug, `app-completa-debug.apk` y
+`app-sinsms-debug.apk`). Para comprobar que la sinSms no pide SMS:
+
+```powershell
+& "$env:LOCALAPPDATA\Android\Sdk\build-tools\<versión>\aapt.exe" dump permissions build\app\outputs\flutter-apk\app-sinsms-release.apk
+```
+
+(no debe aparecer `android.permission.READ_SMS`). Para Google Play, ver
+[google-play.md](google-play.md).
+
+### Archivos
+
+| Archivo | Qué hace |
+|---|---|
+| `src/completa/AndroidManifest.xml` | Declara READ_SMS (solo en la completa) |
+| `src/completa/.../LectorHistorialSms.kt` | Lee los SMS recibidos de 6 meses y aplica el filtro de cobro |
+| `src/sinSms/.../LectorHistorialSms.kt` | Versión vacía: no lee nada |
+| `deteccion/CanalHistorialSms.kt` | Canal `subtrack/historial_sms`: disponible, permiso, leer (en otro hilo), abrir permisos (MIUI) |
+| `deteccion/CanalCompartir.kt` | Canal `subtrack/compartir`: texto compartido al abrir o con la app abierta |
+| `lib/deteccion/historial_sms.dart` | Puente Dart del historial |
+| `lib/deteccion/historial_sms_page.dart` | Divulgación destacada y pedido del permiso |
+| `lib/deteccion/analizador_pagos.dart` | Qué sale del celular y `mismoCobro` (tolerancia de 5 min) |
+| `lib/deteccion/almacen_pagos_locales.dart` | Pagos interpretados en el celular (400 días, cifrados) |
+| `lib/deteccion/compartir_page.dart`, `receptor_compartir.dart` | "Compartir" |
+| `backend/db/migraciones/007_retencion_detecciones.sql` | `fecha_aproximada` y limpieza de compras normales |
+
+### Tests
+
+- `test/deteccion_historial_test.dart` (29): reglas del análisis (servicio
+  conocido, compra puntual, ±10 %, semanal, mensual, anual, irregular),
+  `mismoCobro` de Nequi por notificación e historial, almacén local
+  (retención, cierre de sesión), búsqueda en el historial (qué se envía, sin
+  texto, repetir sin duplicar, no repetir lo que llegó por notificación,
+  sospecha de Xiaomi), divulgación (Ahora no, permiso concedido, rechazado,
+  bloqueado), pantalla 03 y Perfil en las dos versiones, pantalla 04 con
+  historial y "Compartir".
+- `backend/test/detecciones.test.js`: tolerancia de 5 minutos, cobro
+  compartido, validación de los campos nuevos y retención (compras puntuales,
+  alias del catálogo, descartar, tarea diaria).
+
+### Cómo probarlo en el Xiaomi
+
+Ver el resumen al final de "Cómo probar (hito 5)".
 
 ## Parser (hito 2)
 
@@ -642,16 +859,20 @@ paquetes (no se inventan nombres de paquete).
 
 | Dónde | Qué | Límites |
 |---|---|---|
+| Almacén seguro (`pagos_locales_v1`, cifrado por Android) | Los pagos interpretados: banco, comercio, monto, moneda, fecha y si ya se enviaron. **Sin texto** | 400 días, máximo 1000, se borran al cerrar sesión. Aquí se quedan las compras puntuales (hito 5) |
 | Cola: `filesDir/deteccion/cola.json` (almacenamiento interno, solo SubTrack puede leerlo) | Solo las notificaciones que parecen cobros: huella, paquete, nombre de la app, título (el remitente, p. ej. "Bancolombia"), texto y hora de llegada | Máximo 200, se borran solas a los 30 días y al desinstalar. Desde el hito 4, también al enviarlas al backend |
 | SharedPreferences `subtrack_deteccion` | Hora de la última conexión, desconexión y notificación, y una palabra de resultado ("guardada", "descartada"…) | Sin paquete, título ni texto |
 
 El parser (hito 2) lee la cola en el mismo celular; no la copia a otro lado.
 
-### 4. Qué va al backend (hitos 3 y 4)
+### 4. Qué va al backend (hitos 3, 4 y 5)
 
 Solo los **campos extraídos** por el parser: banco, comercio normalizado,
 monto, moneda, fecha y una huella para no repetir pagos, con la sesión del
-usuario. **Nunca** el texto crudo, el título, los dígitos de la tarjeta ni los
+usuario, y **solo de servicios conocidos o de comercios con patrón
+recurrente** (desde el hito 5; las compras puntuales se quedan en el
+celular). Lo mismo para el historial de SMS: de cientos de SMS leídos, solo
+salen los campos de las suscripciones encontradas. **Nunca** el texto crudo, el título, los dígitos de la tarjeta ni los
 teléfonos que traen los mensajes. La huella también se calcula solo con esos
 campos (no con el texto). Después de enviarlas, las notificaciones se borran
 de la cola del celular, también las que el parser descartó.
@@ -977,6 +1198,77 @@ dos candidatos pendientes: Claude (2 cobros por Nequi) y Bodytech (3 cobros
 mensuales). En la app: Perfil → interruptor (o la notificación del flujo B) →
 resultados.
 
+## Cómo probar (hito 5): historial de SMS, rechazo y "Compartir"
+
+### Preparación
+
+1. Aplica la migración 007 en la base que use la app (local: `npm run
+   db:migrate` en `backend/`; nube: `npm run db:migrate:nube`). **Borra las
+   compras normales ya guardadas** (pagos sin suscripción ni candidato).
+2. Instala la versión completa y deja los logs corriendo:
+
+   ```powershell
+   flutter build apk --debug
+   adb install -r build\app\outputs\flutter-apk\app-completa-debug.apk
+   adb logcat -c
+   adb logcat -v time -s SubTrackDeteccion:V
+   ```
+
+### 1. Búsqueda en el historial
+
+1. Perfil → **Buscar suscripciones en mis SMS** (o, en una cuenta nueva,
+   después de la pantalla 03).
+2. Lee la divulgación y toca **Buscar en mis SMS** → Android pregunta por los
+   SMS → **Permitir**.
+3. Pantalla 04: "Revisando tus mensajes del banco…". En logcat:
+   `Historial de SMS: N leídos (M de empresas), K parecen cobro`.
+4. Pantalla 05 con las suscripciones encontradas (servicios conocidos y
+   comercios con cobros periódicos). Una compra puntual no debe aparecer ni
+   llegar al backend.
+5. Repite la búsqueda desde Perfil: no deben aparecer candidatos nuevos ni
+   duplicados.
+6. Si sale "No vimos SMS de bancos": toca **Abrir los permisos de SubTrack**,
+   revisa SMS y, en "Otros permisos", cualquier opción de SMS de servicio o de
+   notificación; vuelve y toca **Buscar de nuevo**. Anota cómo se llama el
+   permiso en tu HyperOS para documentarlo.
+
+### 2. Rechazo del permiso
+
+1. Quita el permiso y sus marcas para que Android vuelva a preguntar:
+
+   ```powershell
+   adb shell pm revoke com.example.flutter_suscripciones android.permission.READ_SMS
+   adb shell pm clear-permission-flags com.example.flutter_suscripciones android.permission.READ_SMS user-set user-fixed
+   ```
+
+2. Perfil → Buscar suscripciones en mis SMS → Buscar en mis SMS → **No
+   permitir**. Debe salir "Sin problema: seguimos detectando los cobros
+   nuevos" y la app sigue normal (la detección por notificaciones intacta).
+3. Recházalo otra vez (o marca "No volver a preguntar"). La tercera vez la
+   pantalla dice "Android ya no muestra la pregunta" con **Abrir los permisos
+   de SubTrack**; si lo permites ahí y vuelves, la búsqueda arranca sola.
+4. **Ahora no** nunca muestra el diálogo de Android.
+
+### 3. Compartir un SMS desde Mensajes de Google
+
+1. En Mensajes de Google, abre un SMS del banco, **mantén presionado** el
+   mensaje → menú **⋮** (o el ícono de compartir) → **Compartir** → **SubTrack**.
+2. SubTrack abre "Encontramos un cobro" con comercio, monto, banco y fecha.
+   **Usar este cobro** → pantalla 05 con la suscripción para confirmar (o, si
+   ya la tenías, el detalle de esa suscripción con "Registramos el cobro…").
+3. Comparte un SMS personal: debe decir "No reconocimos un cobro" y no enviar
+   nada.
+4. Compártelo con la app abierta y con la app cerrada: en los dos casos abre
+   la misma pantalla.
+5. Con la versión **sinSms** (`flutter run --flavor sinSms`) "Compartir"
+   funciona igual, y Perfil no muestra "Buscar suscripciones en mis SMS".
+
+### 4. Sin duplicados
+
+Con un cobro de Nequi (sin fecha) que ya llegó por la notificación, busca en
+el historial: el backend responde `repetido` y no aparece un segundo pago
+(la notificación y el SMS difieren unos segundos; tolerancia de 5 minutos).
+
 ## Limitaciones conocidas
 
 - **La cola se procesa cuando la app se abre o vuelve a primer plano.** El
@@ -999,6 +1291,18 @@ resultados.
 - La app de SMS predeterminada también puede mostrar chats (RCS en Mensajes de
   Google, por ejemplo). Se les aplica el mismo filtro de cobro: solo se
   guardan si parecen un cobro.
+- **El historial de SMS solo existe en la versión completa** y requiere que el
+  usuario dé READ_SMS. Para publicarla en Google Play hace falta la
+  declaración de permisos y la revisión de Google ([google-play.md](google-play.md)).
+- **Xiaomi puede ocultar los SMS de servicio** (números cortos) a las apps. La
+  app lo sospecha si no ve ningún SMS de empresa y guía a los permisos de
+  MIUI, pero el nombre exacto del permiso no se pudo confirmar sin el celular.
+- **Un SMS de Nequi compartido otro día** que el de su llegada no se reconoce
+  como repetido (no trae fecha: la elige el usuario); la tolerancia es de 5
+  minutos.
+- **Un comercio desconocido con un solo cobro** no llega al backend hasta que
+  se repite. Si el usuario ya creó esa suscripción a mano, el primer pago no
+  se enlaza; lo puede registrar con "Compartir".
 - Los cobros publicados mientras el lector estaba detenido solo se recuperan
   si siguen en la barra de notificaciones.
 - Solo se reconocen los formatos de Bancolombia y Nequi probados con mensajes
