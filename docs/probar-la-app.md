@@ -36,10 +36,7 @@ La app todavía no está en Play Store, así que se instala desde el archivo.
 5. En Xiaomi puede aparecer además un análisis de seguridad propio. Espera a
    que termine y toca **Instalar** o **Continuar**.
 
-La app puede aparecer en el celular con el nombre **flutter_suscripciones**.
-Es SubTrack.
-
-Ábrela, crea tu cuenta y, si pregunta si puede **enviarte notificaciones**,
+La app aparece en el celular como **SubTrack**. Ábrela, crea tu cuenta y, si pregunta si puede **enviarte notificaciones**,
 toca **Permitir** (así te avisa de los cobros que detecta).
 
 > La primera vez que abres la app puede tardar hasta un minuto en conectarse:
@@ -54,7 +51,7 @@ Para leer los SMS de cobro, SubTrack necesita el **acceso a notificaciones**.
 
 1. En la app, en la pantalla de detección automática, toca **Dar permiso y
    detectar**. Se abre el ajuste de Android.
-2. Busca **SubTrack** (o **flutter_suscripciones**) y activa el interruptor.
+2. Busca **SubTrack** y activa el interruptor.
 3. Android muestra un aviso fuerte diciendo que la app podrá leer tus
    notificaciones. Toca **Permitir**.
 4. Vuelve a SubTrack.
@@ -74,8 +71,7 @@ habilita así:
 **Xiaomi (HyperOS / MIUI):**
 
 1. Intenta activar el acceso una vez (para que aparezca el aviso) y ciérralo.
-2. Ve a **Ajustes → Aplicaciones → Administrar aplicaciones → SubTrack**
-   (o flutter_suscripciones).
+2. Ve a **Ajustes → Aplicaciones → Administrar aplicaciones → SubTrack**.
 3. Toca los **tres puntos ⋮** de arriba a la derecha y luego **Permitir
    configuración restringida**. Confirma con tu PIN o huella.
 4. Vuelve al paso 2 de esta sección y activa el acceso.
@@ -83,7 +79,7 @@ habilita así:
 **Samsung (One UI):**
 
 1. Intenta activar el acceso una vez (para que aparezca el aviso) y ciérralo.
-2. Ve a **Ajustes → Aplicaciones → SubTrack** (o flutter_suscripciones).
+2. Ve a **Ajustes → Aplicaciones → SubTrack**.
 3. Toca los **tres puntos ⋮** de arriba a la derecha y luego **Permitir
    ajustes restringidos**. Confirma con tu PIN o huella.
 4. Vuelve al paso 2 de esta sección y activa el acceso.

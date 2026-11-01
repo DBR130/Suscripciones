@@ -10,7 +10,7 @@
          Render). El HTTP sin cifrar se permite solo en debug
          (src/debug/AndroidManifest.xml), para el backend local. -->
     <application
-        android:label="flutter_suscripciones"
+        android:label="SubTrack"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="false">
