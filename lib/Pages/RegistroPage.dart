@@ -54,8 +54,9 @@ class _RegistroPageState extends State<RegistroPage> {
       );
       if (!mounted) return;
       mostrarToast(context, 'Hola, ${primerNombre(usuario.nombre)}');
-      // El registro deja la sesión iniciada; sigue la preferencia de avisos.
-      context.go(Routers.preferencias);
+      // El registro deja la sesión iniciada; sigue el permiso para detectar
+      // suscripciones (03) y después la preferencia de avisos (06).
+      context.go(Routers.rutaPermisos(inicio: true));
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {

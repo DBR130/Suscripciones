@@ -16,8 +16,9 @@ void main() {
             builder: (_, _) => RegistroPage(authService: authService),
           ),
           GoRoute(
-            path: '/preferencias',
-            builder: (_, _) => const Scaffold(body: Text('PREFERENCIAS')),
+            path: '/permisos',
+            // Del registro sigue el permiso para detectar suscripciones (03).
+            builder: (_, state) => Scaffold(body: Text('PERMISOS inicio=${state.uri.queryParameters['inicio']}')),
           ),
         ]),
       );
@@ -37,7 +38,7 @@ void main() {
     await tester.tap(boton);
   }
 
-  testWidgets('valida, registra y sigue a la preferencia de avisos', (tester) async {
+  testWidgets('valida, registra y sigue al permiso de detección', (tester) async {
     final auth = FakeAuthService();
     await abrir(tester, auth);
 
@@ -65,7 +66,7 @@ void main() {
     await tester.pump();
     expect(find.text('Creando cuenta…'), findsOneWidget);
     await tester.pumpAndSettle(const Duration(seconds: 3));
-    expect(find.text('PREFERENCIAS'), findsOneWidget);
+    expect(find.text('PERMISOS inicio=1'), findsOneWidget);
     expect(find.text('Hola, Ana'), findsOneWidget);
     expect(auth.ultimaLlamada, ['Ana María', 'ana@correo.com', '123456']);
   });
@@ -80,6 +81,6 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
 
     expect(find.text('Ya existe una cuenta con ese correo'), findsOneWidget);
-    expect(find.text('PREFERENCIAS'), findsNothing);
+    expect(find.textContaining('PERMISOS'), findsNothing);
   });
 }

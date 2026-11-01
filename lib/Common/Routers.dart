@@ -4,7 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../Pages/AhorroPage.dart';
 import '../deteccion/depuracion_deteccion_page.dart';
+import '../deteccion/deteccion_service.dart';
+import '../deteccion/escaneo_page.dart';
 import '../deteccion/lector_notificaciones.dart';
+import '../deteccion/permisos_page.dart';
+import '../deteccion/procesador_detecciones.dart';
+import '../deteccion/resultados_deteccion_page.dart';
+import '../services/api_client.dart';
 import '../Pages/AvisosPage.dart';
 import '../Pages/BienvenidaPage.dart';
 import '../Pages/DashboardPage.dart';
@@ -43,6 +49,16 @@ class Routers {
   // Sin barra de pestañas.
   static const String preferencias = '/preferencias';
   static const String depuracionDeteccion = '/depuracion/deteccion';
+
+  // Detección automática (pantallas 03, 04 y 05). "?inicio=1" = vienen del
+  // registro: al terminar sigue la preferencia de recordatorio (06).
+  static const String permisos = '/permisos';
+  static const String escaneo = '/escaneo';
+  static const String deteccion = '/deteccion';
+  static String rutaPermisos({bool inicio = false}) => inicio ? '$permisos?inicio=1' : permisos;
+  static String rutaEscaneo({bool inicio = false}) => inicio ? '$escaneo?inicio=1' : escaneo;
+  static String rutaDeteccion({bool inicio = false}) => inicio ? '$deteccion?inicio=1' : deteccion;
+  static bool _inicio(GoRouterState state) => state.uri.queryParameters['inicio'] == '1';
   static const String nuevaSuscripcion = '/suscripcion/nueva';
   static String editarSuscripcion(int id) => '/suscripcion/$id/editar';
   static String cancelar(int id) => '/suscripcion/$id/cancelar';
@@ -58,10 +74,19 @@ class Routers {
     SuscripcionService suscripcionService, {
     RecordatoriosService? recordatorios,
     LectorNotificaciones? lector,
+    DeteccionService? deteccionService,
+    ProcesadorDetecciones? procesador,
     String initialLocation = home,
     bool depuracion = kDebugMode,
   }) {
     final lectorNotificaciones = lector ?? LectorNotificaciones();
+    final servicioDeteccion = deteccionService ?? DeteccionService(ApiClient());
+    final procesadorDetecciones = procesador ??
+        ProcesadorDetecciones(
+          lector: lectorNotificaciones,
+          servicio: servicioDeteccion,
+          cargarCatalogo: suscripcionService.catalogoServicios,
+        );
     return GoRouter(
       initialLocation: initialLocation,
       routes: [
@@ -93,6 +118,27 @@ class Routers {
               cargarCatalogo: suscripcionService.catalogoServicios,
             ),
           ),
+        GoRoute(
+          path: permisos,
+          builder: (context, state) => PermisosPage(
+            lector: lectorNotificaciones,
+            recordatorios: recordatorios,
+            inicio: _inicio(state),
+          ),
+        ),
+        GoRoute(
+          path: escaneo,
+          builder: (context, state) => EscaneoPage(procesador: procesadorDetecciones, inicio: _inicio(state)),
+        ),
+        GoRoute(
+          path: deteccion,
+          builder: (context, state) => ResultadosDeteccionPage(
+            servicio: servicioDeteccion,
+            inicio: _inicio(state),
+            recordatorios: recordatorios,
+            suscripcionService: suscripcionService,
+          ),
+        ),
         GoRoute(
           path: preferencias,
           builder: (context, state) =>
@@ -171,6 +217,7 @@ class Routers {
                 authService: authService,
                 suscripcionService: suscripcionService,
                 recordatorios: recordatorios,
+                lector: lectorNotificaciones,
               ),
             ),
             GoRoute(
