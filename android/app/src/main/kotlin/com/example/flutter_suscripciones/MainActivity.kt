@@ -5,7 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import com.example.flutter_suscripciones.deteccion.CanalCompartir
 import com.example.flutter_suscripciones.deteccion.CanalDeteccion
+import com.example.flutter_suscripciones.deteccion.CanalHistorialSms
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -15,6 +17,10 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         // Canales del lector de notificaciones (paquete deteccion/).
         CanalDeteccion.registrar(this, flutterEngine)
+        // "Buscar suscripciones en mis SMS" (solo hace algo en la versión completa).
+        CanalHistorialSms.registrar(this, flutterEngine)
+        // Compartir un SMS con SubTrack (las dos versiones).
+        CanalCompartir.registrar(flutterEngine, intent)
         // Canal que usa RecordatoriosService (lib/services/recordatorios_service.dart)
         // para saber el fabricante y abrir ajustes del sistema.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "subtrack/sistema")
@@ -31,7 +37,22 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         // Al cerrar la app, el lector deja de enviar eventos a un Flutter que ya no existe.
         CanalDeteccion.liberar()
+        CanalHistorialSms.liberar()
+        CanalCompartir.liberar()
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    // La app ya estaba abierta y el usuario compartió otro SMS con SubTrack.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        CanalCompartir.alRecibirIntent(intent)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        if (!CanalHistorialSms.alResponderPermiso(requestCode, grantResults)) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        }
     }
 
     // Pantalla "Información de la app": permisos, notificaciones y batería.

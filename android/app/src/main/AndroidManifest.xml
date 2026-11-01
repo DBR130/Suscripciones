@@ -35,6 +35,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- "Compartir" un SMS con SubTrack desde la app de mensajes (sin
+                 permisos, en las dos versiones). Ver deteccion/CanalCompartir.kt. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
+            </intent-filter>
         </activity>
         <!-- Receptores de flutter_local_notifications: muestran los avisos
              programados y los vuelven a programar tras reiniciar o actualizar. -->
