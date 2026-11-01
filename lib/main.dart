@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,7 +17,7 @@ import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/recordatorios_service.dart';
 import 'services/suscripcion_service.dart';
-import 'widgets/app_marca.dart';
+import 'widgets/animacion_inicio.dart';
 import 'widgets/aviso_despertando.dart';
 
 Future<void> main() async {
@@ -56,7 +58,11 @@ Future<void> main() async {
   // Si hay un token guardado y el servidor lo acepta, se abre directo el resumen.
   // Con el servidor dormido (Render) esto puede tardar cerca de 1 minuto:
   // mientras tanto se muestra la pantalla de arranque con el aviso.
-  runApp(PantallaArranque(despertando: api.despertando));
+  final animacion = Completer<void>();
+  runApp(PantallaArranque(
+    despertando: api.despertando,
+    alTerminar: () => animacion.isCompleted ? null : animacion.complete(),
+  ));
   final haySesion = await authService.haySesionActiva();
 
   final router = Routers.crear(
@@ -92,6 +98,9 @@ Future<void> main() async {
   final deteccion = _DeteccionEnSegundoPlano(api, vigilante, procesador, recordatorios, router);
   WidgetsBinding.instance.addObserver(deteccion);
 
+  // La animación de inicio termina antes de pasar a la app (si la sesión
+  // tarda más, el anillo sigue girando hasta aquí).
+  await animacion.future;
   runApp(MyApp(router: router, despertando: api.despertando));
 
   WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -177,7 +186,7 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.dark,
       routerConfig: router,
       builder: (context, child) {
-        final pantalla = child ?? const SizedBox.shrink();
+        final pantalla = _EntradaSuave(child: child ?? const SizedBox.shrink());
         final aviso = despertando;
         return aviso == null ? pantalla : AvisoDespertando(despertando: aviso, child: pantalla);
       },
@@ -189,12 +198,14 @@ class MyApp extends StatelessWidget {
   }
 }
 
-/// Mientras se comprueba la sesión guardada al abrir la app: la marca y, si el
-/// servidor está dormido, el aviso "Despertando el servidor…".
+/// Mientras se comprueba la sesión guardada al abrir la app: la animación del
+/// logo y, si el servidor está dormido, el aviso "Despertando el servidor…".
+/// [alTerminar] avisa cuando la animación y su pausa acabaron.
 class PantallaArranque extends StatelessWidget {
-  const PantallaArranque({super.key, required this.despertando});
+  const PantallaArranque({super.key, required this.despertando, this.alTerminar});
 
   final ValueListenable<bool> despertando;
+  final VoidCallback? alTerminar;
 
   @override
   Widget build(BuildContext context) {
@@ -204,18 +215,57 @@ class PantallaArranque extends StatelessWidget {
       theme: AppTheme.dark,
       home: AvisoDespertando(
         despertando: despertando,
-        child: const Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AppMarca(),
-                SizedBox(height: 24),
-                SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
-              ],
-            ),
-          ),
+        child: Scaffold(
+          // Mismo fondo que el splash nativo: sin salto entre los dos.
+          backgroundColor: ColoresLogo.fondo,
+          body: Center(child: AnimacionInicio(alTerminar: alTerminar)),
         ),
+      ),
+    );
+  }
+}
+
+/// La primera pantalla aparece con un fundido corto tras la animación de
+/// inicio (sin animación si el sistema las tiene reducidas).
+class _EntradaSuave extends StatefulWidget {
+  const _EntradaSuave({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_EntradaSuave> createState() => _EntradaSuaveState();
+}
+
+class _EntradaSuaveState extends State<_EntradaSuave> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 350));
+  late final Animation<double> _opacidad = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_controller.isDismissed) {
+      if (MediaQuery.of(context).disableAnimations) {
+        _controller.value = 1;
+      } else {
+        _controller.forward();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.bg,
+      child: FadeTransition(
+        opacity: _opacidad,
+        child: widget.child,
       ),
     );
   }
