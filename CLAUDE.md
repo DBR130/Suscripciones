@@ -1,0 +1,124 @@
+# SubTrack: contexto para Claude Code
+
+App para llevar el control de suscripciones (streaming, software, gimnasio):
+cuánto cuestan, cada cuánto se cobran, recordatorios y guías para cancelar.
+Proyecto de clase de David. Flutter (Android) + backend Node/Express +
+PostgreSQL. Responde y documenta **en español**.
+
+## Estado
+
+- Fases 1 a 5 terminadas. La 5 fue el despliegue en la nube: backend en
+  **Render** (`https://subtrack-api-4150.onrender.com`, plan gratis, se duerme
+  a los 15 min y tarda ~1 min en despertar) y base de datos en **Neon**.
+  Guía: [docs/despliegue.md](docs/despliegue.md).
+- **Detección automática**, hitos 1 a 5 hechos: lector de notificaciones
+  (app de SMS predeterminada + lista fija), parser en Dart, backend de pagos y
+  candidatos, pantallas 03/04/05, búsqueda opcional en el historial de SMS,
+  "Compartir" un SMS y análisis en el celular. Todo en
+  [docs/deteccion.md](docs/deteccion.md).
+- Dos versiones Android (*product flavors*): `completa` (con READ_SMS para el
+  historial) y `sinSms` (sin READ_SMS). `default-flavor: completa`.
+
+## Estructura
+
+| Carpeta | Qué hay | Detalle |
+|---|---|---|
+| `lib/` | App Flutter. `Common/` (tema `AppTheme`/`AppColors`, rutas `Routers`), `Pages/`, `widgets/`, `services/` (API, sesión, recordatorios), `models/`, `deteccion/` | |
+| `android/app/src/main/kotlin/.../deteccion/` | Lector de notificaciones, filtro de cobros, reconexión, canales con Flutter | [docs/deteccion.md](docs/deteccion.md) |
+| `android/app/src/completa/`, `src/sinSms/` | Lo que cambia entre versiones (READ_SMS, `LectorHistorialSms.kt`) | ídem, "Versiones completa y sinSms" |
+| `backend/` | API Express 5 (`src/`), migraciones SQL (`db/migraciones/`), catálogo de guías (`db/guias.json`), demo (`db/demo.js`), tests (`test/`) | [backend/README.md](backend/README.md) |
+| `design/` | Diseño: `subtrack-simulacion.html` (fuente visual, manda sobre el resto), `subtrack-pantallas.md` (14 pantallas con colores y textos), `logo/` | |
+| `docs/` | `deteccion.md` (detección y privacidad), `despliegue.md` (Render + Neon), `google-play.md` (permisos de SMS y publicación), `probar-la-app.md` (guía para probadores, lenguaje simple) | |
+| `test/` | Tests de Flutter (`test/fixtures/` con SMS reales y avisos de Truecaller) | |
+| `postman/` | Colecciones de la API | |
+
+`README.md` de la raíz es la plantilla de Flutter (sin contenido propio).
+
+## Reglas de trabajo
+
+- **Solo en la rama `David`.** Commits pequeños y descriptivos. **No hacer
+  push ni merge.**
+- **No cambiar el `applicationId`** (`com.example.flutter_suscripciones`): se
+  perderían los datos, la sesión y el acceso a notificaciones al reinstalar.
+- **No tocar `backend/.env` ni `backend/.env.produccion`** (están en
+  `.gitignore`). Nunca commitear secretos (cadena de Neon, `JWT_SECRET`).
+- **Los tests nunca tocan la base real** (`subtrack`): usan `subtrack_test`.
+  El candado (`backend/src/utils/candadoBd.js`) impide conectarse bajo
+  `node:test` / `NODE_ENV=test` a una base que no termine en `_test`. En los
+  tests, **no importes `src/db.js` (ni nada que lo importe) con `import`
+  estático**: impórtalo dentro de `before()`, después de `prepararBdPruebas()`.
+- `linux/`, `macos/` y `windows/` aparecen modificados solo por fines de
+  línea (archivos generados): **no los commitees**.
+- Privacidad: el texto de los SMS/notificaciones **nunca** se envía al
+  backend, solo campos extraídos. No leer correos ni chats. No inventar
+  nombres de paquete (verificarlos).
+- Al terminar: `flutter analyze` sin avisos, `flutter test` y `npm test`
+  pasando. Mantener [docs/deteccion.md](docs/deteccion.md) al día (lo usa
+  Santiago para el informe y QA).
+- El usuario crea las cuentas y configura los paneles de Render y Neon.
+
+## Comandos (PowerShell, desde la raíz)
+
+```powershell
+# Backend (en backend/)
+npm run dev                # API local en :3000 (usa backend/.env)
+npm test                   # tests contra subtrack_test
+npm run db:migrate         # migraciones en la base local
+npm run db:migrate:nube    # migraciones en Neon (usa .env.produccion)
+npm run db:guias / db:demo # catálogo de guías / datos de demo (también :nube)
+
+# Flutter
+flutter analyze
+flutter test
+flutter run                                   # versión completa
+flutter run --flavor sinSms
+flutter build apk --release --flavor completa --dart-define=API_URL=https://subtrack-api-4150.onrender.com
+flutter build apk --release --flavor sinSms   --dart-define=API_URL=https://subtrack-api-4150.onrender.com
+# APKs: build\app\outputs\flutter-apk\app-completa-debug.apk, app-sinsms-release.apk, ...
+
+# Tests nativos (Kotlin): necesitan el Java de Android Studio
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+cd android; .\gradlew.bat :app:testCompletaDebugUnitTest; cd ..
+
+# Celular por USB
+adb reverse tcp:3000 tcp:3000                 # el celular ve el backend local
+adb install -r build\app\outputs\flutter-apk\app-completa-debug.apk
+adb logcat -v time -s SubTrackDeteccion:V     # logs del lector (solo debug)
+```
+
+Sin `--dart-define=API_URL=...` la app apunta a `http://10.0.2.2:3000`. En
+VS Code (`.vscode/launch.json`): "Celular USB (localhost)" y "Celular (nube)".
+
+## Dispositivo de prueba
+
+Xiaomi 25080RABDG, HyperOS, Android 16, por USB. Probadores: Santiago
+(Xiaomi, Truecaller como app de SMS) y Cristian (Samsung).
+
+## Decisiones ya tomadas
+
+| Tema | Decisión | Dónde |
+|---|---|---|
+| Privacidad de la detección | Filtrar en el celular; al backend solo campos extraídos (banco, comercio, monto, moneda, fecha, huella) | [deteccion.md › Privacidad](docs/deteccion.md#privacidad-rnf01-habeas-data-ley-1581-de-2012) |
+| Apps de SMS | Se permite la app de SMS predeterminada + lista fija verificada; avisos de llamadas/spam se descartan | [deteccion.md › Cualquier app de SMS](docs/deteccion.md#cualquier-app-de-sms-app-predeterminada) |
+| Reconexión del lector | `requestRebind` y, si no basta, reiniciar el componente; si falla, "Detección pausada" | [deteccion.md › Lector desconectado](docs/deteccion.md#lector-desconectado-tras-reinstalar-o-actualizar-hyperos) |
+| Historial de SMS | Opcional, con divulgación destacada y READ_SMS solo al pedirlo; sin RECEIVE_SMS | [deteccion.md › Tres caminos](docs/deteccion.md#tres-caminos-notificaciones-historial-de-sms-y-compartir-hito-5) |
+| Compras normales | Se quedan en el celular (cifradas, 400 días); solo salen servicios conocidos y cobros recurrentes; el backend purga lo demás (migración 007) | ídem, "Decisión: las compras normales se quedan en el celular" |
+| Duplicados | Huella con la fecha del mensaje; sin fecha (Nequi), tolerancia de 5 min | ídem, "Sin duplicados entre caminos" |
+| Servidor dormido | La app espera hasta 75 s y avisa "Despertando el servidor…" | [despliegue.md](docs/despliegue.md) |
+| Firma | El release se firma con la llave de debug (sin llave de Play Store) | [despliegue.md](docs/despliegue.md) |
+
+## Pendientes conocidos
+
+- Probar el hito 5 en el Xiaomi (historial de SMS, rechazo del permiso,
+  "Compartir") y aplicar la **migración 007** en local y en Neon (borra las
+  compras normales ya guardadas).
+- Confirmar el nombre del permiso de Xiaomi para los "SMS de servicio".
+- Los avisos de Truecaller se probaron con textos de ejemplo, no capturas
+  reales.
+- Agregar los paquetes de apps de bancos a `deteccion_apps.json` cuando se
+  identifiquen (modo descubrimiento).
+- Para Google Play: `applicationId` propio, llave de firma, declaración de
+  READ_SMS ([docs/google-play.md](docs/google-play.md)). No cambiar nada de
+  esto sin que David lo pida.
+- Limitaciones de la detección: ver "Limitaciones conocidas" en
+  [docs/deteccion.md](docs/deteccion.md#limitaciones-conocidas).
