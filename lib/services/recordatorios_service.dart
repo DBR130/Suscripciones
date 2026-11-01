@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:timezone/data/latest_all.dart' as tz_datos;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../deteccion/candidato_suscripcion.dart';
 import '../models/suscripcion.dart';
 import '../utils/formato.dart';
 import 'suscripcion_service.dart';
@@ -116,6 +117,15 @@ List<RecordatorioPlan> planificarRecordatorios(
 ///   permiso SCHEDULE_EXACT_ALARM; pueden llegar unos minutos tarde.
 /// - Cada vez que cambia la lista o se abre la app, [reprogramar] borra los
 ///   pendientes y los vuelve a programar.
+/// Cuerpo del aviso del flujo B: "Detectamos un cobro de $68.139 en Nequi."
+/// o "Detectamos 3 cobros de $89.900 con la misma periodicidad."
+String textoAvisoCandidato(CandidatoSuscripcion c) {
+  final monto = Formato.moneda(c.monto, c.moneda);
+  if (c.numPagos > 1) return 'Detectamos ${c.numPagos} cobros de $monto con la misma periodicidad. Toca para confirmarla.';
+  final banco = c.banco.isEmpty ? '' : ' en ${c.banco}';
+  return 'Detectamos un cobro de $monto$banco. Toca para confirmarla o descartarla.';
+}
+
 class RecordatoriosService {
   RecordatoriosService({
     FlutterLocalNotificationsPlugin? plugin,
@@ -139,6 +149,22 @@ class RecordatoriosService {
     ),
   );
 
+  /// Flujo B: aviso de una suscripción detectada, en un canal aparte para que
+  /// el usuario pueda silenciarlo sin perder los recordatorios.
+  static const _detallesDeteccion = NotificationDetails(
+    android: AndroidNotificationDetails(
+      'detecciones',
+      'Suscripciones detectadas',
+      channelDescription: 'Cuando detectamos un cobro que parece una suscripción',
+      importance: Importance.high,
+      priority: Priority.high,
+      icon: 'ic_notificacion',
+    ),
+  );
+
+  /// Payload de los avisos de detección: "candidato:{id}".
+  static const prefijoCandidato = 'candidato:';
+
   final FlutterLocalNotificationsPlugin _plugin;
   final FlutterSecureStorage _storage;
   bool _iniciado = false;
@@ -147,6 +173,9 @@ class RecordatoriosService {
   /// Se llama al tocar una notificación: id de la suscripción, o null para
   /// abrir el dashboard. main.dart lo conecta con el router.
   void Function(int? suscripcionId)? onAbrir;
+
+  /// Se llama al tocar el aviso de una suscripción detectada (flujo B).
+  void Function(int candidatoId)? onAbrirCandidato;
 
   /// Solo Android (la entrega). En web y escritorio no se programa nada.
   bool get disponible => !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -163,19 +192,46 @@ class RecordatoriosService {
       settings: const InitializationSettings(
         android: AndroidInitializationSettings('ic_notificacion'),
       ),
-      onDidReceiveNotificationResponse: (respuesta) =>
-          onAbrir?.call(int.tryParse(respuesta.payload ?? '')),
+      onDidReceiveNotificationResponse: (respuesta) {
+        final payload = respuesta.payload ?? '';
+        final candidato = candidatoDelPayload(payload);
+        if (candidato != null) {
+          onAbrirCandidato?.call(candidato);
+        } else {
+          onAbrir?.call(int.tryParse(payload));
+        }
+      },
     );
     _iniciado = true;
   }
 
-  /// Si la app se abrió tocando una notificación, el id de la suscripción.
-  Future<int?> suscripcionQueAbrioLaApp() async {
+  /// Si la app se abrió tocando una notificación, su payload: el id de la
+  /// suscripción o "candidato:{id}" (flujo B).
+  Future<String?> payloadQueAbrioLaApp() async {
     if (!disponible) return null;
     await inicializar();
     final detalles = await _plugin.getNotificationAppLaunchDetails();
     if (detalles == null || !detalles.didNotificationLaunchApp) return null;
-    return int.tryParse(detalles.notificationResponse?.payload ?? '');
+    return detalles.notificationResponse?.payload;
+  }
+
+  /// Id del candidato si el payload es de un aviso de detección.
+  static int? candidatoDelPayload(String payload) =>
+      payload.startsWith(prefijoCandidato) ? int.tryParse(payload.substring(prefijoCandidato.length)) : null;
+
+  /// Flujo B: "¿Tienes una suscripción a Claude?". Al tocarlo se abren los
+  /// resultados de la detección para confirmarla o descartarla.
+  Future<void> avisarCandidato(CandidatoSuscripcion c) async {
+    if (!disponible) return;
+    await inicializar();
+    await _plugin.show(
+      // Los recordatorios usan suscripción*10 + 1 o 2; aquí candidato*10 + 3.
+      id: c.id * 10 + 3,
+      title: '¿Tienes una suscripción a ${c.nombre}?',
+      body: textoAvisoCandidato(c),
+      notificationDetails: _detallesDeteccion,
+      payload: '$prefijoCandidato${c.id}',
+    );
   }
 
   // ─── Preferencias guardadas en el celular ───────────────────────────────

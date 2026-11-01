@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 
 import 'Common/AppTheme.dart';
 import 'Common/Routers.dart';
+import 'deteccion/deteccion_service.dart';
 import 'deteccion/lector_notificaciones.dart';
+import 'deteccion/procesador_detecciones.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/recordatorios_service.dart';
@@ -30,14 +32,16 @@ Future<void> main() async {
   // Recordatorios locales (solo Android; en web no hace nada).
   final recordatorios = RecordatoriosService();
   await recordatorios.inicializar();
-  final abiertaDesdeAviso = await recordatorios.suscripcionQueAbrioLaApp();
+  final payloadInicial = await recordatorios.payloadQueAbrioLaApp();
 
-  // Lector de notificaciones (detección): si MIUI lo detuvo, pide reconectarlo
-  // y recupera de la barra lo que llegó mientras estaba detenido. Lo mismo
-  // cada vez que la app vuelve a primer plano.
+  // Detección automática: lector nativo, backend y el procesador que los une.
   final lector = LectorNotificaciones();
-  lector.sincronizar();
-  WidgetsBinding.instance.addObserver(_SincronizarAlVolver(lector));
+  final deteccionService = DeteccionService(api);
+  final procesador = ProcesadorDetecciones(
+    lector: lector,
+    servicio: deteccionService,
+    cargarCatalogo: suscripcionService.catalogoServicios,
+  );
 
   // Si hay un token guardado y el servidor lo acepta, se abre directo el resumen.
   final haySesion = await authService.haySesionActiva();
@@ -47,6 +51,8 @@ Future<void> main() async {
     suscripcionService,
     recordatorios: recordatorios,
     lector: lector,
+    deteccionService: deteccionService,
+    procesador: procesador,
     initialLocation: haySesion ? Routers.dashboard : Routers.home,
   );
   // Si el token vence mientras se usa la app, se vuelve al login.
@@ -62,25 +68,71 @@ Future<void> main() async {
     }
   };
 
+  // Flujo B: al tocar "¿Tienes una suscripción a…?", los resultados (05).
+  recordatorios.onAbrirCandidato = (_) => router.push(Routers.deteccion);
+
+  final deteccion = _DeteccionEnSegundoPlano(api, lector, procesador, recordatorios, router);
+  WidgetsBinding.instance.addObserver(deteccion);
+
   runApp(MyApp(router: router));
 
-  // La app estaba cerrada y se abrió tocando un aviso.
-  if (haySesion && abiertaDesdeAviso != null) {
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => router.push(Routers.detalle(abiertaDesdeAviso)),
-    );
-  }
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    // La app estaba cerrada y se abrió tocando un aviso.
+    if (haySesion && payloadInicial != null) {
+      final candidato = RecordatoriosService.candidatoDelPayload(payloadInicial);
+      final suscripcion = int.tryParse(payloadInicial);
+      if (candidato != null) {
+        router.push(Routers.deteccion);
+      } else if (suscripcion != null) {
+        router.push(Routers.detalle(suscripcion));
+      }
+    }
+    deteccion.ejecutar();
+  });
 }
 
-/// Sincroniza el lector cada vez que la app vuelve a primer plano.
-class _SincronizarAlVolver with WidgetsBindingObserver {
-  _SincronizarAlVolver(this.lector);
+/// Al abrir la app y cada vez que vuelve a primer plano: reconecta el lector
+/// (MIUI lo detiene) y, si hay sesión y permiso, procesa la cola de cobros y
+/// avisa de las suscripciones nuevas que detectó el backend (flujo B).
+class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
+  _DeteccionEnSegundoPlano(this.api, this.lector, this.procesador, this.recordatorios, this.router);
 
+  final ApiClient api;
   final LectorNotificaciones lector;
+  final ProcesadorDetecciones procesador;
+  final RecordatoriosService recordatorios;
+  final GoRouter router;
+
+  /// En estas pantallas no se procesa aquí: la propia pantalla lo hace (03,
+  /// 04, 05), o se está revisando la cola (depuración).
+  static const _rutasPropias = {
+    Routers.permisos,
+    Routers.escaneo,
+    Routers.deteccion,
+    Routers.depuracionDeteccion,
+  };
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) lector.sincronizar();
+    if (state == AppLifecycleState.resumed) ejecutar();
+  }
+
+  Future<void> ejecutar() async {
+    try {
+      final ruta = router.routerDelegate.currentConfiguration.uri.path;
+      final haySesion = await api.leerToken() != null;
+      if (_rutasPropias.contains(ruta) || !haySesion || !(await lector.estado()).permiso) {
+        await lector.sincronizar();
+        return;
+      }
+      final resultado = await procesador.procesar();
+      for (final c in resultado.candidatosNuevos) {
+        await recordatorios.avisarCandidato(c);
+      }
+    } catch (e) {
+      // Sin conexión con el backend: la cola queda para la próxima vez.
+      debugPrint('Detección en segundo plano: $e');
+    }
   }
 }
 

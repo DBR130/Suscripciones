@@ -49,11 +49,13 @@ import 'logo_servicio.dart';
   return null;
 }
 
-/// Línea bajo el nombre: la categoría o, si no tiene, "Mensual · Registro manual".
+/// Línea bajo el nombre: la categoría o, si no tiene, "Mensual · Registro
+/// manual". Las detectadas siempre lo dicen: "Streaming · Detectada por
+/// notificación".
 String descripcionSuscripcion(Suscripcion s) {
+  if (s.origen == 'notificacion') return '${s.categoria ?? s.frecuencia.etiqueta} · Detectada por notificación';
   if (s.categoria != null) return s.categoria!;
-  final origen = s.origen == 'notificacion' ? 'Detectada' : 'Registro manual';
-  return '${s.frecuencia.etiqueta} · $origen';
+  return '${s.frecuencia.etiqueta} · Registro manual';
 }
 
 /// Línea de estado de la lista (pantalla 08): "Mensual · próximo 20 sep",

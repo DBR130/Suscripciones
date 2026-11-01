@@ -59,6 +59,19 @@ void main() {
     expect(descripcionSuscripcion(conCategoria), 'Streaming');
   });
 
+  test('una suscripción detectada siempre dice "Detectada por notificación"', () {
+    Suscripcion detectada({String? categoria}) => Suscripcion(
+          nombreServicio: 'Crunchyroll',
+          categoria: categoria,
+          monto: 19900,
+          frecuencia: Frecuencia.mensual,
+          fechaProximoCobro: DateTime(2026, 11, 23),
+          origen: 'notificacion',
+        );
+    expect(descripcionSuscripcion(detectada()), 'Mensual · Detectada por notificación');
+    expect(descripcionSuscripcion(detectada(categoria: 'Streaming')), 'Streaming · Detectada por notificación');
+  });
+
   group('aviso de la tarjeta', () {
     final hoy = DateTime(2026, 11, 10);
     Suscripcion sus({

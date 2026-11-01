@@ -375,7 +375,7 @@ class _Datos extends StatelessWidget {
       (s.esPruebaGratis ? 'Primer cobro' : 'Próximo cobro', Formato.fecha(s.fechaProximoCobro)),
       ('Pagado en total', Formato.moneda(detalle.pagadoTotal, s.moneda)),
       if (s.desde != null) ('Desde', Formato.mesAnio(s.desde!)),
-      ('Origen', s.origen == 'notificacion' ? 'Detección por notificación' : 'Registro manual'),
+      ('Origen', s.origen == 'notificacion' ? 'Detectada por notificación' : 'Registro manual'),
     ];
     return AppCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
