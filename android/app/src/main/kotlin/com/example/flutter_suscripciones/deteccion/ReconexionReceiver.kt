@@ -5,7 +5,6 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.service.notification.NotificationListenerService
-import android.util.Log
 
 /**
  * Al reiniciar el celular (o al actualizar la app), le pide a Android que
@@ -14,14 +13,14 @@ import android.util.Log
  */
 class ReconexionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        Log.i(TAG, "Evento del sistema (${intent.action}): se pide reconectar el lector")
+        RegistroDeteccion.log(context, "Evento del sistema (${intent.action}): se pide reconectar el lector")
         try {
             NotificationListenerService.requestRebind(
                 ComponentName(context, LectorNotificacionesService::class.java)
             )
         } catch (e: Exception) {
             // Sin "Acceso a notificaciones" no hay nada que reconectar.
-            Log.w(TAG, "No se pudo pedir la reconexión", e)
+            RegistroDeteccion.log(context, "No se pudo pedir la reconexión", e)
         }
     }
 }

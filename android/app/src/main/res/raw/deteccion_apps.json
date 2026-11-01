@@ -1,7 +1,10 @@
 {
   "_comentario": "Configuración del lector de notificaciones (detección automática). Ver docs/deteccion.md. Solo se procesan las apps de 'apps_permitidas'; de ellas solo se guardan los textos que parezcan un cobro. Para identificar un paquete, usa la pantalla 'Depuración: detección' (modo debug) con el modo descubrimiento. NO agregues apps de correo ni de chat.",
 
-  "apps_permitidas": [],
+  "_comentario_sms": "Mensajes de Google es la app de SMS del Xiaomi de pruebas (paquete encontrado con el modo descubrimiento). Como de cualquier app, solo se guardan los SMS que parezcan un cobro: un SMS personal se descarta sin guardarse.",
+  "apps_permitidas": [
+    { "paquete": "com.google.android.apps.messaging", "nombre": "Mensajes de Google (SMS)" }
+  ],
 
   "_ejemplo_apps_permitidas": [
     { "paquete": "com.ejemplo.mensajes", "nombre": "App de SMS del celular" },

@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.os.Parcelable
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
-import android.util.Log
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 
@@ -17,7 +16,8 @@ import java.lang.ref.WeakReference
  *
  * Por cada notificación:
  *  1. Si la app que la publicó no está en la lista permitida, se ignora
- *     (en modo descubrimiento, solo se informa el paquete y el título).
+ *     sin leer su título ni su texto (en modo descubrimiento, solo se informa
+ *     el paquete).
  *  2. Si el texto no parece un cobro, se descarta sin guardarlo.
  *  3. Si parece un cobro, se guarda en la cola local y, si la app está
  *     abierta, se envía en vivo a Flutter.
@@ -39,8 +39,9 @@ class LectorNotificacionesService : NotificationListenerService() {
             private set
 
         /**
-         * Solo en debug y solo en memoria: informa paquete y título de
-         * notificaciones de apps NO permitidas (nunca su texto), para poder
+         * Solo en debug y solo en memoria: informa el paquete de las
+         * notificaciones de apps NO permitidas (nunca su título ni su texto:
+         * en chats y SMS el título es el nombre del contacto), para poder
          * identificar los paquetes del banco y de la app de SMS.
          */
         @Volatile
@@ -65,19 +66,19 @@ class LectorNotificacionesService : NotificationListenerService() {
         conectado = true
         instancia = WeakReference(this)
         RegistroDeteccion.marcarConexion(this)
-        Log.i(TAG, "Servicio conectado")
+        RegistroDeteccion.log(this, "Servicio conectado")
         recuperarActivas()
     }
 
     override fun onListenerDisconnected() {
         conectado = false
         RegistroDeteccion.marcarDesconexion(this)
-        Log.w(TAG, "Servicio desconectado: se pide reconexión")
+        RegistroDeteccion.log(this, "Servicio desconectado: se pide reconexión")
         // Le pide a Android que lo vuelva a conectar (si el permiso sigue activo).
         try {
             requestRebind(ComponentName(this, LectorNotificacionesService::class.java))
         } catch (e: Exception) {
-            Log.w(TAG, "No se pudo pedir la reconexión", e)
+            RegistroDeteccion.log(this, "No se pudo pedir la reconexión", e)
         }
     }
 
@@ -87,7 +88,7 @@ class LectorNotificacionesService : NotificationListenerService() {
             RegistroDeteccion.log(this, "Recibida de ${sbn.packageName}: $resultado")
         } catch (e: Exception) {
             // Nunca tumbar el servicio por una notificación con formato raro.
-            Log.e(TAG, "Error procesando una notificación de ${sbn.packageName}", e)
+            RegistroDeteccion.log(this, "Error procesando una notificación de ${sbn.packageName}", e)
         }
     }
 
@@ -97,7 +98,7 @@ class LectorNotificacionesService : NotificationListenerService() {
             activeNotifications ?: emptyArray()
         } catch (e: Exception) {
             // Puede fallar si el servicio aún no termina de conectarse.
-            Log.w(TAG, "No se pudieron leer las notificaciones activas", e)
+            RegistroDeteccion.log(this, "No se pudieron leer las notificaciones activas", e)
             return 0
         }
         var guardadas = 0
@@ -105,10 +106,10 @@ class LectorNotificacionesService : NotificationListenerService() {
             try {
                 if (procesar(sbn, enVivo = false) == "guardada") guardadas++
             } catch (e: Exception) {
-                Log.e(TAG, "Error recuperando una notificación activa", e)
+                RegistroDeteccion.log(this, "Error recuperando una notificación activa", e)
             }
         }
-        Log.i(TAG, "Notificaciones activas revisadas: ${activas.size}, guardadas: $guardadas")
+        RegistroDeteccion.log(this, "Notificaciones activas revisadas: ${activas.size}, guardadas: $guardadas")
         return guardadas
     }
 
@@ -128,18 +129,19 @@ class LectorNotificacionesService : NotificationListenerService() {
 
         val config = ConfiguracionDeteccion.de(this)
         val paquete = sbn.packageName
-        val titulo = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
 
         if (!config.permitida(paquete)) {
             if (!enVivo) return "app no permitida"
             RegistroDeteccion.marcarNotificacion(this, "app no permitida")
             if (config.esDebug && modoDescubrimiento) {
-                // Solo metadatos, solo en vivo: el texto de apps no permitidas no se lee.
-                emitir(mapOf("tipo" to "descubierta", "paquete" to paquete, "titulo" to titulo,
-                    "recibida_en" to sbn.postTime))
+                // Solo el paquete, solo en vivo: de apps no permitidas no se lee
+                // ni el título (nombre del contacto en chats y SMS) ni el texto.
+                emitir(mapOf("tipo" to "descubierta", "paquete" to paquete, "recibida_en" to sbn.postTime))
             }
             return "app no permitida"
         }
+
+        val titulo = n.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString().orEmpty()
 
         val texto = textoDe(n.extras)
         val motivo = FiltroCobros.motivoDescarte(texto, config)
@@ -147,8 +149,9 @@ class LectorNotificacionesService : NotificationListenerService() {
             if (enVivo) {
                 RegistroDeteccion.marcarNotificacion(this, "descartada")
                 if (config.esDebug && modoDescubrimiento) {
-                    emitir(mapOf("tipo" to "descartada", "paquete" to paquete, "titulo" to titulo,
-                        "motivo" to motivo, "recibida_en" to sbn.postTime))
+                    // Sin título: en la app de SMS es el nombre del contacto.
+                    emitir(mapOf("tipo" to "descartada", "paquete" to paquete, "motivo" to motivo,
+                        "recibida_en" to sbn.postTime))
                 }
             }
             return "descartada ($motivo)" // no se guarda
@@ -195,7 +198,7 @@ class LectorNotificacionesService : NotificationListenerService() {
         try {
             oyente?.invoke(evento)
         } catch (e: Exception) {
-            Log.w(TAG, "No se pudo enviar el evento en vivo", e)
+            RegistroDeteccion.log(this, "No se pudo enviar el evento en vivo", e)
         }
     }
 }

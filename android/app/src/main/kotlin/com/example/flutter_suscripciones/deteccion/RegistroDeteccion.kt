@@ -42,8 +42,14 @@ object RegistroDeteccion {
         )
     }
 
-    /** Logs detallados (con paquete) solo en debug; nunca el texto de la notificación. */
-    fun log(context: Context, mensaje: String) {
-        if (ConfiguracionDeteccion.esDebug(context)) Log.i(TAG, mensaje)
+    /**
+     * Único punto de logs del lector. Solo en compilaciones debug: en release
+     * no se escribe nada. Nunca recibe el texto ni el título de una
+     * notificación, y de un error solo se anota el tipo (el mensaje de una
+     * excepción podría traer parte del texto).
+     */
+    fun log(context: Context, mensaje: String, error: Throwable? = null) {
+        if (!ConfiguracionDeteccion.esDebug(context)) return
+        if (error == null) Log.i(TAG, mensaje) else Log.w(TAG, "$mensaje (${error.javaClass.simpleName})")
     }
 }

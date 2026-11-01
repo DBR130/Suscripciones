@@ -1,7 +1,6 @@
 package com.example.flutter_suscripciones.deteccion
 
 import android.content.Context
-import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -74,10 +73,6 @@ object ColaNotificaciones {
         val temporal = File(f.parentFile, "cola.json.tmp")
         temporal.writeText(JSONArray(lista).toString(), Charsets.UTF_8)
         val ok = temporal.renameTo(f) // reemplazo atómico: nunca queda un archivo a medias
-        if (ok) {
-            Log.i(TAG, "Cola escrita: ${lista.size} notificaciones")
-        } else {
-            Log.e(TAG, "No se pudo escribir la cola en ${f.absolutePath}")
-        }
+        RegistroDeteccion.log(context, if (ok) "Cola escrita: ${lista.size} notificaciones" else "No se pudo escribir la cola")
     }
 }

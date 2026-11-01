@@ -8,7 +8,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
-import android.util.Log
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
@@ -40,11 +39,11 @@ object CanalDeteccion {
                 "reconectar" -> {
                     // Si Android (o MIUI) detuvo el servicio, le pide volver a conectarlo.
                     if (permisoConcedido(activity, componente) && !LectorNotificacionesService.conectado) {
-                        Log.i(TAG, "App abierta con el servicio desconectado: se pide reconexión")
+                        RegistroDeteccion.log(contexto, "App abierta con el servicio desconectado: se pide reconexión")
                         try {
                             NotificationListenerService.requestRebind(componente)
                         } catch (e: Exception) {
-                            Log.w(TAG, "No se pudo pedir la reconexión", e)
+                            RegistroDeteccion.log(contexto, "No se pudo pedir la reconexión", e)
                         }
                     }
                     result.success(null)
@@ -73,11 +72,13 @@ object CanalDeteccion {
                         )
                     )
                 }
-                "modoDescubrimiento" -> {
-                    // Solo en debug; en release siempre queda apagado.
-                    LectorNotificacionesService.modoDescubrimiento =
-                        ConfiguracionDeteccion.esDebug(contexto) && call.argument<Boolean>("activo") == true
+                // Solo existe en debug: en release responde "no implementado" y
+                // el modo queda siempre apagado.
+                "modoDescubrimiento" -> if (ConfiguracionDeteccion.esDebug(contexto)) {
+                    LectorNotificacionesService.modoDescubrimiento = call.argument<Boolean>("activo") == true
                     result.success(LectorNotificacionesService.modoDescubrimiento)
+                } else {
+                    result.notImplemented()
                 }
                 else -> result.notImplemented()
             }
@@ -96,7 +97,7 @@ object CanalDeteccion {
                             try {
                                 sink.success(evento)
                             } catch (e: Exception) {
-                                Log.w(TAG, "Flutter no está escuchando; se descarta el evento en vivo", e)
+                                RegistroDeteccion.log(contexto, "Flutter no está escuchando; se descarta el evento en vivo", e)
                                 LectorNotificacionesService.oyente = null
                             }
                         }
