@@ -40,7 +40,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | Archivo | Qué hace |
 |---|---|
 | `LectorNotificacionesService.kt` | Servicio que Android ejecuta aunque la app esté cerrada. Recibe cada notificación (`onNotificationPosted`), aplica los filtros y guarda las que parecen cobros. Toma el texto largo (`EXTRA_BIG_TEXT`), el último mensaje si la app usa MessagingStyle (Google Mensajes) o el texto corto. Ignora resúmenes de grupo y notificaciones fijas. Al conectarse revisa las notificaciones activas de la barra (`getActiveNotifications`) y al desconectarse pide reconexión (`requestRebind`). |
-| `RegistroDeteccion.kt` | Horas de la última conexión, desconexión y notificación (SharedPreferences) y logs con el tag `SubTrackDeteccion`. |
+| `RegistroDeteccion.kt` | Horas de la última conexión, desconexión y notificación (SharedPreferences) y el único punto de logs (tag `SubTrackDeteccion`, solo en debug). |
 | `ReconexionReceiver.kt` | Al reiniciar el celular o actualizar la app, pide reconectar el lector. |
 | `FiltroCobros.kt` | Decide si un texto "parece un cobro": debe tener un monto **y** una palabra de cobro, y no tener palabras excluidas. Compara sin tildes ni mayúsculas. |
 | `ColaNotificaciones.kt` | Cola en `filesDir/deteccion/cola.json` (almacenamiento interno: solo esta app puede leerlo). Máximo 200 entradas, se borran solas a los 30 días, no guarda dos veces el mismo texto de la misma app y escribe de forma atómica. |
@@ -62,26 +62,26 @@ solo después de que el usuario lo autoriza en Ajustes.
 | `leerCola` | Lista de `{id, paquete, app, titulo, texto, recibida_en}` |
 | `borrarDeCola` `{ids}` / `vaciarCola` | Quita las procesadas / todas |
 | `configuracion` | Apps permitidas y palabras de cobro |
-| `modoDescubrimiento` `{activo}` | Solo en debug (ver privacidad) |
+| `modoDescubrimiento` `{activo}` | Solo en debug; en release responde "no implementado" (ver privacidad) |
 
 **Canal de eventos** `subtrack/deteccion/eventos`: `{tipo: guardada, notificacion}`,
-y en modo descubrimiento también `{tipo: descartada, paquete, titulo, motivo}` y
-`{tipo: descubierta, paquete, titulo}`.
+y en modo descubrimiento (solo debug) también `{tipo: descartada, paquete, motivo}` y
+`{tipo: descubierta, paquete}`, sin título ni texto.
 
 ### Configuración (`android/app/src/main/res/raw/deteccion_apps.json`)
 
 ```json
 {
-  "apps_permitidas": [ { "paquete": "com.ejemplo.mensajes", "nombre": "App de SMS" } ],
+  "apps_permitidas": [ { "paquete": "com.google.android.apps.messaging", "nombre": "Mensajes de Google (SMS)" } ],
   "apps_solo_debug": [ { "paquete": "com.android.shell", "nombre": "Shell (simulación con adb)" } ],
   "palabras_cobro": ["compra", "compraste", "pago", "pagaste", "debito", "transaccion"],
   "palabras_excluidas": ["codigo", "clave", "otp", "contrasena"]
 }
 ```
 
-- `apps_permitidas` está **vacía a propósito**: los paquetes del banco y de la
-  app de SMS se identifican en el celular real con la pantalla de depuración
-  (ver "Cómo probar") y luego se agregan aquí. Después de editarlo hay que
+- `apps_permitidas` solo tiene paquetes verificados en el celular real con
+  el modo descubrimiento (ver "Cómo probar"): por ahora, Mensajes de Google.
+  Los bancos se agregan cuando se identifiquen. Después de editarlo hay que
   recompilar la app.
 - `apps_solo_debug` solo se carga en compilaciones debug (`flutter run`). En
   release nadie puede simular pagos con el shell.
@@ -166,8 +166,9 @@ detiene con Ctrl+C. Mensajes que deben aparecer:
 | `Cola escrita: N notificaciones` | Se guardó el archivo de la cola |
 | `Servicio desconectado: se pide reconexión` | Android o MIUI detuvo el lector |
 
-Los logs con el paquete de cada notificación solo salen en compilaciones
-debug y **nunca incluyen el texto** de la notificación.
+Los logs solo salen en compilaciones debug (en release no hay ninguno) y
+**nunca incluyen el texto ni el título** de la notificación; de un error solo
+se anota su tipo (por ejemplo `JSONException`).
 
 ### Comandos útiles de diagnóstico
 
@@ -179,28 +180,76 @@ adb shell dumpsys notification | Select-String LectorNotificacionesService
 adb shell cmd notification allow_listener com.example.flutter_suscripciones/com.example.flutter_suscripciones.deteccion.LectorNotificacionesService
 ```
 
-## Privacidad (RNF01, Habeas Data)
+## Privacidad (RNF01, Habeas Data, Ley 1581 de 2012)
 
-1. **Lista de apps permitidas.** Solo se procesan notificaciones de bancos,
-   billeteras y la app de SMS. Las de cualquier otra app (correo, chats, redes
-   sociales) se ignoran: el servicio ni siquiera lee su texto.
-2. **Solo lo que parece un cobro.** Lo que no tiene un monto y una palabra de
-   cobro se descarta en el acto, sin guardarse. Este filtro se aplica a **todas**
-   las apps permitidas, no solo al SMS: los bancos también envían códigos y
-   publicidad. Los textos con "código", "clave", "OTP" o "contraseña" se
-   descartan siempre, aunque tengan monto, para no guardar nunca un código de
-   verificación.
-3. **Almacenamiento local y temporal.** La cola está en el almacenamiento
-   interno de la app, máximo 200 entradas y 30 días. Se borra al desinstalar.
-4. **El texto crudo nunca sale del celular.** Al backend (hito 3) solo se
-   envían los campos extraídos por el parser.
-5. **Modo descubrimiento, solo para desarrollo.** Para encontrar los paquetes
-   hace falta ver qué apps publican notificaciones. En compilaciones debug, la
-   pantalla de depuración puede activar un modo que muestra el **paquete y el
-   título** de cualquier notificación, **nunca su texto**. Vive solo en memoria,
-   no se guarda y se apaga al salir de la pantalla. En release no existe.
-6. **Permiso explícito.** Nada funciona hasta que el usuario activa SubTrack en
-   "Acceso a notificaciones", y puede quitarlo en cualquier momento.
+La detección trata datos personales (pagos y, de paso, cualquier notificación
+del celular), así que se diseñó con dos principios de la Ley 1581 de 2012:
+
+- **Finalidad** (art. 4, literal b): los datos se usan solo para lo que se le
+  informa al usuario, detectar cobros de suscripciones. Nada más.
+- **Minimización**: de cada notificación se usa lo mínimo necesario para esa
+  finalidad, y todo lo demás se descarta lo antes posible. (La ley no usa esa
+  palabra; se desprende del principio de finalidad. Para el informe conviene
+  citarla así.)
+
+También se apoyan en los principios de **libertad** (literal c: nada funciona
+sin la autorización del usuario), **seguridad** (literal g) y **acceso y
+circulación restringida** (literal f).
+
+### 1. Qué recibe Android al dar el acceso
+
+Al activar SubTrack en "Acceso a notificaciones", Android le entrega al
+servicio **todas** las notificaciones de **todas** las apps: chats, correo,
+redes sociales, bancos. Es una limitación de Android: no existe un permiso
+"solo de estas apps". Por eso el primer paso del servicio es filtrar, y
+Android muestra una advertencia fuerte al activarlo.
+
+### 2. Qué se descarta en memoria (sin guardarse)
+
+| Notificación | Qué se mira | Qué pasa |
+|---|---|---|
+| De una app **fuera de la lista** (WhatsApp, Gmail, Instagram…) | Solo el **nombre del paquete**, para compararlo con la lista | Se descarta en el acto. **No se lee ni el título ni el texto** (en chats y SMS el título es el nombre del contacto) |
+| De una app permitida, pero **no parece un cobro** ("prueba" de un contacto, "Recibiste…", publicidad sin monto) | El texto, en memoria, para decidir | Se descarta: no se guarda ni se escribe en ningún log |
+| Con "código", "clave", "OTP" o "contraseña" | El texto, en memoria | Se descarta siempre, aunque tenga monto |
+| Resúmenes de grupo y notificaciones fijas (música, descargas) | Solo sus banderas | Se ignoran |
+
+Apps permitidas hoy: **Mensajes de Google (SMS)**, encontrada con el modo
+descubrimiento en el celular de pruebas. Los bancos y billeteras se agregarán
+cuando se identifiquen sus paquetes (no se inventan nombres de paquete).
+
+### 3. Qué se guarda en el celular
+
+| Dónde | Qué | Límites |
+|---|---|---|
+| Cola: `filesDir/deteccion/cola.json` (almacenamiento interno, solo SubTrack puede leerlo) | Solo las notificaciones que parecen cobros: huella, paquete, nombre de la app, título (el remitente, p. ej. "Bancolombia"), texto y hora de llegada | Máximo 200, se borran solas a los 30 días y al desinstalar. Desde el hito 3, también al enviarlas al backend |
+| SharedPreferences `subtrack_deteccion` | Hora de la última conexión, desconexión y notificación, y una palabra de resultado ("guardada", "descartada"…) | Sin paquete, título ni texto |
+
+El parser (hito 2) lee la cola en el mismo celular; no la copia a otro lado.
+
+### 4. Qué va al backend (hito 3)
+
+Solo los **campos extraídos** por el parser: banco, comercio normalizado,
+monto, moneda, fecha y una huella para no repetir pagos, con la sesión del
+usuario. **Nunca** el texto crudo, el título, los dígitos de la tarjeta ni los
+teléfonos que traen los mensajes.
+
+### 5. Herramientas de desarrollo (no existen en release)
+
+- **Modo descubrimiento**: en debug, muestra el **paquete** de las apps no
+  permitidas, sin título ni texto. Vive solo en memoria y se apaga al salir de
+  la pantalla. En release el método nativo responde "no implementado".
+- **Pantalla de depuración**: en release la ruta no se registra
+  (`Routers.crear(depuracion: kDebugMode)`), la fila de Perfil no existe y el
+  compilador elimina la pantalla. No se puede abrir ni escribiendo la ruta.
+- **Simulación con adb** (`com.android.shell`): solo se permite en debug.
+- **Logs** (`SubTrackDeteccion`): solo en debug, con el paquete y el resultado,
+  **nunca con el texto ni el título**; de un error solo se anota su tipo. En
+  release no se escribe ningún log.
+
+### 6. Autorización y revocación
+
+Nada funciona hasta que el usuario activa SubTrack en "Acceso a
+notificaciones", y puede quitarlo cuando quiera desde los ajustes de Android.
 
 ## Cómo probar (hito 1)
 
@@ -281,7 +330,8 @@ adb shell "cmd notification cancel pago1"
 | Pago simulado con la app **cerrada** (deslízala fuera de recientes) | Al abrirla, está en "Cola guardada": la guardó el servicio, o se recuperó de la barra al abrir (log `Notificaciones activas revisadas`). Si borraste la notificación de la barra antes de abrir la app y el servicio estaba detenido, se pierde |
 | "Recibiste…" o código de verificación | No queda en la cola. Con modo descubrimiento: **DESCARTADA** con el motivo |
 | Mismo texto enviado dos veces con otra etiqueta | Queda una sola vez en la cola |
-| Notificación de WhatsApp o Gmail con modo descubrimiento | **APP NO PERMITIDA**: paquete y título, sin texto |
+| Notificación de WhatsApp o Gmail con modo descubrimiento | **APP NO PERMITIDA**: solo el paquete, sin título ni texto |
+| SMS personal ("prueba") de un contacto | No queda en la cola. Con modo descubrimiento: **DESCARTADA** (no tiene palabras de cobro / monto), sin el nombre del contacto |
 | Celular reiniciado | Tras desbloquearlo, el servicio vuelve a conectarse (puede tardar) |
 
 ### Identificar los paquetes del banco y del SMS
