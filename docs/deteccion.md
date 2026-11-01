@@ -39,13 +39,14 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 
 | Archivo | Qué hace |
 |---|---|
-| `LectorNotificacionesService.kt` | Servicio que Android ejecuta aunque la app esté cerrada. Recibe cada notificación (`onNotificationPosted`), aplica los filtros y guarda las que parecen cobros. Toma el texto largo (`EXTRA_BIG_TEXT`), el último mensaje si la app usa MessagingStyle (Google Mensajes) o el texto corto. Ignora resúmenes de grupo y notificaciones fijas. Al conectarse revisa las notificaciones activas de la barra (`getActiveNotifications`) y al desconectarse pide reconexión (`requestRebind`). |
+| `LectorNotificacionesService.kt` | Servicio que Android ejecuta aunque la app esté cerrada. Recibe cada notificación (`onNotificationPosted`), aplica los filtros y guarda las que parecen cobros. Toma el texto largo (`EXTRA_BIG_TEXT`), el último mensaje si la app usa MessagingStyle (Google Mensajes) o el texto corto. Ignora resúmenes de grupo, notificaciones fijas y llamadas (categorías `call` y `missed_call`). Al conectarse revisa las notificaciones activas de la barra (`getActiveNotifications`) y al desconectarse pide reconexión (`requestRebind`). |
 | `RegistroDeteccion.kt` | Horas de la última conexión, desconexión y notificación (SharedPreferences) y el único punto de logs (tag `SubTrackDeteccion`, solo en debug). |
 | `ReconexionReceiver.kt` | Al reiniciar el celular o actualizar/reinstalar la app (`MY_PACKAGE_REPLACED`), intenta reconectar el lector. |
 | `ReconexionLector.kt` | Reconexión escalonada: `requestRebind` y, si no basta, reiniciar el componente del servicio (ver "Lector desconectado tras reinstalar o actualizar"). |
-| `FiltroCobros.kt` | Decide si un texto "parece un cobro": debe tener un monto **y** una palabra de cobro, y no tener palabras excluidas. Compara sin tildes ni mayúsculas. |
+| `FiltroCobros.kt` | Decide si un texto "parece un cobro": debe tener un monto **y** una palabra de cobro, y no tener palabras excluidas. Compara sin tildes ni mayúsculas. Los números de teléfono no cuentan como monto. |
+| `AppSmsPredeterminada.kt` | La app de SMS predeterminada del usuario (`Telephony.Sms.getDefaultSmsPackage`), que se permite aunque no esté en la lista fija. Se consulta al abrir la app y al conectarse el lector. |
 | `ColaNotificaciones.kt` | Cola en `filesDir/deteccion/cola.json` (almacenamiento interno: solo esta app puede leerlo). Máximo 200 entradas, se borran solas a los 30 días, no guarda dos veces el mismo texto de la misma app y escribe de forma atómica. |
-| `ConfiguracionDeteccion.kt` | Lee la configuración de `res/raw/deteccion_apps.json`. |
+| `ConfiguracionDeteccion.kt` | Lee la configuración de `res/raw/deteccion_apps.json` y decide si una app está permitida (lista fija o app de SMS predeterminada). |
 | `CanalDeteccion.kt` | MethodChannel y EventChannel con Flutter; abre los ajustes de "Acceso a notificaciones" y detecta si el permiso está concedido. |
 
 El servicio está declarado en `AndroidManifest.xml` con el permiso
@@ -56,7 +57,7 @@ solo después de que el usuario lo autoriza en Ajustes.
 
 | Método | Devuelve |
 |---|---|
-| `estado` | `{permiso, conectado, es_debug, modo_descubrimiento, ultima_conexion, ultima_desconexion, ultima_notificacion, ultimo_resultado}` (horas en milisegundos) |
+| `estado` | `{permiso, conectado, es_debug, modo_descubrimiento, app_sms_paquete, app_sms_nombre, ultima_conexion, ultima_desconexion, ultima_notificacion, ultimo_resultado, ultima_reconexion, resultado_reconexion}` (horas en milisegundos). También vuelve a consultar la app de SMS predeterminada |
 | `abrirAjustesAcceso` | Abre el ajuste de SubTrack en "Acceso a notificaciones" (Android 11+) o la lista general |
 | `reconectar` `{motivo}` | Si hay permiso pero el servicio está desconectado, inicia la reconexión escalonada (`ReconexionLector`). Responde enseguida; el resultado se ve en `estado` |
 | `recuperarActivas` | Revisa las notificaciones activas de la barra y guarda las que falten. Devuelve cuántas guardó, o `-1` si el servicio no está conectado |
@@ -73,17 +74,25 @@ y en modo descubrimiento (solo debug) también `{tipo: descartada, paquete, moti
 
 ```json
 {
-  "apps_permitidas": [ { "paquete": "com.google.android.apps.messaging", "nombre": "Mensajes de Google (SMS)" } ],
+  "apps_permitidas": [
+    { "paquete": "com.google.android.apps.messaging", "nombre": "Mensajes de Google (SMS)" },
+    { "paquete": "com.truecaller", "nombre": "Truecaller (SMS)" },
+    { "paquete": "com.samsung.android.messaging", "nombre": "Mensajes de Samsung (SMS)" },
+    { "paquete": "com.android.mms", "nombre": "Mensajes de Xiaomi/MIUI (SMS)" }
+  ],
   "apps_solo_debug": [ { "paquete": "com.android.shell", "nombre": "Shell (simulación con adb)" } ],
   "palabras_cobro": ["compra", "compraste", "pago", "pagaste", "debito", "transaccion"],
-  "palabras_excluidas": ["codigo", "clave", "otp", "contrasena"]
+  "palabras_excluidas": ["codigo", "clave", "otp", "contrasena", "llamada", "llamadas", "llamando", "spam", "estafa", "call", "calling", "missed"]
 }
 ```
 
-- `apps_permitidas` solo tiene paquetes verificados en el celular real con
-  el modo descubrimiento (ver "Cómo probar"): por ahora, Mensajes de Google.
-  Los bancos se agregan cuando se identifiquen. Después de editarlo hay que
-  recompilar la app.
+- Además de `apps_permitidas`, el lector permite **siempre la app de SMS
+  predeterminada** del usuario, sea cual sea (ver "Cualquier app de SMS").
+- `apps_permitidas` es el respaldo, con paquetes verificados: Mensajes de
+  Google (con el modo descubrimiento en el Xiaomi de pruebas), Truecaller,
+  Mensajes de Samsung y Mensajes de Xiaomi/MIUI (en Google Play y en
+  sysapps.bayton.org). Los bancos se agregan cuando se identifiquen. Después
+  de editarlo hay que recompilar la app.
 - `apps_solo_debug` solo se carga en compilaciones debug (`flutter run`). En
   release nadie puede simular pagos con el shell.
 
@@ -285,6 +294,91 @@ que lleva a la pantalla 03.
      Perfil dice "Activo".
 5. Comprueba que detecta: simula un pago (por ejemplo `real1` de "Cómo
    probar (hito 4)") o pide que te envíen un SMS de cobro.
+
+## Cualquier app de SMS (app predeterminada)
+
+**Razón.** Con probadores nuevos, a Santiago (Xiaomi) no le funcionó la
+detección: su app de SMS predeterminada es **Truecaller**, y la lista fija
+solo permitía Mensajes de Google. Cristian (Samsung) puede usar **Mensajes de
+Samsung**. Agregar apps de SMS una por una no escala: cada probador puede tener
+otra.
+
+**Cambio.**
+
+1. El lector permite, además de la lista fija, la **app de SMS predeterminada**
+   del usuario (`Telephony.Sms.getDefaultSmsPackage`, en
+   `AppSmsPredeterminada.kt`). Se le aplica el mismo filtro de cobro que a
+   cualquier app permitida: un SMS personal se descarta sin guardarse.
+2. Se vuelve a consultar al abrir la app o volver a ella (método `estado`) y
+   cuando el lector se conecta, por si el usuario cambió de app de SMS. El log
+   avisa cuando cambia: `App de SMS predeterminada (motivo): paquete`.
+3. La lista fija queda como respaldo (por ejemplo, si el usuario recibe los SMS
+   en una app que no es la predeterminada) y ahora incluye Truecaller
+   (`com.truecaller`), Mensajes de Samsung (`com.samsung.android.messaging`) y
+   Mensajes de Xiaomi/MIUI (`com.android.mms`). Los tres paquetes se
+   verificaron antes de agregarlos: Truecaller en Google Play (informe de
+   Exodus Privacy), y Mensajes de Samsung y de Xiaomi en sysapps.bayton.org
+   (base de datos de apps preinstaladas por fabricante).
+4. La pantalla de depuración muestra la fila **App de SMS predeterminada** con
+   el nombre y el paquete detectados.
+5. Para ver el nombre de la app (por ejemplo "Truecaller"), el manifiesto
+   declara en `<queries>` las apps que responden a "enviar a `smsto:`" (todas
+   las apps de SMS). No se pide `QUERY_ALL_PACKAGES`.
+
+**Truecaller no solo muestra SMS.** También publica el identificador de
+llamadas, llamadas perdidas, llamadas bloqueadas y alertas de spam, casi
+siempre con un número de teléfono que parece un monto ("3001234567"). Para
+que no pasen como cobro hay tres defensas:
+
+| Defensa | Dónde | Ejemplo descartado |
+|---|---|---|
+| Notificaciones de categoría llamada (`call`, `missed_call`) se ignoran sin leer su texto | `LectorNotificacionesService.kt` | El identificador de llamadas mientras suena el teléfono |
+| Palabras excluidas nuevas: llamada(s), llamando, spam, estafa, call, calling, missed | `deteccion_apps.json` | "Llamada perdida: Pagos y Cobros SAS 3001234567" |
+| Los teléfonos (+57…, celulares de 10 dígitos que empiezan por 3, fijos 60…, líneas 01 8000) no cuentan como monto | `FiltroCobros.kt` | "Pago Facil Colombia · 3001234567" |
+
+Y aunque algo pasara el filtro, el parser (hito 2) solo acepta
+"compraste/pagaste MONTO en COMERCIO" de un banco conocido.
+
+**Tests (sin celular).**
+
+- `test/fixtures/avisos_no_sms.json`: 10 avisos tipo Truecaller (llamadas,
+  spam, identificador). Los usan las dos capas:
+  - `android/app/src/test/.../FiltroCobrosTest.kt` (JUnit, con las palabras
+    reales de `deteccion_apps.json`): ningún aviso pasa el filtro nativo, los
+    3 SMS reales sí, y un teléfono no cuenta como monto.
+  - `test/deteccion_parser_test.dart`: el parser tampoco los acepta.
+- `test/deteccion_lector_test.dart`: la pantalla de depuración muestra la app
+  de SMS predeterminada.
+
+Correr los tests nativos (PowerShell, desde la carpeta del proyecto; Gradle
+necesita el Java que trae Android Studio):
+
+```powershell
+$env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
+cd android
+.\gradlew.bat :app:testDebugUnitTest
+cd ..
+```
+
+El informe queda en `build/app/reports/tests/testDebugUnitTest/index.html`.
+
+**Guía para probadores** (instalar, permisos, batería, SMS de prueba):
+[probar-la-app.md](probar-la-app.md).
+
+### Cómo probarlo
+
+1. En el celular del probador, abre **Perfil → Depuración: detección** (solo
+   en la app debug): la fila "App de SMS predeterminada" debe mostrar su app
+   (por ejemplo "Truecaller (com.truecaller)").
+2. Pide que le envíen un SMS de cobro (ver la guía). En logcat:
+   `Recibida de com.truecaller: guardada`.
+3. Pide que lo llamen y no contesten: la llamada perdida de Truecaller debe
+   salir como `ignorada (llamada)` o `descartada (palabra excluida…)`, nunca
+   `guardada`.
+4. Cambia la app de SMS predeterminada (Ajustes → Apps → Apps predeterminadas
+   → App de SMS), vuelve a SubTrack: en logcat aparece `App de SMS
+   predeterminada (app abierta): …` con la nueva y la fila de depuración se
+   actualiza.
 
 ## Parser (hito 2)
 
@@ -535,10 +629,14 @@ Android muestra una advertencia fuerte al activarlo.
 | De una app permitida, pero **no parece un cobro** ("prueba" de un contacto, "Recibiste…", publicidad sin monto) | El texto, en memoria, para decidir | Se descarta: no se guarda ni se escribe en ningún log |
 | Con "código", "clave", "OTP" o "contraseña" | El texto, en memoria | Se descarta siempre, aunque tenga monto |
 | Resúmenes de grupo y notificaciones fijas (música, descargas) | Solo sus banderas | Se ignoran |
+| Llamadas y llamadas perdidas (por ejemplo, de Truecaller) | Solo su categoría | Se ignoran sin leer el texto |
+| Con "llamada", "spam" o "estafa" (avisos de Truecaller) | El texto, en memoria | Se descarta siempre, aunque tenga monto |
 
-Apps permitidas hoy: **Mensajes de Google (SMS)**, encontrada con el modo
-descubrimiento en el celular de pruebas. Los bancos y billeteras se agregarán
-cuando se identifiquen sus paquetes (no se inventan nombres de paquete).
+Apps permitidas hoy: la **app de SMS predeterminada** del usuario, más la lista
+fija de respaldo (Mensajes de Google, Truecaller, Mensajes de Samsung y
+Mensajes de Xiaomi/MIUI, con paquetes verificados). Ninguna app de correo ni
+de chat. Los bancos y billeteras se agregarán cuando se identifiquen sus
+paquetes (no se inventan nombres de paquete).
 
 ### 3. Qué se guarda en el celular
 
@@ -890,6 +988,17 @@ resultados.
   componente). Si no lo logra, avisa "La detección está pausada" y el usuario
   debe apagar y encender el acceso de SubTrack en los ajustes. Mientras tanto
   no se detectan cobros nuevos.
+- **Solo se leen los SMS de la app de SMS predeterminada y de la lista fija.**
+  Si el usuario recibe los SMS en otra app que no es la predeterminada ni está
+  en la lista, no se detectan.
+- **Los avisos de Truecaller que no son SMS se probaron con textos de
+  ejemplo**, no con capturas de un celular real: si Truecaller usa una
+  redacción nueva, con una palabra de cobro y un monto, podría guardarse. El
+  parser igual la rechaza si no es "compraste/pagaste MONTO en COMERCIO" de
+  un banco conocido.
+- La app de SMS predeterminada también puede mostrar chats (RCS en Mensajes de
+  Google, por ejemplo). Se les aplica el mismo filtro de cobro: solo se
+  guardan si parecen un cobro.
 - Los cobros publicados mientras el lector estaba detenido solo se recuperan
   si siguen en la barra de notificaciones.
 - Solo se reconocen los formatos de Bancolombia y Nequi probados con mensajes

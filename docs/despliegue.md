@@ -251,7 +251,8 @@ permisos de SubTrack explica cómo habilitarlo.
 
 - No existe la pantalla de depuración ni el modo descubrimiento.
 - **No se pueden simular pagos con adb** (`com.android.shell` solo se permite
-  en debug). La detección funciona con SMS reales de Mensajes de Google.
+  en debug). La detección funciona con SMS reales de la app de SMS
+  predeterminada (ver [probar-la-app.md](probar-la-app.md)).
 - No escribe logs del lector.
 
 Para desarrollar contra la nube con hot reload (y simular pagos con adb), usa
