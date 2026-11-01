@@ -9,7 +9,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | 1 | Lector nativo, cola local, canales con Flutter y pantalla de depuración | **Hecho** |
 | 2 | Parser en Dart: comercio, monto, moneda, fecha y banco | **Hecho** |
 | 3 | Backend: pagos detectados y candidatos de suscripción | **Hecho** |
-| 4 | Pantallas 03, 04, 05 y flujo B | Pendiente |
+| 4 | Pantallas 03, 04, 05 y flujo B | **Hecho** |
 
 ## Arquitectura
 
@@ -95,10 +95,15 @@ y en modo descubrimiento (solo debug) también `{tipo: descartada, paquete, moti
 | `depuracion_deteccion_page.dart` | Pantalla "Depuración: detección" (solo debug): estado, apps permitidas, eventos en vivo, cola con lo que extrae el parser y comando de simulación. Se abre desde Perfil. |
 | `parser_pagos.dart` | Parser (hito 2): de un texto de cobro saca banco, monto, moneda, comercio normalizado, fecha y medio. |
 | `catalogo_servicios.dart` | Nombres y alias del catálogo de guías (`GET /api/guias`) para reconocer servicios conocidos. |
+| `huella_pago.dart` | Huella del cobro y lo que se envía al backend (solo campos extraídos). |
+| `procesador_detecciones.dart` | Une todo: cola + notificaciones activas → parser → backend → borra lo procesado. |
+| `deteccion_service.dart` / `candidato_suscripcion.dart` | Llamadas a `/api/detecciones` y modelo del candidato. |
+| `permisos_page.dart`, `escaneo_page.dart`, `resultados_deteccion_page.dart` | Pantallas 03, 04 y 05. |
 
-Al abrir la app y cada vez que vuelve a primer plano, `main.dart` llama a
-`sincronizar()`: pide reconectar el servicio si está detenido y recupera las
-notificaciones activas de la barra.
+Al abrir la app y cada vez que vuelve a primer plano, `main.dart` pide
+reconectar el servicio si está detenido y recupera las notificaciones activas
+de la barra. Si además hay sesión y permiso, procesa la cola y avisa de los
+candidatos nuevos (flujo B, ver hito 4).
 
 ## Problema encontrado en la primera prueba (hito 1) y solución
 
@@ -346,6 +351,59 @@ Al **confirmar**: la suscripción se crea con `origen = 'notificacion'`,
 cobro = el primero después de hoy contando desde el último pago. Los pagos
 detectados de ese comercio se enlazan y pasan al historial.
 
+## Pantallas y flujo B (hito 4)
+
+### Flujo
+
+```
+Registro ─► 03 Permisos ─► (Acceso a notificaciones) ─► 04 Escaneo ─► 05 Resultados ─► 06 Preferencia ─► Dashboard
+                │                                                         ▲
+                └─► "Prefiero agregarlas a mano" ─► 13 Formulario ─► 06  │
+Perfil: interruptor "Permiso de notificaciones" ─► 03 ─► 04 ─► 05 ─► Dashboard
+Flujo B: abrir/volver a la app ─► procesar cola ─► candidato nuevo ─► notificación ─► 05
+```
+
+- **03 Permisos** (`/permisos`): textos del diseño. "Dar permiso y detectar"
+  abre el ajuste de SubTrack en "Acceso a notificaciones"; al volver, si el
+  permiso quedó concedido pasa a la 04. Si volvió sin el permiso, explica
+  **"Ajuste restringido"** (Android 13+ con apps instaladas desde un APK) con
+  un botón a la información de la app.
+- **04 Escaneo** (`/escaneo`): reconecta el lector, recupera las
+  notificaciones activas (espera hasta 3 s si el lector recién se conecta), lee
+  la cola, interpreta cada una, envía los cobros y borra lo procesado. Se
+  muestra al menos 1,9 s. Si falla (sin backend), "Reintentar" o "Seguir sin
+  detectar"; la cola no se borra.
+- **05 Resultados** (`/deteccion`): "Encontramos {n} suscripciones" con los
+  candidatos **pendientes reales** (sin la etiqueta de datos de ejemplo). Cada
+  fila: "{monto} · {frecuencia} · {n} cobros detectados", botones **Es mía** /
+  **No es mía** y un lápiz para corregir monto y frecuencia. "Confirmar {n}
+  suscripciones" confirma las marcadas (con las correcciones) y descarta las
+  demás.
+- **Perfil**: el interruptor "Permiso de notificaciones" muestra el estado real
+  ("Activo · detección automática encendida" / "Desactivado · solo registro
+  manual"). Encenderlo abre la 03; apagarlo abre los ajustes de Android.
+- **Origen**: las suscripciones confirmadas dicen **"Detectada por
+  notificación"** en las tarjetas del dashboard y la lista, y en el detalle.
+
+### Flujo B
+
+Al abrir la app y cada vez que vuelve a primer plano (`main.dart`), si hay
+sesión y permiso, se procesa la cola igual que en la 04. Por cada candidato
+**nuevo** que devuelve el backend llega una notificación local **"¿Tienes una
+suscripción a {servicio}?"** ("Detectamos un cobro de $68.139 en Nequi…"), en
+el canal "Suscripciones detectadas". Al tocarla se abre la 05. No se procesa
+en segundo plano mientras están abiertas la 03, la 04, la 05 o la pantalla de
+depuración (ellas mismas lo hacen, o se está revisando la cola).
+
+### Huella
+
+`huellaDePago` = SHA-256 de `banco|comercio normalizado|monto|moneda|fecha`.
+La fecha es la del mensaje ("el 23/10/2026 a las 07:20") o, si no la trae
+(Nequi), la hora en que **Android publicó** la notificación (`postTime`), no la
+hora en que la app la procesó. Así la misma notificación leída en vivo y
+recuperada después desde la barra da la misma huella, y el backend la marca
+`repetido`.
+
 ## Privacidad (RNF01, Habeas Data, Ley 1581 de 2012)
 
 La detección trata datos personales (pagos y, de paso, cualquier notificación
@@ -397,7 +455,9 @@ El parser (hito 2) lee la cola en el mismo celular; no la copia a otro lado.
 Solo los **campos extraídos** por el parser: banco, comercio normalizado,
 monto, moneda, fecha y una huella para no repetir pagos, con la sesión del
 usuario. **Nunca** el texto crudo, el título, los dígitos de la tarjeta ni los
-teléfonos que traen los mensajes.
+teléfonos que traen los mensajes. La huella también se calcula solo con esos
+campos (no con el texto). Después de enviarlas, las notificaciones se borran
+de la cola del celular, también las que el parser descartó.
 
 ### 5. Herramientas de desarrollo (no existen en release)
 
@@ -623,7 +683,113 @@ $p = @{ huella = Huella "real4"; comercio = "GOOGLE *Crunchyroll"; comercio_norm
    Esperado: `suscripcion_existente` con `cambio_precio: true`. En la app, el
    detalle de Crunchyroll muestra el cambio de 19.900 a 23.900.
 
-## Pendiente para los siguientes hitos
+## Cómo probar (hito 4): el flujo completo en el Xiaomi
 
-- Hito 4: pantallas 03, 04 y 05, lectura de notificaciones activas
-  (`getActiveNotifications`), flujo B e interruptor real en Perfil.
+La forma más limpia es empezar **sin la app instalada**: así no queda permiso,
+sesión ni cola de pruebas anteriores, y se ve el onboarding completo
+(registro → 03 → 04 → 05 → 06 → dashboard).
+
+### 1. Preparación (PowerShell)
+
+```powershell
+# Backend (la migración 006 ya está aplicada)
+cd backend
+npm run dev
+```
+
+En otra terminal:
+
+```powershell
+adb reverse tcp:3000 tcp:3000
+adb uninstall com.example.flutter_suscripciones
+```
+
+Lanza la app en debug con la configuración "Celular USB (localhost)". Al
+reinstalar, MIUI olvida **Inicio automático** y **Ahorro de batería → Sin
+restricciones**: vuelve a activarlos (guía en Perfil).
+
+### 2. Registro y pantalla 03
+
+Crea una cuenta de prueba (por ejemplo `deteccion2@prueba.com`). Después del
+registro aparece **"Permiso para leer notificaciones de pago"**. **No toques
+nada todavía.**
+
+### 3. Simula los cobros (con la pantalla 03 abierta)
+
+El lector aún no tiene permiso: las notificaciones solo quedan en la barra.
+Al dar el permiso se recuperan desde ahí (`getActiveNotifications`).
+
+```powershell
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' real1 'Bancolombia: Compraste `$19.900,00 en GOOGLE *Crunchyroll con tu T.Deb *0000, el 23/10/2026 a las 07:20. Si tienes dudas, encuentranos aqui: 6045109095 o 018000931987. Estamos cerca.'"
+adb shell "cmd notification post -S bigtext -t 'Nequi' real2 'NEQUI: Pagaste 68.139,27 en ANTHROPIC* CLAUDE SUB'"
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' real3 'Bancolombia: Compraste `$18.900,00 en DIDI FOOD con tu T.Deb *0000, el 30/10/2026 a las 13:10.'"
+```
+
+### 4. Permiso → escaneo → resultados
+
+1. Toca **Dar permiso y detectar** y activa SubTrack en "Acceso a
+   notificaciones". Si Android muestra **"Ajuste restringido"**, al volver la
+   pantalla explica cómo habilitarlo (Información de la app → ⋮ → Permitir
+   ajustes restringidos).
+2. Al volver con el permiso pasa sola a **"Revisando tus notificaciones de
+   pago…"** (04) y después a la 05.
+3. Debe decir **"Encontramos 2 suscripciones"**: Crunchyroll ($19.900 ·
+   Mensual · 1 cobro detectado) y Claude ($68.139 · Mensual · 1 cobro
+   detectado). DiDi Food **no** aparece: es una compra normal.
+
+### 5. Confirmar una y descartar otra
+
+1. Deja **Es mía** en Crunchyroll. Opcional: el lápiz permite corregir el monto
+   y la frecuencia antes de confirmar.
+2. Toca **No es mía** en Claude.
+3. Toca **Confirmar 1 suscripción**: sale el toast "Agregamos 1 suscripción" y
+   sigue la preferencia de recordatorio (06). Toca **Ir a mi dashboard** (y
+   acepta el permiso de notificaciones, lo necesita el flujo B).
+
+### 6. Verla en el dashboard
+
+La tarjeta de Crunchyroll dice **"Mensual · Detectada por notificación"**. En
+su detalle: origen **Detectada por notificación**, próximo cobro 23 nov y el
+pago del 23 oct en el historial.
+
+### 7. Flujo B (opcional)
+
+Con la app en **segundo plano** (botón de inicio):
+
+```powershell
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' real4 'Bancolombia: Compraste `$26.900,00 en NETFLIX.COM con tu T.Deb *0000, el 01/11/2026 a las 09:00.'"
+```
+
+Vuelve a la app: llega la notificación **"¿Tienes una suscripción a
+Netflix?"**. Al tocarla se abren los resultados para confirmarla o
+descartarla. Un nuevo cobro de Claude (descartado) no genera aviso.
+
+### Qué debe pasar
+
+| Paso | Resultado |
+|---|---|
+| Salir y volver a la app con los cobros aún en la barra | Se recuperan y se envían otra vez, pero no se duplican: la misma notificación da la misma huella (`repetido`) y no hay avisos nuevos |
+| Backend apagado durante el escaneo | "No pudimos revisar tus cobros" con **Reintentar**; la cola queda intacta |
+| Perfil → "Permiso de notificaciones" | "Activo · detección automática encendida". Al apagarlo abre los ajustes de Android (el permiso solo se quita ahí) |
+| Pantalla de depuración abierta | No se procesa la cola en segundo plano, para poder revisarla |
+
+### Probar la pantalla 05 sin el celular (presentación)
+
+`npm run db:demo` deja al usuario demo (`demo@subtrack.co` / `Demo1234`) con
+dos candidatos pendientes: Claude (2 cobros por Nequi) y Bodytech (3 cobros
+mensuales). En la app: Perfil → interruptor (o la notificación del flujo B) →
+resultados.
+
+## Limitaciones conocidas
+
+- **La cola se procesa cuando la app se abre o vuelve a primer plano.** El
+  lector guarda los cobros aunque la app esté cerrada, pero el envío al backend
+  y la notificación del flujo B ocurren al abrir la app (no hay trabajo en
+  segundo plano de Flutter).
+- Los cobros publicados mientras el lector estaba detenido solo se recuperan
+  si siguen en la barra de notificaciones.
+- Solo se reconocen los formatos de Bancolombia y Nequi probados con mensajes
+  reales; los demás bancos de la lista usan la forma general
+  "compraste/pagaste MONTO en COMERCIO".
+- Dos compras idénticas (mismo banco, comercio, monto y minuto del mensaje)
+  dan la misma huella y se cuentan como una.
