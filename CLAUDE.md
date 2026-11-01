@@ -21,6 +21,12 @@ PostgreSQL. Responde y documenta **en español**.
   candidatos, pantallas 03/04/05, búsqueda opcional en el historial de SMS,
   "Compartir" un SMS y análisis en el celular. Todo en
   [docs/deteccion.md](docs/deteccion.md).
+- **Fase de diseño** hecha: logo "Cuenta regresiva" (ícono adaptativo, splash
+  nativo, ícono de notificaciones), animación de inicio, barra de pestañas
+  flotante con botón "+" y campana de avisos, pestaña **Análisis**
+  (`GET /api/analisis`, fl_chart) y fluidez (transiciones, Hero, esqueletos,
+  vibración). Detalle en [design/subtrack-pantallas.md](design/subtrack-pantallas.md)
+  (pantalla 15 y "Movimiento").
 - Dos versiones Android (*product flavors*): `completa` (con READ_SMS para el
   historial) y `sinSms` (sin READ_SMS). `default-flavor: completa`.
 
@@ -28,11 +34,12 @@ PostgreSQL. Responde y documenta **en español**.
 
 | Carpeta | Qué hay | Detalle |
 |---|---|---|
-| `lib/` | App Flutter. `Common/` (tema `AppTheme`/`AppColors`, rutas `Routers`), `Pages/`, `widgets/`, `services/` (API, sesión, recordatorios), `models/`, `deteccion/` | |
+| `lib/` | App Flutter. `Common/` (tema `AppTheme`/`AppColors`, rutas `Routers`), `Pages/`, `widgets/` (`app_shell` barra flotante, `animacion_inicio`, `movimiento` transiciones/esqueletos/escalonado, `presionable`, `campana_avisos`), `services/` (API, sesión, recordatorios, `avisos_nuevos`), `models/`, `deteccion/` | |
+| `assets/logo/`, `assets/iconos/` | SVG del logo que usa la app; PNG del ícono y splash (salen de los SVG con `flutter test tool/generar_iconos.dart`) | `pubspec.yaml` (flutter_launcher_icons, flutter_native_splash) |
 | `android/app/src/main/kotlin/.../deteccion/` | Lector de notificaciones, filtro de cobros, reconexión, canales con Flutter | [docs/deteccion.md](docs/deteccion.md) |
 | `android/app/src/completa/`, `src/sinSms/` | Lo que cambia entre versiones (READ_SMS, `LectorHistorialSms.kt`) | ídem, "Versiones completa y sinSms" |
 | `backend/` | API Express 5 (`src/`), migraciones SQL (`db/migraciones/`), catálogo de guías (`db/guias.json`), demo (`db/demo.js`), tests (`test/`) | [backend/README.md](backend/README.md) |
-| `design/` | Diseño: `subtrack-simulacion.html` (fuente visual, manda sobre el resto), `subtrack-pantallas.md` (14 pantallas con colores y textos), `logo/` | |
+| `design/` | Diseño: `subtrack-simulacion.html` (fuente visual, manda sobre el resto), `subtrack-pantallas.md` (15 pantallas con colores y textos, componentes y movimiento), `logo/` | |
 | `docs/` | `deteccion.md` (detección y privacidad), `despliegue.md` (Render + Neon), `google-play.md` (permisos de SMS y publicación), `probar-la-app.md` (guía para probadores, lenguaje simple) | |
 | `test/` | Tests de Flutter (`test/fixtures/` con SMS reales y avisos de Truecaller) | |
 | `postman/` | Colecciones de la API | |
@@ -86,6 +93,11 @@ flutter analyze
 flutter test
 flutter run                                   # versión completa
 flutter run --flavor sinSms
+
+# Logo: si cambian los SVG de assets/logo/, regenerar ícono y splash
+flutter test tool/generar_iconos.dart
+dart run flutter_launcher_icons
+dart run flutter_native_splash:create
 flutter build apk --release --flavor completa --dart-define=API_URL=https://subtrack-api-4150.onrender.com
 flutter build apk --release --flavor sinSms   --dart-define=API_URL=https://subtrack-api-4150.onrender.com
 # APKs: build\app\outputs\flutter-apk\app-completa-debug.apk, app-sinsms-release.apk, ...
@@ -118,11 +130,19 @@ Xiaomi 25080RABDG, HyperOS, Android 16, por USB. Probadores: Santiago
 | Historial de SMS | Opcional, con divulgación destacada y READ_SMS solo al pedirlo; sin RECEIVE_SMS | [deteccion.md › Tres caminos](docs/deteccion.md#tres-caminos-notificaciones-historial-de-sms-y-compartir-hito-5) |
 | Compras normales | Se quedan en el celular (cifradas, 400 días); solo salen servicios conocidos y cobros recurrentes; el backend purga lo demás (migración 007) | ídem, "Decisión: las compras normales se quedan en el celular" |
 | Duplicados | Huella con la fecha del mensaje; sin fecha (Nequi), tolerancia de 5 min | ídem, "Sin duplicados entre caminos" |
-| Servidor dormido | La app espera hasta 75 s y avisa "Despertando el servidor…" | [despliegue.md](docs/despliegue.md) |
+| Servidor dormido | La app espera hasta 75 s y avisa "Despertando el servidor…"; en el arranque el anillo del logo sigue girando hasta que responde | [despliegue.md](docs/despliegue.md) |
+| Navegación | Barra flotante (Resumen, Suscripciones, Análisis, Perfil) + botón "+"; Avisos en la campana del encabezado (contador de no vistos guardado en el celular). Ahorro se ve en Análisis; Perfil tiene acceso directo | `widgets/app_shell.dart` |
+| Análisis | Una sola petición `GET /api/analisis` (sin migraciones). No se convierten monedas: selector COP/USD en las gráficas y "más caras" con COP primero | [backend/README.md](backend/README.md) |
+| Animaciones | Todas respetan `MediaQuery.disableAnimations`; sin Lottie ni videos | `widgets/movimiento.dart` |
 | Firma | El release se firma con la llave de debug (sin llave de Play Store) | [despliegue.md](docs/despliegue.md) |
 
 ## Pendientes conocidos
 
+- **Actualizar Render** con `GET /api/analisis` (llega al hacer merge a
+  `develop`; no necesita migraciones). Hasta entonces, la pestaña Análisis
+  con el backend de la nube muestra "Ruta no encontrada" (con "Reintentar").
+- Probar en el Xiaomi la fase de diseño: ícono, splash, animación de inicio,
+  barra flotante, Análisis y "Quitar animaciones".
 - Probar el hito 5 en el Xiaomi (historial de SMS, rechazo del permiso,
   "Compartir").
 - Aplicar la **migración 007** en la base **local** (`npm run db:migrate`;

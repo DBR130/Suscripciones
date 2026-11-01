@@ -36,7 +36,8 @@ La app todavía no está en Play Store, así que se instala desde el archivo.
 5. En Xiaomi puede aparecer además un análisis de seguridad propio. Espera a
    que termine y toca **Instalar** o **Continuar**.
 
-La app aparece en el celular como **SubTrack**. Ábrela, crea tu cuenta y, si pregunta si puede **enviarte notificaciones**,
+La app aparece en el celular como **SubTrack**, con un ícono azul oscuro de un
+anillo con una S. Al abrirla verás una animación corta del logo. Ábrela, crea tu cuenta y, si pregunta si puede **enviarte notificaciones**,
 toca **Permitir** (así te avisa de los cobros que detecta).
 
 > La primera vez que abres la app puede tardar hasta un minuto en conectarse:
@@ -220,6 +221,19 @@ Si un cobro no se detectó, puedes enviárselo a la app sin dar ningún permiso:
 Si el mensaje no es un cobro, la app te lo dice y no guarda nada.
 
 ---
+
+## 9. Moverte por la app
+
+- Abajo hay una **barra flotante** con cuatro pestañas: **Resumen**,
+  **Suscripciones**, **Análisis** y **Perfil**. El botón redondo **+** de la
+  derecha agrega una suscripción.
+- Los **avisos** están en la **campana** de arriba a la derecha. El número
+  amarillo son los avisos que todavía no has visto.
+- En **Análisis** ves cuánto pagaste cada mes, en qué categorías se va tu
+  dinero, qué se cobra en los próximos 30 días y cuánto ahorras por lo que
+  cancelaste.
+- Si en tu celular activaste **"Quitar animaciones"** (accesibilidad), la app
+  no se mueve: todo aparece de una vez.
 
 ## Qué reportar al equipo
 

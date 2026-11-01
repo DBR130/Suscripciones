@@ -88,7 +88,7 @@ Fuente **Inter** (paquete `google_fonts` o asset), pesos 400 a 900. Interlineado
 
 | Componente | Especificación | Notas Flutter |
 |---|---|---|
-| **Marca** | Cuadro de 28×28, radio 9, `primary`, letra "S" 13/900 en blanco, más "SubTrack" 17/800 | Ya existe `widgets/app_marca.dart`; ajustarlo |
+| **Marca** | Logo "Cuenta regresiva" (`assets/logo/logo-nombre-oscuro.svg`): anillo `#60A5FA` con tramo tenue `#17367B`, punto y S `#E9EFFA`, más "SubTrack". Alto 28 (26 en el dashboard) | `widgets/app_marca.dart` (flutter_svg) |
 | **Hero** | Degradado, radio inferior 26, padding 10/16/20 | Widget `HeroHeader(child)` |
 | **Botón volver** | Píldora con fondo `rgba(255,255,255,.1)`, borde `rgba(255,255,255,.22)`, ícono ‹, texto 12.5/700 "Volver" | También para "Editar" (ícono lápiz) y "Dashboard" |
 | **Botón primario** | Píldora `primary`, texto blanco 14/700, ancho completo | `FilledButton` del tema |
@@ -108,7 +108,9 @@ Fuente **Inter** (paquete `google_fonts` o asset), pesos 400 a 900. Interlineado
 | **Lista de datos (facts)** | Tarjeta `surface` con filas clave/valor separadas por `divider`. Clave 12.5/600 `muted`, valor 13/700 | Detalle, historial, perfil |
 | **Selector de días** | 3 pills (1 día / 3 días / 7 días). Activa: `primary` con texto blanco. Inactiva: transparente con borde `line-2` | Se repite en 06, 09 y 14 |
 | **Switch** | 46×27, perilla de 21. Encendido: `primary` con perilla blanca. Apagado: `surface`, borde `line-2`, perilla `#5B6A85` | `Switch` con colores del tema |
-| **Barra de pestañas** | Fondo `bar`, borde superior `divider`, 4 pestañas con ícono de 20 y texto 10/700. Activa en `link`, inactiva en `muted` | Resumen · Suscripciones · Avisos · Perfil. `ShellRoute` + `NavigationBar` |
+| **Barra de pestañas** | Flotante, a 16 px de los bordes, píldora completa de alto 64, fondo `bar` al 72 % con desenfoque, borde blanco al 9 % y sombra suave. La activa lleva una píldora `primary` al 28 % que se desliza (320 ms). A la derecha, botón circular "+" `primary` de 64 | Resumen · Suscripciones · Análisis · Perfil. `widgets/app_shell.dart`. El contenido deja abajo `AppShell.rellenoInferior` |
+| **Campana de avisos** | Círculo de 38 translúcido arriba a la derecha de cada encabezado de pestaña, con contador ámbar de avisos nuevos | `widgets/campana_avisos.dart`; abre `/avisos` (11) |
+| **Esqueleto de carga** | Bloques `surface` con un brillo que los recorre (1,3 s) | `widgets/movimiento.dart` (`Esqueleto`, `EsqueletoTarjetas`) en lugar de círculos girando |
 | **Toast** | Tarjeta `surface`, borde `line-2`, radio 14, ✓ en `accent` y texto 13/600, a 96 px del fondo (sobre las pestañas) y 2.4 s | `SnackBar` flotante del tema |
 | **Diálogo de confirmación** | Hoja inferior `surface`, radio 22, título 17/800, cuerpo 13.5 `muted`, botón destructivo `#DC2626` y "No, volver" | `showModalBottomSheet` |
 | **Estado vacío** | Ícono + en un cuadro `surface-2` de 54, título 17/800, texto `muted` y botón primario | Dashboard y lista sin suscripciones |
@@ -243,8 +245,29 @@ Para cada pantalla se indica: **ruta sugerida**, **datos**, estructura y textos 
 ### 14 Perfil y configuración · prioridad 1 para nombre, correo y cerrar sesión; el resto después
 - Pestaña 4. Hero: avatar de 52 con iniciales, nombre 18/800 y "{correo} · Colombia (COP)". Los datos vienen de `Usuario` (backend).
 - Tarjeta "Avisarme antes de cada cobro" / "Preferencia global" con el selector de días.
-- Lista: "Permiso de notificaciones" con switch ("Activo · detección automática encendida" / "Desactivado · solo registro manual") · "Resumen mensual" con switch ("Cada 1 del mes") · "Historial y ahorro" con "{ahorro} ›" en `link` (lleva a 12) · "Agregar suscripción manual ›" (lleva a 13).
+- Lista: "Permiso de notificaciones" con switch ("Activo · detección automática encendida" / "Desactivado · solo registro manual") · "Resumen mensual" con switch ("Cada 1 del mes") · "Análisis y ahorro" con "{ahorro} ›" en `link` (lleva a la pestaña Análisis, 15) · "Agregar suscripción manual ›" (lleva a 13).
 - Botones: outline "Cerrar sesión" (borra el token y lleva a 02 login) y ámbar "Eliminar cuenta y todos mis datos", que abre el diálogo "¿Eliminar tu cuenta?" / "Borramos tu cuenta, tus suscripciones, el historial y los recordatorios. Esto no se puede deshacer." con el botón "Eliminar cuenta y datos".
+
+### 15 Análisis · backend real (GET /api/analisis)
+
+- Encabezado con degradado: **"Análisis"**, "{n} activas · gasto, cobros y ahorro" y la campana.
+- Tarjetas, en este orden (aparecen escalonadas):
+  1. **Proyección anual**: número grande que cuenta hasta su valor, otras monedas debajo y "Si nada cambia · {gasto}/mes".
+  2. **Las más caras**: las 3 de mayor gasto mensual equivalente, con logo, monto al mes y una barra relativa a la primera.
+  3. Selector **"Gráficas en" COP / USD** (solo si hay dos monedas).
+  4. **Gasto de los últimos 6 meses**: barras de lo pagado (historial de pagos); el mes actual en `accent`, los demás `primary` al 55 %. Al tocar una barra arriba sale su monto.
+  5. **Gasto mensual por categoría**: dona con el total en el centro y leyenda con color, monto y porcentaje. En pantallas de menos de 330 px la leyenda va debajo.
+  6. **Próximos 30 días**: línea de tiempo con fecha ("Hoy", "Mañana", "5 nov"), logo, servicio y monto. Las pruebas gratis aparecen el día que pasan a pago ("Termina la prueba gratis" en ámbar). Arriba, el total por moneda.
+  7. **Ahorro por cancelaciones**: total anual en `link` y lista de canceladas con fecha y ahorro.
+- Estado vacío: "Aún no hay nada que analizar" con "Agregar suscripción". Cada tarjeta sin datos muestra una frase corta en `muted`.
+
+### Movimiento
+
+- Inicio: animación del logo (design/logo/4-cuenta-regresiva/animacion-inicio.md), luego la app aparece con un fundido de 350 ms.
+- Entre pantallas: fundido con desplazamiento corto hacia arriba (320 ms). El logo del servicio vuela de la tarjeta al detalle (Hero).
+- Listas: tarjetas escalonadas (55 ms entre una y otra). El total del dashboard cuenta hasta su valor.
+- Botones y tarjetas se hunden levemente al presionarlos; vibración suave al confirmar, cancelar o eliminar.
+- Con "reducir animaciones" del sistema, todo aparece en su estado final.
 
 ### Notificación push (simulada)
 Banner glass arriba (top 44, márgenes de 12, radio 20) con la marca "S", título 12.5/800, cuerpo 12.5 y "SubTrack · ahora". Al tocarlo abre el detalle de esa suscripción. Ejemplos:
@@ -276,7 +299,7 @@ Operaciones necesarias: listar las activas del usuario, ver una, crear, actualiz
 ## 5. Navegación (go_router)
 
 - Sin sesión: `/` (01) → `/registro` o `/login` (02) → `/permisos` (03) → `/escaneo` (04) → `/deteccion` (05) → `/preferencias` (06) → `/resumen`.
-- Con sesión: `ShellRoute` con barra de pestañas: `/resumen` (07), `/suscripciones` (08), `/avisos` (11), `/perfil` (14). Dentro del shell: `/suscripcion/:id` (09) y `/ahorro` (12).
+- Con sesión: `ShellRoute` con barra de pestañas flotante: `/resumen` (07), `/suscripciones` (08), `/analisis` (15), `/perfil` (14). Dentro del shell: `/suscripcion/:id` (09) y `/ahorro` (12). `/avisos` (11) se abre desde la campana, fuera del shell, con "Volver".
 - Fuera del shell (sin pestañas): `/suscripcion/nueva` y `/suscripcion/:id/editar` (13), `/suscripcion/:id/cancelar` (10).
 - "Volver" usa `context.pop()`. Las pestañas usan `context.go()`.
 - Mientras el onboarding no se implemente, `main.dart` puede seguir abriendo `/` y `/login` como hoy.
