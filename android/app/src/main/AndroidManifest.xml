@@ -83,6 +83,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Detección: ver el nombre de la app de SMS predeterminada
+             (Truecaller, Mensajes de Samsung...) en la pantalla de depuración.
+             Las apps de SMS responden a "enviar a smsto:". -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
         <!-- url_launcher: abrir el sitio del proveedor desde la guía de cancelación. -->
         <intent>
             <action android:name="android.intent.action.VIEW" />

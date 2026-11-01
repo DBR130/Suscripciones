@@ -14,7 +14,8 @@ import java.lang.ref.WeakReference
  * esté cerrada, una vez el usuario da el "Acceso a notificaciones".
  *
  * Por cada notificación:
- *  1. Si la app que la publicó no está en la lista permitida, se ignora
+ *  1. Si la app que la publicó no está en la lista permitida ni es la app de
+ *     SMS predeterminada del usuario (AppSmsPredeterminada), se ignora
  *     sin leer su título ni su texto (en modo descubrimiento, solo se informa
  *     el paquete).
  *  2. Si el texto no parece un cobro, se descarta sin guardarlo.
@@ -66,6 +67,8 @@ class LectorNotificacionesService : NotificationListenerService() {
         instancia = WeakReference(this)
         RegistroDeteccion.marcarConexion(this)
         RegistroDeteccion.log(this, "Servicio conectado")
+        // Por si el usuario cambió de app de SMS mientras el lector no estaba.
+        AppSmsPredeterminada.actualizar(this, "servicio conectado")
         recuperarActivas()
     }
 
@@ -122,11 +125,15 @@ class LectorNotificacionesService : NotificationListenerService() {
         // Resúmenes de grupo y notificaciones fijas (música, descargas) no son cobros.
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return "ignorada (resumen de grupo)"
         if (sbn.isOngoing) return "ignorada (notificación fija)"
+        // Llamadas entrantes y perdidas (por ejemplo, el identificador de
+        // llamadas de Truecaller): nunca son cobros. "missed_call" es
+        // Notification.CATEGORY_MISSED_CALL (Android 13+).
+        if (n.category == Notification.CATEGORY_CALL || n.category == "missed_call") return "ignorada (llamada)"
 
         val config = ConfiguracionDeteccion.de(this)
         val paquete = sbn.packageName
 
-        if (!config.permitida(paquete)) {
+        if (!config.permitida(this, paquete)) {
             if (!enVivo) return "app no permitida"
             RegistroDeteccion.marcarNotificacion(this, "app no permitida")
             if (config.esDebug && modoDescubrimiento) {
@@ -157,7 +164,7 @@ class LectorNotificacionesService : NotificationListenerService() {
         val notificacion = JSONObject()
             .put("id", huella)
             .put("paquete", paquete)
-            .put("app", config.appsPermitidas[paquete] ?: paquete)
+            .put("app", config.nombreDe(this, paquete))
             .put("titulo", titulo)
             .put("texto", texto)
             .put("recibida_en", sbn.postTime)

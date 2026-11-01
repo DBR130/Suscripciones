@@ -26,14 +26,21 @@ object CanalDeteccion {
 
         MethodChannel(engine.dartExecutor.binaryMessenger, METODOS).setMethodCallHandler { call, result ->
             when (call.method) {
-                "estado" -> result.success(
-                    mapOf(
-                        "permiso" to ReconexionLector.permisoConcedido(contexto),
-                        "conectado" to LectorNotificacionesService.conectado,
-                        "es_debug" to ConfiguracionDeteccion.esDebug(contexto),
-                        "modo_descubrimiento" to LectorNotificacionesService.modoDescubrimiento,
-                    ) + RegistroDeteccion.leer(contexto)
-                )
+                "estado" -> {
+                    // Flutter pide el estado al abrir la app y al volver a ella:
+                    // buen momento para notar si el usuario cambió de app de SMS.
+                    val appSms = AppSmsPredeterminada.actualizar(contexto, "app abierta")
+                    result.success(
+                        mapOf(
+                            "permiso" to ReconexionLector.permisoConcedido(contexto),
+                            "conectado" to LectorNotificacionesService.conectado,
+                            "es_debug" to ConfiguracionDeteccion.esDebug(contexto),
+                            "modo_descubrimiento" to LectorNotificacionesService.modoDescubrimiento,
+                            "app_sms_paquete" to appSms,
+                            "app_sms_nombre" to appSms?.let { AppSmsPredeterminada.nombre(contexto, it) },
+                        ) + RegistroDeteccion.leer(contexto)
+                    )
+                }
                 "abrirAjustesAcceso" -> result.success(abrirAjustesAcceso(activity, componente))
                 "reconectar" -> {
                     // Permiso concedido pero lector desconectado (MIUI lo detuvo, o

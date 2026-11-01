@@ -17,7 +17,13 @@ class ConfiguracionDeteccion private constructor(
     val palabrasExcluidas: List<String>,
     val esDebug: Boolean,
 ) {
-    fun permitida(paquete: String): Boolean = appsPermitidas.containsKey(paquete)
+    /** Está en la lista fija o es la app de SMS predeterminada del usuario. */
+    fun permitida(context: Context, paquete: String): Boolean =
+        appsPermitidas.containsKey(paquete) || paquete == AppSmsPredeterminada.paquete(context)
+
+    /** Nombre legible: el de la lista fija o, para la app de SMS predeterminada, el de Android. */
+    fun nombreDe(context: Context, paquete: String): String =
+        appsPermitidas[paquete] ?: AppSmsPredeterminada.nombre(context, paquete)
 
     companion object {
         @Volatile

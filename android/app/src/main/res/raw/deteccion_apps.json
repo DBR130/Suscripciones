@@ -1,9 +1,12 @@
 {
   "_comentario": "Configuración del lector de notificaciones (detección automática). Ver docs/deteccion.md. Solo se procesan las apps de 'apps_permitidas'; de ellas solo se guardan los textos que parezcan un cobro. Para identificar un paquete, usa la pantalla 'Depuración: detección' (modo debug) con el modo descubrimiento. NO agregues apps de correo ni de chat.",
 
-  "_comentario_sms": "Mensajes de Google es la app de SMS del Xiaomi de pruebas (paquete encontrado con el modo descubrimiento). Como de cualquier app, solo se guardan los SMS que parezcan un cobro: un SMS personal se descarta sin guardarse.",
+  "_comentario_sms": "Además de estas apps, el lector permite SIEMPRE la app de SMS predeterminada del usuario (Telephony.Sms.getDefaultSmsPackage, ver AppSmsPredeterminada.kt), sea cual sea. Esta lista es el respaldo: Mensajes de Google (encontrado con el modo descubrimiento en el Xiaomi de pruebas), Truecaller, Mensajes de Samsung y Mensajes de Xiaomi/MIUI (paquetes verificados en Google Play y en sysapps.bayton.org). Como de cualquier app, solo se guardan los SMS que parezcan un cobro: un SMS personal, una llamada perdida o una alerta de spam se descartan sin guardarse.",
   "apps_permitidas": [
-    { "paquete": "com.google.android.apps.messaging", "nombre": "Mensajes de Google (SMS)" }
+    { "paquete": "com.google.android.apps.messaging", "nombre": "Mensajes de Google (SMS)" },
+    { "paquete": "com.truecaller", "nombre": "Truecaller (SMS)" },
+    { "paquete": "com.samsung.android.messaging", "nombre": "Mensajes de Samsung (SMS)" },
+    { "paquete": "com.android.mms", "nombre": "Mensajes de Xiaomi/MIUI (SMS)" }
   ],
 
   "_ejemplo_apps_permitidas": [
@@ -18,5 +21,6 @@
 
   "_comentario_palabras": "Un texto parece un cobro si tiene un monto y alguna de estas palabras (sin tildes ni mayúsculas). Si tiene una palabra excluida, se descarta aunque tenga monto (por ejemplo, códigos de verificación).",
   "palabras_cobro": ["compra", "compraste", "pago", "pagaste", "debito", "transaccion"],
-  "palabras_excluidas": ["codigo", "clave", "otp", "contrasena"]
+  "_comentario_excluidas": "llamada, spam, estafa, call...: Truecaller también publica avisos de llamadas, llamadas perdidas y spam (con números de teléfono que parecen montos).",
+  "palabras_excluidas": ["codigo", "clave", "otp", "contrasena", "llamada", "llamadas", "llamando", "spam", "estafa", "call", "calling", "missed"]
 }
