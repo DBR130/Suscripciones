@@ -7,7 +7,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | Hito | Contenido | Estado |
 |---|---|---|
 | 1 | Lector nativo, cola local, canales con Flutter y pantalla de depuración | **Hecho** |
-| 2 | Parser en Dart: comercio, monto, moneda, fecha y banco | Pendiente |
+| 2 | Parser en Dart: comercio, monto, moneda, fecha y banco | **Hecho** |
 | 3 | Backend: pagos detectados y candidatos de suscripción | Pendiente |
 | 4 | Pantallas 03, 04, 05 y flujo B | Pendiente |
 
@@ -92,7 +92,9 @@ y en modo descubrimiento (solo debug) también `{tipo: descartada, paquete, moti
 |---|---|
 | `lector_notificaciones.dart` | Puente con la parte nativa. Fuera de Android (Chrome, tests) no hace nada. |
 | `notificacion_capturada.dart` | Modelos: notificación capturada, evento en vivo, estado y configuración. |
-| `depuracion_deteccion_page.dart` | Pantalla "Depuración: detección" (solo debug): estado, apps permitidas, eventos en vivo, cola y comando de simulación. Se abre desde Perfil. |
+| `depuracion_deteccion_page.dart` | Pantalla "Depuración: detección" (solo debug): estado, apps permitidas, eventos en vivo, cola con lo que extrae el parser y comando de simulación. Se abre desde Perfil. |
+| `parser_pagos.dart` | Parser (hito 2): de un texto de cobro saca banco, monto, moneda, comercio normalizado, fecha y medio. |
+| `catalogo_servicios.dart` | Nombres y alias del catálogo de guías (`GET /api/guias`) para reconocer servicios conocidos. |
 
 Al abrir la app y cada vez que vuelve a primer plano, `main.dart` llama a
 `sincronizar()`: pide reconectar el servicio si está detenido y recupera las
@@ -179,6 +181,87 @@ adb shell dumpsys notification | Select-String LectorNotificacionesService
 # Dar el acceso a notificaciones desde el PC (solo para pruebas)
 adb shell cmd notification allow_listener com.example.flutter_suscripciones/com.example.flutter_suscripciones.deteccion.LectorNotificacionesService
 ```
+
+## Parser (hito 2)
+
+`ParserPagos.interpretar(texto, titulo:, recibidaEn:)` devuelve un
+`InterpretacionPago`: un `PagoExtraido` o el motivo por el que **no es un
+cobro**. Es código Dart puro (sin Flutter ni red), probado en
+`test/deteccion_parser_test.dart` con los SMS reales de
+`test/fixtures/notificaciones_reales.json`.
+
+### Pasos
+
+1. **¿Es claramente otra cosa?** Se descarta si el texto (sin tildes ni
+   mayúsculas) tiene palabras de:
+
+   | Motivo | Palabras |
+   |---|---|
+   | código de verificación | código, clave, OTP, contraseña, verificación |
+   | dinero recibido | recibiste, recibió, te enviaron, te envió, te consignaron, consignación, abono |
+   | transferencia | transferiste, transferencia, enviaste |
+   | recarga | recarga, recargaste, recargar |
+   | retiro de dinero | retiro, retiraste |
+   | publicidad | aprovecha, descuento, promoción, oferta, sorteo, participa, gana |
+
+2. **Banco.** Por el título de la notificación, el remitente al inicio del
+   texto ("Bancolombia: …", "NEQUI: …") o el texto. Bancos reconocidos:
+   Bancolombia, Nequi, Davivienda, Daviplata, BBVA, Banco de Bogotá y
+   Scotiabank Colpatria. **Sin banco conocido no hay cobro** (un SMS personal
+   con "te pagué 15.000" no cuenta).
+3. **Forma del cobro:** "compraste / pagaste / compra / pago / débito / realizaste
+   una compra" + (por/de) + **monto** + "en"/"a" + **comercio**. El comercio
+   termina en " con tu", " desde", ", ", " el <fecha>", un punto final o el
+   fin del texto.
+4. **Monto y moneda.** "$19.900,00" → 19900, "$26.900" → 26900, "68.139,27" →
+   68139.27, "COP 26,900.00" → 26900, "USD 20.00" → 20 USD. Si hay punto y coma,
+   el último es el decimal; si hay uno solo, es de miles cuando lo siguen
+   grupos de 3 dígitos y decimal cuando lo siguen 1 o 2. Sin "USD"/"US$" se
+   asume COP. Un número ambiguo ("12.3456") no se adivina.
+5. **Fecha.** "el 23/10/2026 a las 07:20", "23/10/26 18:05" o solo la fecha. Si
+   no la trae, o es imposible (31/02), se usa la hora de llegada de la
+   notificación (`fechaDelMensaje = false`).
+6. **Medio:** "T.Deb", "T.Cred", "tarjeta de crédito"… **sin los dígitos** de la
+   tarjeta. Los teléfonos del mensaje tampoco se guardan en ningún campo.
+7. **Comercio normalizado:**
+   - Se quitan prefijos de pasarelas: `GOOGLE *`, `APPLE.COM/BILL`, `PAYPAL *`,
+     `EBANX`. Si no queda nada ("APPLE.COM/BILL" solo), el comercio es la
+     pasarela (Apple).
+   - "SUB" (o "suscripción", "subscription") marca `indicaSuscripcion` y se
+     quita del nombre.
+   - Se busca en el catálogo de guías, igual que `buscarGuia` del backend
+     (palabras completas, gana el alias más largo): "NETFLIX.COM",
+     "Netflix*Bogota" y "NETFLIX INC" → **Netflix**; "ANTHROPIC* CLAUDE SUB" →
+     **Claude**. Si lo encuentra, `servicio` es el nombre del catálogo.
+   - Si no está en el catálogo, se deja legible: sin ".COM", "INC", "SAS", sin
+     la ciudad después de "*", y con mayúscula inicial ("DIDI FOOD" →
+     "Didi Food"). `servicio` queda en null: **compra normal**.
+
+**Claude** (alias "Claude Pro", "Claude Max", "Anthropic") se agregó al
+catálogo (`backend/db/guias.json`) como servicio conocido, con una guía de
+cancelación general. En una BD que ya existía hay que cargarlo con
+`npm run db:guias`.
+
+### Los 3 ejemplos reales
+
+| SMS | Banco | Monto | Comercio | Fecha | Servicio |
+|---|---|---|---|---|---|
+| Bancolombia: Compraste $19.900,00 en GOOGLE *Crunchyroll con tu T.Deb *0000, el 23/10/2026 a las 07:20. Si tienes dudas… | Bancolombia | 19.900 COP | Crunchyroll | 23/10/2026 07:20 (del mensaje) | Crunchyroll |
+| NEQUI: Pagaste 68.139,27 en ANTHROPIC* CLAUDE SUB | Nequi | 68.139,27 COP | Claude (SUB) | llegada | Claude |
+| Bancolombia: Compraste $18.900,00 en DIDI FOOD con tu T.Deb *0000, el 30/10/2026 a las 13:10. | Bancolombia | 18.900 COP | Didi Food | 30/10/2026 13:10 (del mensaje) | ninguno (compra normal) |
+
+El tercero se interpreta bien, pero no es un servicio del catálogo. Que un solo
+pago así **no cree un candidato de suscripción** lo decide el backend en el
+hito 3 (hacen falta pagos repetidos, o un servicio conocido).
+
+### Decisiones del parser
+
+- **Conservador:** ante la duda, "no es un cobro". Es peor inventar una
+  suscripción que perder un cobro (el usuario siempre puede agregarla a mano).
+- **Solo bancos conocidos.** Evita que un SMS de spam con "Compraste $… en …"
+  pase como cobro. Para agregar un banco basta una línea en `_bancos`.
+- **El catálogo viene del backend.** Así hay una sola lista de servicios y
+  alias. Sin conexión, el parser funciona igual, pero no reconoce servicios.
 
 ## Privacidad (RNF01, Habeas Data, Ley 1581 de 2012)
 
@@ -343,9 +426,51 @@ adb shell "cmd notification cancel pago1"
 4. Agrégalo a `apps_permitidas` en `res/raw/deteccion_apps.json`, recompila y
    repite: ahora debe salir como **GUARDADA** (si es un cobro).
 
+## Cómo probar (hito 2)
+
+1. Si la BD ya existía, carga Claude en el catálogo: en `backend/`,
+   `npm run db:guias`. Arranca el backend y `adb reverse tcp:3000 tcp:3000`.
+2. Lanza la app en debug en el Xiaomi, **inicia sesión** (el catálogo se pide
+   con la sesión) y entra a **Perfil → Depuración: detección**. En "Apps
+   permitidas" debe decir *Catálogo de servicios: 20 (de /api/guias)*.
+3. Toca **Vaciar cola**: la cola no guarda dos veces el mismo texto, y las
+   pruebas del hito 1 usaban algunos de estos.
+4. Simula los 3 ejemplos (PowerShell):
+
+```powershell
+# 1) Bancolombia, Crunchyroll (con los teléfonos del mensaje real)
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' real1 'Bancolombia: Compraste `$19.900,00 en GOOGLE *Crunchyroll con tu T.Deb *0000, el 23/10/2026 a las 07:20. Si tienes dudas, encuentranos aqui: 6045109095 o 018000931987. Estamos cerca.'"
+
+# 2) Nequi, Claude, sin fecha
+adb shell "cmd notification post -S bigtext -t 'Nequi' real2 'NEQUI: Pagaste 68.139,27 en ANTHROPIC* CLAUDE SUB'"
+
+# 3) Bancolombia, DiDi Food (compra normal)
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' real3 'Bancolombia: Compraste `$18.900,00 en DIDI FOOD con tu T.Deb *0000, el 30/10/2026 a las 13:10.'"
+```
+
+En Git Bash, cambia `` `$ `` por `\$`.
+
+5. Debajo de cada entrada de "Cola guardada" debe aparecer:
+
+| Notificación | Lo que muestra |
+|---|---|
+| real1 | Banco Bancolombia · Monto 19.900 COP · Comercio *Crunchyroll (servicio conocido)* · Original GOOGLE *Crunchyroll · Fecha 23/10/2026 07:20 (del mensaje) · Medio T.Deb |
+| real2 | Banco Nequi · Monto 68.139,27 COP · Comercio *Claude (servicio conocido)* · Fecha = hora en que llegó (de llegada) · Indica suscripción (SUB) |
+| real3 | Banco Bancolombia · Monto 18.900 COP · Comercio *Didi Food (no está en el catálogo)* · Fecha 30/10/2026 13:10 (del mensaje) |
+
+Más pruebas: cualquier texto que pase el filtro nativo pero no el parser
+muestra **"No es un cobro (motivo)"**:
+
+```powershell
+# Pasa el filtro nativo (tiene "pago" y monto) pero no es de un banco: no es un cobro
+adb shell "cmd notification post -S bigtext -t 'Juan' real4 'Ya te hice el pago de 15.000 del almuerzo'"
+
+# Formato USD
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' real5 'Bancolombia: Compraste USD 20.00 en NETFLIX.COM con tu T.Cred *0000'"
+```
+
 ## Pendiente para los siguientes hitos
 
-- Hito 2: parser por banco y normalización del comercio con el catálogo de guías.
 - Hito 3: endpoints `/api/detecciones/*` y tablas de la migración 006.
 - Hito 4: pantallas 03, 04 y 05, lectura de notificaciones activas
   (`getActiveNotifications`), flujo B e interruptor real en Perfil.
