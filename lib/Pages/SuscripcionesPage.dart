@@ -16,6 +16,8 @@ import '../widgets/app_shell.dart';
 import '../widgets/campana_avisos.dart';
 import '../widgets/estado_vacio.dart';
 import '../widgets/logo_servicio.dart';
+import '../widgets/movimiento.dart';
+import '../widgets/presionable.dart';
 import '../widgets/suscripcion_card.dart';
 
 /// Lista de suscripciones (pantalla 08 del diseño, pestaña 2).
@@ -44,6 +46,14 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
   void initState() {
     super.initState();
     _cargar();
+    // Al volver del formulario abierto con el botón "+" de la barra.
+    AppShell.cambios.addListener(_cargar);
+  }
+
+  @override
+  void dispose() {
+    AppShell.cambios.removeListener(_cargar);
+    super.dispose();
   }
 
   Future<void> _cargar() async {
@@ -66,8 +76,10 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
     }
   }
 
-  Future<void> _abrir(String ruta) async {
-    await context.push(ruta);
+  /// [extra]: la suscripción, para que el detalle la muestre al instante
+  /// (y el logo vuele desde la tarjeta).
+  Future<void> _abrir(String ruta, [Object? extra]) async {
+    await context.push(ruta, extra: extra);
     if (mounted) _cargar();
   }
 
@@ -140,20 +152,22 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
                     ],
                   ],
                   if (_todas == null && _error == null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 48),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
+                    const EsqueletoTarjetas(cantidad: 5, titulo: false)
                   else if (_todas != null && activas.isEmpty)
                     const EstadoVacio(
                       titulo: 'Tu lista está vacía',
                       texto: 'Las suscripciones que agregues aparecerán aquí.',
                     )
                   else
-                    for (final s in activas)
+                    for (final (i, s) in activas.indexed)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 11),
-                        child: _Fila(s, onAbrir: () => _abrir(Routers.detalle(s.id!))),
+                        child: AparicionEscalonada(
+                          indice: i,
+                          child: Presionable(
+                            child: _Fila(s, onAbrir: () => _abrir(Routers.detalle(s.id!), s)),
+                          ),
+                        ),
                       ),
                   if (_todas != null) ...[
                     const SizedBox(height: 3),
@@ -185,7 +199,7 @@ class _Fila extends StatelessWidget {
       destacada: esDestacada(s),
       child: Row(
         children: [
-          LogoServicio(s.nombreServicio),
+          LogoServicio(s.nombreServicio, heroTag: s.id == null ? null : LogoServicio.tagHero(s.id!)),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

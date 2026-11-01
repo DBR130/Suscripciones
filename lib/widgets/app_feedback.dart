@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../Common/AppTheme.dart';
 import 'app_text_field.dart';
@@ -79,7 +80,10 @@ Future<bool> confirmarAccion(
       texto: texto,
       boton: boton,
       peligro: peligro,
-      onConfirmar: () async => Navigator.pop(context, true),
+      onConfirmar: () async {
+        HapticFeedback.lightImpact();
+        Navigator.pop(context, true);
+      },
     ),
   );
   return ok ?? false;

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
 import '../widgets/app_marca.dart';
+import '../widgets/presionable.dart';
 
 /// Bienvenida (pantalla 01 del diseño): 3 slides que se pasan con el dedo o
 /// con "Siguiente". Se muestra en "/" cuando no hay sesión.
@@ -86,9 +87,11 @@ class _BienvenidaPageState extends State<BienvenidaPage> {
                     const SizedBox(height: 22),
                     SizedBox(
                       width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _siguiente,
-                        child: Text(_esUltimo ? 'Crear mi cuenta' : 'Siguiente'),
+                      child: Presionable(
+                        child: FilledButton(
+                          onPressed: _siguiente,
+                          child: Text(_esUltimo ? 'Crear mi cuenta' : 'Siguiente'),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 10),

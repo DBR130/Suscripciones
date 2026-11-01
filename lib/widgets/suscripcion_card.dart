@@ -104,7 +104,7 @@ class SuscripcionCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                LogoServicio(s.nombreServicio),
+                LogoServicio(s.nombreServicio, heroTag: s.id == null ? null : LogoServicio.tagHero(s.id!)),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(

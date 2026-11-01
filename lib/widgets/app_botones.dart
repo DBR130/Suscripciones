@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../Common/AppTheme.dart';
+import 'presionable.dart';
 
 /// Botón píldora con borde (acciones secundarias). Con [ambar] se usa para
 /// acciones de cancelar o eliminar, como en el diseño.
@@ -31,13 +32,15 @@ class AppBotonSecundario extends StatelessWidget {
       textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
     );
     if (icon == null) {
-      return OutlinedButton(onPressed: onPressed, style: style, child: Text(texto));
+      return Presionable(child: OutlinedButton(onPressed: onPressed, style: style, child: Text(texto)));
     }
-    return OutlinedButton.icon(
-      onPressed: onPressed,
-      style: style,
-      icon: Icon(icon, size: 18),
-      label: Text(texto),
+    return Presionable(
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        style: style,
+        icon: Icon(icon, size: 18),
+        label: Text(texto),
+      ),
     );
   }
 }
@@ -99,17 +102,19 @@ class AppBotonPunteado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _BordePunteado(),
-      child: TextButton(
-        onPressed: onPressed,
-        style: TextButton.styleFrom(
-          foregroundColor: AppColors.textSoft,
-          shape: const StadiumBorder(),
-          minimumSize: const Size.fromHeight(46),
-          textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+    return Presionable(
+      child: CustomPaint(
+        painter: _BordePunteado(),
+        child: TextButton(
+          onPressed: onPressed,
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.textSoft,
+            shape: const StadiumBorder(),
+            minimumSize: const Size.fromHeight(46),
+            textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          ),
+          child: Text(texto),
         ),
-        child: Text(texto),
       ),
     );
   }

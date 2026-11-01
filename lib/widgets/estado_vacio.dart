@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../Common/AppTheme.dart';
+import 'presionable.dart';
 
 /// Estado vacío del diseño: ícono "+" en un cuadro, título, texto y botón.
 class EstadoVacio extends StatelessWidget {
@@ -50,7 +51,7 @@ class EstadoVacio extends StatelessWidget {
           ),
           if (boton != null) ...[
             const SizedBox(height: 18),
-            FilledButton(onPressed: onPressed, child: Text(boton!)),
+            Presionable(child: FilledButton(onPressed: onPressed, child: Text(boton!))),
           ],
         ],
       ),

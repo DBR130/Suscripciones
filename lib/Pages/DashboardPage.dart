@@ -22,6 +22,8 @@ import '../widgets/app_marca.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/campana_avisos.dart';
 import '../widgets/estado_vacio.dart';
+import '../widgets/movimiento.dart';
+import '../widgets/presionable.dart';
 import '../widgets/suscripcion_card.dart';
 
 /// Dashboard (pantalla 07 del diseño): gasto del mes, próximos 7 días, el
@@ -60,6 +62,14 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     _cargar();
+    // Al volver del formulario abierto con el botón "+" de la barra.
+    AppShell.cambios.addListener(_cargar);
+  }
+
+  @override
+  void dispose() {
+    AppShell.cambios.removeListener(_cargar);
+    super.dispose();
   }
 
   Future<void> _cargar() async {
@@ -87,8 +97,10 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   /// Abre otra pantalla y al volver recarga, por si algo cambió.
-  Future<void> _abrir(String ruta) async {
-    await context.push(ruta);
+  /// [extra]: la suscripción, para que el detalle la muestre al instante
+  /// (y el logo vuele desde la tarjeta).
+  Future<void> _abrir(String ruta, [Object? extra]) async {
+    await context.push(ruta, extra: extra);
     if (mounted) _cargar();
   }
 
@@ -101,13 +113,20 @@ class _DashboardPageState extends State<DashboardPage> {
     final despues = suscripciones.where((s) => s.diasHasta(hoy) > _ventanaDias).toList();
     final diasGlobales = _resumen?.diasAnticipacion ?? 3;
 
+    // Las tarjetas aparecen escalonadas, en el orden en que se muestran.
+    var orden = 0;
     Widget tarjeta(Suscripcion s) => Padding(
           padding: const EdgeInsets.only(bottom: 11),
-          child: SuscripcionCard(
-            suscripcion: s,
-            hoy: hoy,
-            diasGlobales: diasGlobales,
-            onVerDetalle: () => _abrir(Routers.detalle(s.id!)),
+          child: AparicionEscalonada(
+            indice: orden++,
+            child: Presionable(
+              child: SuscripcionCard(
+                suscripcion: s,
+                hoy: hoy,
+                diasGlobales: diasGlobales,
+                onVerDetalle: () => _abrir(Routers.detalle(s.id!), s),
+              ),
+            ),
           ),
         );
 
@@ -169,10 +188,7 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
     if (_suscripciones == null) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 48),
-        child: Center(child: CircularProgressIndicator()),
-      );
+      return const EsqueletoTarjetas();
     }
     if (_suscripciones!.isEmpty) {
       return EstadoVacio(
@@ -317,8 +333,10 @@ class _Encabezado extends StatelessWidget {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(
-                    Formato.moneda(principal?.gastoMensual ?? 0, principal?.moneda ?? 'COP'),
+                  // El total "cuenta" hasta su valor al cargar.
+                  child: NumeroAnimado(
+                    valor: principal?.gastoMensual ?? 0,
+                    formato: (v) => Formato.moneda(v, principal?.moneda ?? 'COP'),
                     style: const TextStyle(
                       color: AppColors.text,
                       fontSize: 38,

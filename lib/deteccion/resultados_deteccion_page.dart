@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
@@ -101,6 +102,7 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   }
 
   Future<void> _terminar() async {
+    HapticFeedback.lightImpact();
     final candidatos = _candidatos ?? const <CandidatoSuscripcion>[];
     setState(() {
       _guardando = true;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -13,6 +14,7 @@ import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/presionable.dart';
 
 /// Abre una URL en el navegador del celular (fuera de la app).
 Future<bool> abrirEnNavegador(Uri url) =>
@@ -72,6 +74,7 @@ class _GuiaCancelacionPageState extends State<GuiaCancelacionPage> {
   }
 
   Future<void> _confirmar() async {
+    HapticFeedback.lightImpact();
     final nombre = _datos!.nombreServicio;
     setState(() {
       _confirmando = true;
@@ -178,15 +181,17 @@ class _GuiaCancelacionPageState extends State<GuiaCancelacionPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    FilledButton(
-                      onPressed: _confirmando ? null : _confirmar,
-                      child: _confirmando
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text('Ya cancelé, confirmar'),
+                    Presionable(
+                      child: FilledButton(
+                        onPressed: _confirmando ? null : _confirmar,
+                        child: _confirmando
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text('Ya cancelé, confirmar'),
+                      ),
                     ),
                     const SizedBox(height: 4),
                     TextButton(

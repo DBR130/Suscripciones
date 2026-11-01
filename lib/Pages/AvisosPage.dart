@@ -13,6 +13,7 @@ import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/estado_vacio.dart';
+import '../widgets/movimiento.dart';
 
 /// "hoy", "ayer" o "14 sep" (fecha de cada aviso).
 String fechaRelativa(DateTime fecha, DateTime hoy) {
@@ -119,10 +120,7 @@ class _AvisosPageState extends State<AvisosPage> {
                       },
                     ),
                   ] else if (_avisos == null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 48),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
+                    const EsqueletoTarjetas(cantidad: 3, titulo: false)
                   else if (_avisos!.isEmpty)
                     const EstadoVacio(
                       titulo: 'No tienes avisos por ahora',

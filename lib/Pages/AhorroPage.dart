@@ -13,6 +13,7 @@ import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/estado_vacio.dart';
+import '../widgets/movimiento.dart';
 import '../widgets/logo_servicio.dart';
 
 /// Ahorro (pantalla 12 del diseño) con datos reales de GET /api/ahorro.
@@ -88,10 +89,7 @@ class _AhorroPageState extends State<AhorroPage> {
                       },
                     ),
                   ] else if (ahorro == null)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 48),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
+                    const EsqueletoTarjetas(cantidad: 3, titulo: false)
                   else ...[
                     for (final serie in ahorro.evolucion)
                       if (serie.moneda == 'COP' || serie.tieneDatos) ...[

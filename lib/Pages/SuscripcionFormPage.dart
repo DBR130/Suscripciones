@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
@@ -13,6 +14,7 @@ import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/app_text_field.dart';
+import '../widgets/presionable.dart';
 
 /// Agregar o editar una suscripción (pantalla 13 del diseño).
 /// Con [inicial] edita esa suscripción (y permite eliminarla); sin ella,
@@ -111,6 +113,7 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
     FocusScope.of(context).unfocus();
     setState(() => _errorServidor = null);
     if (!_formKey.currentState!.validate()) return;
+    HapticFeedback.lightImpact();
 
     final suscripcion = Suscripcion(
       id: widget.inicial?.id,
@@ -330,15 +333,17 @@ class _SuscripcionFormPageState extends State<SuscripcionFormPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  FilledButton(
-                    onPressed: _guardando ? null : _guardar,
-                    child: _guardando
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(_editando ? 'Guardar cambios' : 'Guardar suscripción'),
+                  Presionable(
+                    child: FilledButton(
+                      onPressed: _guardando ? null : _guardar,
+                      child: _guardando
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : Text(_editando ? 'Guardar cambios' : 'Guardar suscripción'),
+                    ),
                   ),
                   if (_editando) ...[
                     const SizedBox(height: 4),

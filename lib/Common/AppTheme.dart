@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../widgets/movimiento.dart';
+
 /// Paleta del mockup 07-flat-azul-oscuro.html.
 class AppColors {
   AppColors._();
@@ -84,6 +86,14 @@ class AppTheme {
     // Inter, incluida en assets/fonts (ver pubspec.yaml).
     fontFamily: 'Inter',
     scaffoldBackgroundColor: AppColors.bg,
+    // Fundido con desplazamiento corto entre pantallas (widgets/movimiento.dart).
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: TransicionSuave(),
+        TargetPlatform.iOS: TransicionSuave(),
+        TargetPlatform.windows: TransicionSuave(),
+      },
+    ),
     colorScheme: const ColorScheme.dark(
       primary: AppColors.primary,
       onPrimary: Colors.white,

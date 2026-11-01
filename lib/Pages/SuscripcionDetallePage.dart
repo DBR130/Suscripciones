@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
@@ -14,6 +15,7 @@ import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/app_shell.dart';
+import '../widgets/movimiento.dart';
 import '../widgets/logo_servicio.dart';
 
 /// Detalle de una suscripción (pantalla 09 del diseño): datos, historial de
@@ -26,12 +28,17 @@ class SuscripcionDetallePage extends StatefulWidget {
     required this.authService,
     required this.suscripcionService,
     this.recordatorios,
+    this.inicial,
   });
 
   final int id;
   final AuthService authService;
   final SuscripcionService suscripcionService;
   final RecordatoriosService? recordatorios;
+
+  /// La suscripción de la tarjeta tocada: su logo y nombre aparecen al
+  /// instante (Hero) mientras carga el resto.
+  final Suscripcion? inicial;
 
   @override
   State<SuscripcionDetallePage> createState() => _SuscripcionDetallePageState();
@@ -94,6 +101,7 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
   Future<void> _cambiarEstado(EstadoSuscripcion estado, String mensaje) {
     return _accion(() async {
       final s = await widget.suscripcionService.cambiarEstado(widget.id, estado);
+      HapticFeedback.lightImpact();
       if (!mounted) return;
       _reemplazar(s);
       mostrarToast(context, mensaje);
@@ -142,13 +150,42 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
           children: [
             AppHeader(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-              child: AppBotonVolver(onPressed: () => context.pop()),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppBotonVolver(onPressed: () => context.pop()),
+                  if (widget.inicial != null) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        LogoServicio(
+                          widget.inicial!.nombreServicio,
+                          size: 52,
+                          heroTag: LogoServicio.tagHero(widget.id),
+                        ),
+                        const SizedBox(width: 13),
+                        Expanded(
+                          child: Text(
+                            widget.inicial!.nombreServicio,
+                            style: const TextStyle(
+                              color: AppColors.text,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
             ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: _error == null
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const EsqueletoTarjetas(cantidad: 3, titulo: false)
                     : Column(children: [BannerError(_error!)]),
               ),
             ),
@@ -182,7 +219,7 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    LogoServicio(s.nombreServicio, size: 52),
+                    LogoServicio(s.nombreServicio, size: 52, heroTag: LogoServicio.tagHero(widget.id)),
                     const SizedBox(width: 13),
                     Expanded(
                       child: Column(

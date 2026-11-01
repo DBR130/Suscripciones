@@ -4,10 +4,16 @@ import 'package:flutter/material.dart';
 /// "Disney Plus" → "DP"). El color sale del nombre, así cada servicio
 /// conserva siempre el mismo.
 class LogoServicio extends StatelessWidget {
-  const LogoServicio(this.nombre, {super.key, this.size = 44});
+  const LogoServicio(this.nombre, {super.key, this.size = 44, this.heroTag});
 
   final String nombre;
   final double size;
+
+  /// Con valor, el logo "vuela" de la tarjeta al detalle (Hero).
+  final Object? heroTag;
+
+  /// Etiqueta del Hero de una suscripción (tarjeta → detalle).
+  static String tagHero(int id) => 'logo-suscripcion-$id';
 
   // Tonos de marca del diseño.
   static const List<Color> _colores = [
@@ -36,7 +42,7 @@ class LogoServicio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final indice = nombre.trim().toLowerCase().codeUnits.fold(0, (a, b) => a + b) % _colores.length;
-    return Container(
+    final logo = Container(
       width: size,
       height: size,
       alignment: Alignment.center,
@@ -54,5 +60,8 @@ class LogoServicio extends StatelessWidget {
         ),
       ),
     );
+    if (heroTag == null) return logo;
+    // Material transparente: el texto conserva su estilo mientras vuela.
+    return Hero(tag: heroTag!, child: Material(type: MaterialType.transparency, child: logo));
   }
 }

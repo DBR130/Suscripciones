@@ -288,6 +288,8 @@ class Routers {
               path: '/suscripcion/:id',
               builder: (context, state) => SuscripcionDetallePage(
                 id: _id(state),
+                // Desde una tarjeta llega la suscripción: se muestra mientras carga.
+                inicial: state.extra is Suscripcion ? state.extra as Suscripcion : null,
                 authService: authService,
                 suscripcionService: suscripcionService,
                 recordatorios: recordatorios,
