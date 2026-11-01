@@ -5,6 +5,8 @@
 //
 // SOLO toca a ese usuario: lo borra (con todos SUS datos, por ON DELETE
 // CASCADE) y lo vuelve a crear. Ningún otro usuario se modifica.
+import crypto from 'node:crypto';
+
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
@@ -43,6 +45,23 @@ const CANCELADAS = [
 ];
 
 const MESES_HISTORIAL = 6;
+
+// Detección automática (pantalla 05): pagos detectados en notificaciones y
+// los candidatos pendientes que generaron. Claude es un servicio conocido;
+// Bodytech se detectó por sus cobros mensuales; DiDi Food es una compra
+// normal y no genera candidato. haceDias: cuándo llegó cada cobro.
+const PAGOS_DETECTADOS = [
+  { comercio: 'ANTHROPIC* CLAUDE SUB', normalizado: 'Claude', banco: 'Nequi', monto: 68139.27, haceDias: 33 },
+  { comercio: 'ANTHROPIC* CLAUDE SUB', normalizado: 'Claude', banco: 'Nequi', monto: 69850.5, haceDias: 3 },
+  { comercio: 'BODYTECH*CHAPINERO', normalizado: 'Bodytech', banco: 'Bancolombia', monto: 99900, haceMeses: 2 },
+  { comercio: 'BODYTECH*CHAPINERO', normalizado: 'Bodytech', banco: 'Bancolombia', monto: 99900, haceMeses: 1 },
+  { comercio: 'BODYTECH*CHAPINERO', normalizado: 'Bodytech', banco: 'Bancolombia', monto: 99900, haceDias: 4 },
+  { comercio: 'DIDI FOOD', normalizado: 'Didi Food', banco: 'Bancolombia', monto: 18900, haceDias: 2 },
+];
+const CANDIDATOS = [
+  { nombre: 'Claude', monto: 69850.5, banco: 'Nequi', conocido: true },
+  { nombre: 'Bodytech', monto: 99900, banco: 'Bancolombia', conocido: false },
+];
 
 /** Fechas de cobro mensual hacia atrás desde `proximo`, hasta `limite` (incluido). */
 function cobrosAnteriores(proximo, limite, hasta) {
@@ -129,6 +148,26 @@ export async function crearDemo(connectionString, hoy = hoyColombia()) {
         `INSERT INTO cancelaciones (suscripcion_id, fecha_cancelacion, ahorro_proyectado_anual)
          VALUES ($1, $2, $3)`,
         [id, fechaCancelacion, s.monto * 12],
+      );
+    }
+
+    const ultimoPago = {};
+    for (const [i, p] of PAGOS_DETECTADOS.entries()) {
+      const dia = p.haceMeses ? sumarMeses(sumarDias(hoy, -4), -p.haceMeses) : sumarDias(hoy, -p.haceDias);
+      ultimoPago[p.normalizado] = dia > (ultimoPago[p.normalizado] ?? '') ? dia : ultimoPago[p.normalizado];
+      await client.query(
+        `INSERT INTO pagos_detectados (usuario_id, comercio, comercio_normalizado, monto, moneda, fecha, banco, huella)
+         VALUES ($1, $2, $3, $4, 'COP', $5, $6, $7)`,
+        [usuario.id, p.comercio, p.normalizado, p.monto, `${dia}T10:15:00`, p.banco,
+          crypto.createHash('sha256').update(`demo-${i}`).digest('hex')],
+      );
+    }
+    for (const c of CANDIDATOS) {
+      await client.query(
+        `INSERT INTO candidatos_suscripcion (usuario_id, comercio_normalizado, monto, moneda, frecuencia_estimada,
+           es_servicio_conocido, banco, fecha_ultimo_pago)
+         VALUES ($1, $2, $3, 'COP', 'mensual', $4, $5, $6)`,
+        [usuario.id, c.nombre, c.monto, c.conocido, c.banco, ultimoPago[c.nombre]],
       );
     }
 

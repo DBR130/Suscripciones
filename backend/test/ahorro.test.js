@@ -156,5 +156,10 @@ describe('GET /api/ahorro y usuario demo', () => {
 
     const avisos = (await request(app).get('/api/avisos').set(demo).expect(200)).body.avisos;
     assert.ok(avisos.some((a) => a.tipo === 'cambio_precio'));
+
+    // Pantalla 05: dos candidatos pendientes, con sus pagos detectados.
+    const candidatos = (await request(app).get('/api/detecciones/candidatos').set(demo).expect(200)).body.candidatos;
+    assert.deepEqual(candidatos.map((c) => [c.comercio_normalizado, c.num_pagos]).sort(), [['Bodytech', 3], ['Claude', 2]]);
+    assert.equal(candidatos.find((c) => c.comercio_normalizado === 'Claude').fecha_ultimo_pago, sumarDias(hoyColombia(), -3));
   });
 });
