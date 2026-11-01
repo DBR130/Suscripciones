@@ -8,7 +8,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 |---|---|---|
 | 1 | Lector nativo, cola local, canales con Flutter y pantalla de depuración | **Hecho** |
 | 2 | Parser en Dart: comercio, monto, moneda, fecha y banco | **Hecho** |
-| 3 | Backend: pagos detectados y candidatos de suscripción | Pendiente |
+| 3 | Backend: pagos detectados y candidatos de suscripción | **Hecho** |
 | 4 | Pantallas 03, 04, 05 y flujo B | Pendiente |
 
 ## Arquitectura
@@ -263,6 +263,89 @@ hito 3 (hacen falta pagos repetidos, o un servicio conocido).
 - **El catálogo viene del backend.** Así hay una sola lista de servicios y
   alias. Sin conexión, el parser funciona igual, pero no reconoce servicios.
 
+## Backend de detecciones (hito 3)
+
+Archivos: `backend/db/migraciones/006_detecciones.sql`,
+`backend/src/services/detecciones.js` (reglas),
+`backend/src/controllers/detecciones.controller.js`,
+`backend/src/routes/detecciones.routes.js` y
+`backend/test/detecciones.test.js`.
+
+### Tablas (migración 006)
+
+| Tabla | Qué guarda |
+|---|---|
+| `pagos_detectados` | Cada cobro ya interpretado: comercio (como venía y normalizado), monto, moneda, fecha, banco, huella y, si corresponde, la suscripción a la que pertenece. `UNIQUE (usuario_id, huella)`: la misma notificación nunca se registra dos veces |
+| `candidatos_suscripcion` | Posibles suscripciones: comercio, monto, moneda, frecuencia estimada, estado (`pendiente`, `confirmada`, `descartada`), suscripción creada, si es un servicio conocido, banco y fecha del último pago. Un solo candidato por usuario y comercio (sin importar mayúsculas) |
+
+La huella es única **por usuario** y no global: así nadie puede averiguar,
+enviando una huella, si otro usuario ya la registró.
+
+### Endpoints (todos con sesión)
+
+| Método y ruta | Qué hace |
+|---|---|
+| `POST /api/detecciones/pagos` | Recibe `{pagos: [...]}` (máx. 100) y devuelve `{resultados, candidatos_nuevos}` |
+| `GET /api/detecciones/candidatos` | Candidatos pendientes (`?estado=pendiente,confirmada,descartada` para otros), con `num_pagos` |
+| `POST /api/detecciones/candidatos/:id/confirmar` | Crea la suscripción. Cuerpo opcional con los datos corregidos (mismos campos que una suscripción); lo que falte sale del candidato. 201 `{suscripcion, candidato, pagos_enlazados}` |
+| `POST /api/detecciones/candidatos/:id/descartar` | El comercio no se vuelve a proponer. `{candidato}` |
+
+Cada pago del lote:
+
+```json
+{
+  "huella": "<SHA-256 en hexadecimal, 64 caracteres>",
+  "comercio": "GOOGLE *Crunchyroll",
+  "comercio_normalizado": "Crunchyroll",
+  "monto": 19900,
+  "moneda": "COP",
+  "fecha": "2026-10-23T07:20:00",
+  "banco": "Bancolombia"
+}
+```
+
+- `fecha` es la hora local de Colombia, **sin zona** (como
+  `DateTime.toIso8601String()` en Dart, que también se acepta con milisegundos).
+- Si un pago no es válido, se rechaza **todo el lote** (400) y no se guarda nada.
+- **Privacidad:** si un pago trae `texto` o `titulo`, se rechaza con 400. El
+  texto de la notificación nunca debe llegar al servidor.
+- Confirmar o descartar un candidato que ya no está pendiente: 409. Uno de
+  otro usuario: 404 (como en suscripciones, no se revela que existe).
+
+### Reglas de cada pago
+
+Los pagos del lote se procesan en orden de fecha, en una transacción.
+
+| Orden | Caso | Condición | Qué pasa | `resultado` |
+|---|---|---|---|---|
+| 0 | Repetido | La huella ya estaba | Nada | `repetido` |
+| 1 | **a)** Suscripción existente | El comercio coincide con una suscripción activa o marcada para cancelar del usuario: uno contiene al otro ("Netflix" y "Netflix Estándar") o llevan a la misma guía ("Max" y "HBO Max") | Se enlaza el pago y se agrega al historial. Si el monto cambió **más de 5 %**, se registra en `cambios_precio` y se actualiza el monto (RF08 automático) | `suscripcion_existente` |
+| 2 | **b)** Servicio conocido | El comercio está en el catálogo de guías (incluye Claude) | Candidato pendiente desde el primer pago, frecuencia mensual (o la estimada si ya hay varios pagos). Se guarda con el nombre del catálogo | `candidato_nuevo` / `candidato_actualizado` |
+| 3 | **c)** Comercio desconocido | 2 o más pagos al mismo comercio, en la misma moneda, con montos a ±10 % y **todos** los intervalos semanales (6-8 días), mensuales (26-35) o anuales (355-375) | Candidato pendiente con esa frecuencia | `candidato_nuevo` / `candidato_actualizado` |
+| 4 | Compra normal | Comercio desconocido sin esa periodicidad (DiDi Food con un pago) | Solo queda el pago registrado | `compra_normal` |
+
+Además: si el comercio ya fue **descartado**, `comercio_descartado` (no se vuelve
+a proponer); si ya se **confirmó** y su suscripción existe, `ya_confirmado`. Si
+el usuario borró esa suscripción, el comercio se vuelve a proponer.
+`candidatos_nuevos` trae los candidatos creados en este envío: la app los usará
+para la notificación del flujo B (hito 4).
+
+Detalles del caso a):
+
+- **Tolerancia de 5 %**: un cobro en USD que el banco convierte a COP (Claude
+  por Nequi) varía un poco cada mes por la tasa de cambio; eso no es un cambio
+  de precio. 26.900 → 29.900 (11 %) sí lo es.
+- Si el proceso automático de cobros ya registró ese cobro (±3 días), no se
+  duplica en el historial.
+- Un pago en otra moneda que la suscripción solo se enlaza: `historial_pagos`
+  no guarda moneda.
+- Un pago viejo que llega después de uno más nuevo no cambia el precio.
+
+Al **confirmar**: la suscripción se crea con `origen = 'notificacion'`,
+`fecha_deteccion` = cuando se creó el candidato y, si no se envía, el próximo
+cobro = el primero después de hoy contando desde el último pago. Los pagos
+detectados de ese comercio se enlazan y pasan al historial.
+
 ## Privacidad (RNF01, Habeas Data, Ley 1581 de 2012)
 
 La detección trata datos personales (pagos y, de paso, cualquier notificación
@@ -304,12 +387,12 @@ cuando se identifiquen sus paquetes (no se inventan nombres de paquete).
 
 | Dónde | Qué | Límites |
 |---|---|---|
-| Cola: `filesDir/deteccion/cola.json` (almacenamiento interno, solo SubTrack puede leerlo) | Solo las notificaciones que parecen cobros: huella, paquete, nombre de la app, título (el remitente, p. ej. "Bancolombia"), texto y hora de llegada | Máximo 200, se borran solas a los 30 días y al desinstalar. Desde el hito 3, también al enviarlas al backend |
+| Cola: `filesDir/deteccion/cola.json` (almacenamiento interno, solo SubTrack puede leerlo) | Solo las notificaciones que parecen cobros: huella, paquete, nombre de la app, título (el remitente, p. ej. "Bancolombia"), texto y hora de llegada | Máximo 200, se borran solas a los 30 días y al desinstalar. Desde el hito 4, también al enviarlas al backend |
 | SharedPreferences `subtrack_deteccion` | Hora de la última conexión, desconexión y notificación, y una palabra de resultado ("guardada", "descartada"…) | Sin paquete, título ni texto |
 
 El parser (hito 2) lee la cola en el mismo celular; no la copia a otro lado.
 
-### 4. Qué va al backend (hito 3)
+### 4. Qué va al backend (hitos 3 y 4)
 
 Solo los **campos extraídos** por el parser: banco, comercio normalizado,
 monto, moneda, fecha y una huella para no repetir pagos, con la sesión del
@@ -469,8 +552,78 @@ adb shell "cmd notification post -S bigtext -t 'Juan' real4 'Ya te hice el pago 
 adb shell "cmd notification post -S bigtext -t 'Bancolombia' real5 'Bancolombia: Compraste USD 20.00 en NETFLIX.COM con tu T.Cred *0000'"
 ```
 
+## Cómo probar (hito 3)
+
+El hito 3 es solo backend: se prueba llamando la API desde el PC. **Usa una
+cuenta de prueba**: confirmar un candidato crea una suscripción real en esa
+cuenta.
+
+1. Aplica la migración (solo agrega dos tablas; no cambia datos) y arranca el
+   backend, en `backend/`:
+
+```powershell
+npm run db:migrate   # debe mostrar + 006_detecciones.sql
+npm run db:guias     # si no lo hiciste en el hito 2 (Claude)
+npm run dev
+```
+
+2. En otra terminal de PowerShell, crea la cuenta de prueba y guarda el token:
+
+```powershell
+$api = "http://localhost:3000/api"
+$r = Invoke-RestMethod -Method Post "$api/auth/registro" -ContentType "application/json" -Body '{"nombre":"Prueba deteccion","correo":"deteccion@prueba.com","password":"secreta123"}'
+$h = @{ Authorization = "Bearer $($r.token)" }
+# Si la cuenta ya existe, inicia sesión en su lugar:
+# $r = Invoke-RestMethod -Method Post "$api/auth/login" -ContentType "application/json" -Body '{"correo":"deteccion@prueba.com","password":"secreta123"}'
+```
+
+3. Envía los 3 ejemplos reales, como los mandará la app:
+
+```powershell
+function Huella($t) { -join ([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($t)) | ForEach-Object { $_.ToString("x2") }) }
+$pagos = @(
+  @{ huella = Huella "real1"; comercio = "GOOGLE *Crunchyroll"; comercio_normalizado = "Crunchyroll"; monto = 19900; moneda = "COP"; fecha = "2026-10-23T07:20:00"; banco = "Bancolombia" },
+  @{ huella = Huella "real2"; comercio = "ANTHROPIC* CLAUDE SUB"; comercio_normalizado = "Claude"; monto = 68139.27; moneda = "COP"; fecha = "2026-10-28T10:15:00"; banco = "Nequi" },
+  @{ huella = Huella "real3"; comercio = "DIDI FOOD"; comercio_normalizado = "Didi Food"; monto = 18900; moneda = "COP"; fecha = "2026-10-30T13:10:00"; banco = "Bancolombia" }
+)
+$res = Invoke-RestMethod -Method Post "$api/detecciones/pagos" -Headers $h -ContentType "application/json" -Body (ConvertTo-Json @{ pagos = $pagos } -Depth 4)
+$res.resultados | Format-Table resultado, candidato_id, suscripcion_id
+$res.candidatos_nuevos | Format-Table id, comercio_normalizado, monto, frecuencia_estimada, es_servicio_conocido
+```
+
+   Esperado: Crunchyroll y Claude `candidato_nuevo` (servicios conocidos),
+   DiDi Food `compra_normal`.
+
+4. Repite el mismo envío: los 3 deben salir `repetido`.
+5. Lista, confirma y descarta:
+
+```powershell
+$c = (Invoke-RestMethod "$api/detecciones/candidatos" -Headers $h).candidatos
+$c | Format-Table id, comercio_normalizado, monto, num_pagos
+$crunchy = ($c | Where-Object comercio_normalizado -eq "Crunchyroll").id
+$claude = ($c | Where-Object comercio_normalizado -eq "Claude").id
+
+# Confirmar Crunchyroll con la categoría (los demás datos salen del candidato)
+Invoke-RestMethod -Method Post "$api/detecciones/candidatos/$crunchy/confirmar" -Headers $h -ContentType "application/json" -Body '{"categoria":"Streaming"}'
+
+# Descartar Claude
+Invoke-RestMethod -Method Post "$api/detecciones/candidatos/$claude/descartar" -Headers $h
+```
+
+   Crunchyroll debe aparecer en la app (con esa cuenta) con su pago del 23/10 en
+   el historial. Un nuevo pago de Claude saldrá `comercio_descartado`.
+
+6. Cambio de precio automático (caso a): un cobro de Crunchyroll más caro.
+
+```powershell
+$p = @{ huella = Huella "real4"; comercio = "GOOGLE *Crunchyroll"; comercio_normalizado = "Crunchyroll"; monto = 23900; moneda = "COP"; fecha = "2026-11-23T07:20:00"; banco = "Bancolombia" }
+(Invoke-RestMethod -Method Post "$api/detecciones/pagos" -Headers $h -ContentType "application/json" -Body (ConvertTo-Json @{ pagos = @($p) } -Depth 4)).resultados
+```
+
+   Esperado: `suscripcion_existente` con `cambio_precio: true`. En la app, el
+   detalle de Crunchyroll muestra el cambio de 19.900 a 23.900.
+
 ## Pendiente para los siguientes hitos
 
-- Hito 3: endpoints `/api/detecciones/*` y tablas de la migración 006.
 - Hito 4: pantallas 03, 04 y 05, lectura de notificaciones activas
   (`getActiveNotifications`), flujo B e interruptor real en Perfil.

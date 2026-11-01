@@ -10,6 +10,7 @@ numerados en `db/migraciones/` que se aplican en orden y una sola vez.
 | `003_categoria.sql` | Columna opcional `categoria` en `suscripciones`, limitada a las categorías del diseño |
 | `004_cobros_y_precios.sql` | `UNIQUE (suscripcion_id, fecha_pago)` en `historial_pagos` y tabla `cambios_precio` |
 | `005_guias_cancelacion.sql` | Columnas `alias`, `duracion_minutos`, `actualizada_en` y `es_generica` en `guias_cancelacion`; `pasos` pasa a JSONB |
+| `006_detecciones.sql` | Tablas `pagos_detectados` y `candidatos_suscripcion` (detección automática, ver `docs/deteccion.md`) |
 
 La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
 
@@ -41,6 +42,7 @@ La tabla `schema_migrations` guarda qué migraciones ya se aplicaron.
    + 003_categoria.sql
    + 004_cobros_y_precios.sql
    + 005_guias_cancelacion.sql
+   + 006_detecciones.sql
    ```
 
 5. Carga el catálogo de guías de cancelación:
