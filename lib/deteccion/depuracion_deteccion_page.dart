@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../Common/AppTheme.dart';
 import '../services/recordatorios_service.dart';
@@ -11,8 +12,10 @@ import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/guia_xiaomi.dart';
+import 'catalogo_servicios.dart';
 import 'lector_notificaciones.dart';
 import 'notificacion_capturada.dart';
+import 'parser_pagos.dart';
 
 /// Comando de ejemplo para simular un pago desde el PC, en PowerShell (ver
 /// docs/deteccion.md). La comilla invertida antes del signo de pesos evita que
@@ -20,16 +23,21 @@ import 'notificacion_capturada.dart';
 /// shell del celular.
 const comandoSimulacion = r'''adb shell "cmd notification post -S bigtext -t 'Bancolombia' pago1 'Bancolombia: Compraste `$19.900,00 en GOOGLE *Crunchyroll con tu T.Deb *0000, el 23/10/2026 a las 07:20.'"''';
 
-/// Pantalla de depuración del lector (hito 1, solo en modo debug): estado del
-/// permiso, apps permitidas, notificaciones en vivo y cola guardada. Sirve
-/// para identificar los paquetes del banco y de la app de SMS del celular.
+/// Pantalla de depuración del lector (solo en modo debug): estado del
+/// permiso, apps permitidas, notificaciones en vivo y cola guardada con lo que
+/// extrae el parser (hito 2). Sirve para identificar los paquetes del banco y
+/// de la app de SMS del celular y para probar el parser con cobros reales.
 class DepuracionDeteccionPage extends StatefulWidget {
-  const DepuracionDeteccionPage({super.key, required this.lector, this.recordatorios});
+  const DepuracionDeteccionPage({super.key, required this.lector, this.recordatorios, this.cargarCatalogo});
 
   final LectorNotificaciones lector;
 
   /// Para la guía de Xiaomi (abrir Inicio automático y ajustes de la app).
   final RecordatoriosService? recordatorios;
+
+  /// Catálogo de servicios para normalizar comercios (GET /api/guias). Si
+  /// falla, el parser funciona igual, sin reconocer servicios.
+  final Future<CatalogoServicios> Function()? cargarCatalogo;
 
   @override
   State<DepuracionDeteccionPage> createState() => _DepuracionDeteccionPageState();
@@ -44,11 +52,17 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
   final List<EventoDeteccion> _enVivo = [];
   StreamSubscription<EventoDeteccion>? _suscripcion;
   bool _xiaomi = false;
+  ParserPagos _parser = const ParserPagos();
+
+  /// null mientras carga; si no se pudo cargar, el motivo.
+  String? _errorCatalogo;
+  bool _catalogoCargado = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _cargarCatalogo();
     _suscripcion = widget.lector.eventos().listen(_alLlegar, onError: (Object e) => debugPrint('Lector: $e'));
     _actualizar();
     widget.recordatorios?.esXiaomi().then((v) {
@@ -95,6 +109,21 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
       _config = config;
       _cola = cola.reversed.toList(); // más recientes primero
     });
+  }
+
+  Future<void> _cargarCatalogo() async {
+    final cargar = widget.cargarCatalogo;
+    if (cargar == null) return;
+    try {
+      final catalogo = await cargar();
+      if (!mounted) return;
+      setState(() {
+        _parser = ParserPagos(catalogo);
+        _catalogoCargado = true;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _errorCatalogo = '$e');
+    }
   }
 
   Future<void> _cambiarDescubrimiento(bool activo) async {
@@ -175,7 +204,10 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
           if (_cola.isEmpty)
             const _Vacio('Aquí quedan los cobros que llegan con la app cerrada; Flutter los lee al abrirse.')
           else
-            for (final n in _cola) ...[_TarjetaNotificacion(n), const SizedBox(height: 8)],
+            for (final n in _cola) ...[
+              _TarjetaNotificacion(n, _parser.interpretarNotificacion(n)),
+              const SizedBox(height: 8),
+            ],
           const SizedBox(height: 14),
           _tarjetaSimulacion(),
           if (_xiaomi && widget.recordatorios != null) ...[
@@ -282,6 +314,21 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
               'notificación del banco y agrega su paquete al archivo.',
               style: TextStyle(color: AppColors.amber, fontSize: 12.5, fontWeight: FontWeight.w700, height: 1.4),
             ),
+          const SizedBox(height: 6),
+          Text(
+            _catalogoCargado
+                ? 'Catálogo de servicios: ${_parser.catalogo.servicios.length} (de /api/guias)'
+                : _errorCatalogo != null
+                    ? 'Sin catálogo de servicios ($_errorCatalogo): el parser limpia el comercio '
+                        'pero no lo reconoce como servicio.'
+                    : 'Cargando el catálogo de servicios…',
+            style: TextStyle(
+              color: _errorCatalogo != null ? AppColors.amber : AppColors.muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              height: 1.4,
+            ),
+          ),
         ],
       ),
     );
@@ -345,29 +392,93 @@ class _Vacio extends StatelessWidget {
 }
 
 class _TarjetaNotificacion extends StatelessWidget {
-  const _TarjetaNotificacion(this.n);
+  const _TarjetaNotificacion(this.n, this.interpretacion);
 
   final NotificacionCapturada n;
+  final InterpretacionPago interpretacion;
+
+  static final _numero = NumberFormat('#,##0.##', 'es_CO');
 
   @override
   Widget build(BuildContext context) {
+    final p = interpretacion.pago;
     return AppCard(
-      child: SelectableText.rich(
-        TextSpan(
-          style: const TextStyle(color: AppColors.text2, fontSize: 12.5, height: 1.45),
-          children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SelectableText.rich(
             TextSpan(
-              text: '${n.app} · ${_hora(n.recibidaEn)}\n',
-              style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w700),
+              style: const TextStyle(color: AppColors.text2, fontSize: 12.5, height: 1.45),
+              children: [
+                TextSpan(
+                  text: '${n.app} · ${_hora(n.recibidaEn)}\n',
+                  style: const TextStyle(color: AppColors.muted, fontWeight: FontWeight.w700),
+                ),
+                TextSpan(text: '${n.paquete}\n', style: const TextStyle(color: AppColors.muted)),
+                if (n.titulo.isNotEmpty)
+                  TextSpan(text: '${n.titulo}\n', style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w700)),
+                TextSpan(text: n.texto),
+              ],
             ),
-            TextSpan(text: '${n.paquete}\n', style: const TextStyle(color: AppColors.muted)),
-            TextSpan(text: '${n.titulo}\n', style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w700)),
-            TextSpan(text: n.texto),
+          ),
+          const Divider(height: 20, color: AppColors.divider),
+          if (p == null)
+            Text(
+              'No es un cobro (${interpretacion.motivo})',
+              style: const TextStyle(color: AppColors.amber, fontSize: 12.5, fontWeight: FontWeight.w700),
+            )
+          else ...[
+            const Text(
+              'EXTRAÍDO POR EL PARSER',
+              style: TextStyle(color: AppColors.link, fontSize: 11.5, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 4),
+            _Extraido('Banco', p.banco),
+            _Extraido('Monto', '${_numero.format(p.monto)} ${p.moneda}'),
+            _Extraido(
+              'Comercio',
+              p.esServicioConocido ? '${p.comercio} (servicio conocido)' : '${p.comercio} (no está en el catálogo)',
+            ),
+            _Extraido('Original', p.comercioOriginal),
+            _Extraido('Fecha', '${_fechaHora(p.fecha)} (${p.fechaDelMensaje ? 'del mensaje' : 'de llegada'})'),
+            if (p.medio != null) _Extraido('Medio', p.medio!),
+            if (p.indicaSuscripcion) const _Extraido('Indica', 'suscripción (SUB)'),
           ],
-        ),
+        ],
       ),
     );
   }
+}
+
+class _Extraido extends StatelessWidget {
+  const _Extraido(this.clave, this.valor);
+
+  final String clave;
+  final String valor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 72,
+            child: Text(clave, style: const TextStyle(color: AppColors.muted, fontSize: 12.5, fontWeight: FontWeight.w600)),
+          ),
+          Expanded(
+            child: Text(valor, style: const TextStyle(color: AppColors.text, fontSize: 12.5, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _fechaHora(DateTime d) {
+  String dos(int n) => n.toString().padLeft(2, '0');
+  return '${dos(d.day)}/${dos(d.month)}/${d.year} ${dos(d.hour)}:${dos(d.minute)}';
 }
 
 class _TarjetaEvento extends StatelessWidget {

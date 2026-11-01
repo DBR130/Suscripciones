@@ -90,6 +90,7 @@ class Routers {
             builder: (context, state) => DepuracionDeteccionPage(
               lector: lectorNotificaciones,
               recordatorios: recordatorios,
+              cargarCatalogo: suscripcionService.catalogoServicios,
             ),
           ),
         GoRoute(

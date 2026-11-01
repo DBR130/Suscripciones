@@ -1,3 +1,4 @@
+import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
 import 'package:flutter_suscripciones/models/ahorro.dart';
 import 'package:flutter_suscripciones/models/aviso.dart';
 import 'package:flutter_suscripciones/models/guia.dart';
@@ -85,6 +86,9 @@ class FakeSuscripcionService implements SuscripcionService {
       esGenerica: g.esGenerica,
     );
   }
+
+  @override
+  Future<CatalogoServicios> catalogoServicios() async => CatalogoServicios.vacio;
 
   @override
   Future<Ahorro> ahorro() async =>

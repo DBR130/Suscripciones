@@ -1,3 +1,4 @@
+import '../deteccion/catalogo_servicios.dart';
 import '../models/ahorro.dart';
 import '../models/aviso.dart';
 import '../models/guia.dart';
@@ -57,6 +58,11 @@ class SuscripcionService {
   /// La guía de cancelación que corresponde a la suscripción (o la genérica).
   Future<GuiaDeSuscripcion> guia(int id) async =>
       GuiaDeSuscripcion.fromJson(await _api.get('$_ruta/$id/guia'));
+
+  /// Nombres y alias del catálogo de guías, para reconocer servicios en los
+  /// cobros detectados (GET /api/guias).
+  Future<CatalogoServicios> catalogoServicios() async =>
+      CatalogoServicios.fromJson(await _api.get('/api/guias'));
 
   /// Ahorro por canceladas y gasto de los últimos 6 meses.
   Future<Ahorro> ahorro() async => Ahorro.fromJson(await _api.get('/api/ahorro'));

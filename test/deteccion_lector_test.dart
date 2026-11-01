@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_suscripciones/Common/AppTheme.dart';
 import 'package:flutter_suscripciones/Common/Routers.dart';
+import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
 import 'package:flutter_suscripciones/deteccion/depuracion_deteccion_page.dart';
 import 'package:flutter_suscripciones/deteccion/lector_notificaciones.dart';
 import 'package:flutter_suscripciones/deteccion/notificacion_capturada.dart';
@@ -195,11 +196,33 @@ void main() {
       }),
     );
 
+    // Un SMS que pasó el filtro nativo pero que el parser no reconoce.
+    cola.insert(0, {
+      ...notificacion,
+      'id': 'otra',
+      'titulo': '',
+      'texto': 'Hola, ya te pagué lo del almuerzo, eran 15.000',
+    });
+
     await tester.pumpWidget(MaterialApp(
       theme: AppTheme.dark,
-      home: DepuracionDeteccionPage(lector: lector()),
+      home: DepuracionDeteccionPage(
+        lector: lector(),
+        cargarCatalogo: () async => const CatalogoServicios([(nombre: 'Crunchyroll', alias: [])]),
+      ),
     ));
     await tester.pumpAndSettle();
+
+    // Lo que extrajo el parser, debajo de cada entrada de la cola.
+    expect(find.text('Catálogo de servicios: 1 (de /api/guias)'), findsOneWidget);
+    expect(find.text('EXTRAÍDO POR EL PARSER'), findsOneWidget);
+    expect(find.text('Bancolombia'), findsWidgets);
+    expect(find.text('19.900 COP'), findsOneWidget);
+    expect(find.text('Crunchyroll (servicio conocido)'), findsOneWidget);
+    expect(find.text('GOOGLE *Crunchyroll'), findsOneWidget);
+    expect(find.text('23/10/2026 07:20 (de llegada)'), findsOneWidget);
+    expect(find.text('T.Deb'), findsOneWidget);
+    expect(find.text('No es un cobro (no es de un banco conocido)'), findsOneWidget);
 
     expect(find.text('Depuración: detección'), findsOneWidget);
     expect(find.text('Concedido'), findsOneWidget);
@@ -210,7 +233,7 @@ void main() {
     expect(find.text('31/10 09:15:30 (guardada)'), findsOneWidget);
     expect(find.text('com.android.shell · Shell (simulación con adb)'), findsOneWidget);
     expect(find.textContaining('Todavía no hay apps reales'), findsOneWidget);
-    expect(find.text('Cola guardada (1)'), findsOneWidget);
+    expect(find.text('Cola guardada (2)'), findsOneWidget);
     // El comando de simulación también nombra Crunchyroll, pero con la comilla
     // invertida antes del signo de pesos; esto solo está en la cola.
     expect(find.textContaining(r'Compraste $19.900,00 en GOOGLE', findRichText: true), findsOneWidget);
