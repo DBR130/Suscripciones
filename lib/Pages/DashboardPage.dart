@@ -18,6 +18,7 @@ import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/app_marca.dart';
 import '../widgets/estado_vacio.dart';
 import '../widgets/suscripcion_card.dart';
 
@@ -270,7 +271,7 @@ class _Encabezado extends StatelessWidget {
         children: [
           Row(
             children: [
-              const _MarcaPequena(),
+              const AppMarca.fila(altura: 26),
               const Spacer(),
               Semantics(
                 button: true,
@@ -403,41 +404,6 @@ class _Glass extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _MarcaPequena extends StatelessWidget {
-  const _MarcaPequena();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 26,
-          height: 26,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: const Text(
-            'S',
-            style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w900),
-          ),
-        ),
-        const SizedBox(width: 9),
-        const Text(
-          'SubTrack',
-          style: TextStyle(
-            color: AppColors.text,
-            fontSize: 16.5,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.3,
-          ),
-        ),
-      ],
     );
   }
 }

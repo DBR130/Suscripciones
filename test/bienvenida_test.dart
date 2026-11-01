@@ -32,7 +32,7 @@ void main() {
   testWidgets('recorre los 3 slides con "Siguiente" y termina en registro', (tester) async {
     await abrir(tester);
 
-    expect(find.text('SubTrack'), findsOneWidget);
+    expect(find.bySemanticsLabel('SubTrack'), findsOneWidget);
     expect(find.text('Todo lo que pagas cada mes, en una sola lista.'), findsOneWidget);
 
     await tester.tap(find.text('Siguiente'));

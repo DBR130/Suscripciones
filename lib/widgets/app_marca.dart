@@ -1,79 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
-import '../Common/AppTheme.dart';
-
-/// Logo de SubTrack: el cuadro azul con la "S".
-/// - `AppMarca()`: grande y centrado (login y registro).
-/// - `AppMarca.fila()`: la "Marca" del diseño, cuadro de 28 y "SubTrack" al lado.
+/// Logo de SubTrack (concepto "Cuenta regresiva": un anillo que se llena
+/// hasta el próximo cobro, con la S al centro). Versión para fondos oscuros.
+/// - `AppMarca()`: el ícono redondeado grande.
+/// - `AppMarca.fila()`: ícono y "SubTrack" al lado (encabezados, bienvenida,
+///   login y registro). [altura] cambia el tamaño.
 class AppMarca extends StatelessWidget {
-  const AppMarca({super.key}) : _fila = false;
+  const AppMarca({super.key, this.altura = 64}) : _fila = false;
 
-  const AppMarca.fila({super.key}) : _fila = true;
+  const AppMarca.fila({super.key, this.altura = 28}) : _fila = true;
 
   final bool _fila;
+  final double altura;
+
+  static const String iconoAsset = 'assets/logo/icono-redondeado.svg';
+  static const String filaAsset = 'assets/logo/logo-nombre-oscuro.svg';
+
+  /// Proporción del logo con nombre (viewBox 239 × 64).
+  static const double _proporcionFila = 239 / 64;
 
   @override
   Widget build(BuildContext context) {
-    if (_fila) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Text(
-              'S',
-              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900),
-            ),
-          ),
-          const SizedBox(width: 9),
-          const Text(
-            'SubTrack',
-            style: TextStyle(
-              color: AppColors.text,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.34,
-            ),
-          ),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        Container(
-          width: 64,
-          height: 64,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.primary,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: const Text(
-            'S',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        const Text(
-          'SubTrack',
-          style: TextStyle(
-            color: AppColors.text,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.3,
-          ),
-        ),
-      ],
+    return SvgPicture.asset(
+      _fila ? filaAsset : iconoAsset,
+      height: altura,
+      width: _fila ? altura * _proporcionFila : altura,
+      semanticsLabel: 'SubTrack',
     );
   }
 }
