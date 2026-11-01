@@ -9,7 +9,7 @@ import java.io.File
 
 /**
  * Filtro nativo de cobros, con las palabras reales de res/raw/deteccion_apps.json.
- * Corre en el PC:  cd android  y  .\gradlew :app:testDebugUnitTest
+ * Corre en el PC:  cd android  y  .\gradlew :app:testCompletaDebugUnitTest
  */
 class FiltroCobrosTest {
     // Gradle corre los tests con android/app como carpeta de trabajo.

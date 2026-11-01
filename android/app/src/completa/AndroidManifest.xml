@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Solo en la versión "completa": "Buscar suscripciones en mis SMS" lee el
+         historial de SMS una vez, cuando el usuario lo pide (pantalla de
+         divulgación + permiso en tiempo de ejecución). La versión "sinSms" no
+         declara este permiso. No se usa RECEIVE_SMS: los cobros nuevos llegan
+         por el lector de notificaciones. -->
+    <uses-permission android:name="android.permission.READ_SMS"/>
+</manifest>

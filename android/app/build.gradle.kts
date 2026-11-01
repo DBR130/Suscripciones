@@ -32,6 +32,20 @@ android {
         versionName = flutter.versionName
     }
 
+    // Dos versiones de la app (ver docs/deteccion.md, "Versiones completa y sinSms"):
+    //  - completa: incluye "Buscar suscripciones en mis SMS" (READ_SMS, declarado
+    //    solo en src/completa/AndroidManifest.xml).
+    //  - sinSms: sin READ_SMS ni el lector del historial (src/sinSms). Conserva el
+    //    lector de notificaciones, el registro manual y "Compartir".
+    // Las dos usan el mismo applicationId: se instala una u otra, no ambas.
+    // flutter run / flutter build sin --flavor usan "completa" (default-flavor
+    // en pubspec.yaml).
+    flavorDimensions += "sms"
+    productFlavors {
+        create("completa") { dimension = "sms" }
+        create("sinSms") { dimension = "sms" }
+    }
+
     buildTypes {
         release {
             // Para la entrega del proyecto el APK release se firma con la llave
