@@ -138,6 +138,9 @@ class RecordatoriosService {
   static const _claveActivos = 'recordatorios_activos';
   static const _claveResumen = 'resumen_mensual';
 
+  /// Azul del anillo del logo: Android lo usa para teñir el ícono pequeño.
+  static const _colorLogo = Color(0xFF60A5FA);
+
   static const _detalles = NotificationDetails(
     android: AndroidNotificationDetails(
       'recordatorios',
@@ -146,6 +149,7 @@ class RecordatoriosService {
       importance: Importance.high,
       priority: Priority.high,
       icon: 'ic_notificacion',
+      color: _colorLogo,
     ),
   );
 
@@ -159,6 +163,7 @@ class RecordatoriosService {
       importance: Importance.high,
       priority: Priority.high,
       icon: 'ic_notificacion',
+      color: _colorLogo,
     ),
   );
 
