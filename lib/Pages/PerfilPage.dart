@@ -17,6 +17,8 @@ import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/app_shell.dart';
+import '../widgets/campana_avisos.dart';
 import '../widgets/guia_xiaomi.dart';
 
 /// Perfil y configuración (pantalla 14 del diseño, pestaña 4): días de
@@ -113,10 +115,9 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _abrirAhorro() async {
-    await context.push(Routers.ahorro);
-    if (mounted) _cargarAhorro();
-  }
+  /// El ahorro por cancelaciones vive en la pestaña Análisis; esta fila es
+  /// un acceso directo.
+  void _abrirAhorro() => context.go(Routers.analisis);
 
   /// "$465.600 ›" (o "$465.600 + US$119,88 ›" si hay en dos monedas).
   String get _textoAhorro {
@@ -319,7 +320,7 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     final u = _usuario;
     return Scaffold(
       body: ListView(
-        padding: EdgeInsets.zero,
+        padding: AppShell.rellenoInferior(context),
         children: [
           AppHeader(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 22),
@@ -369,6 +370,8 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
+                const CampanaAvisos(),
               ],
             ),
           ),
@@ -426,7 +429,7 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                     children: [
                       if (widget.suscripcionService != null) ...[
                         _FilaEnlace(
-                          texto: 'Historial y ahorro',
+                          texto: 'Análisis y ahorro',
                           detalle: _textoAhorro,
                           colorDetalle: AppColors.link,
                           onTap: _abrirAhorro,

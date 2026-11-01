@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../Pages/AhorroPage.dart';
+import '../Pages/AnalisisPage.dart';
 import '../deteccion/depuracion_deteccion_page.dart';
 import '../deteccion/deteccion_service.dart';
 import '../deteccion/compartir_page.dart';
@@ -15,6 +16,7 @@ import '../deteccion/procesador_detecciones.dart';
 import '../deteccion/resultados_deteccion_page.dart';
 import '../deteccion/vigilante_deteccion.dart';
 import '../services/api_client.dart';
+import '../services/avisos_nuevos.dart';
 import '../Pages/AvisosPage.dart';
 import '../Pages/BienvenidaPage.dart';
 import '../Pages/DashboardPage.dart';
@@ -45,12 +47,13 @@ class Routers {
   // Con barra de pestañas.
   static const String dashboard = '/resumen';
   static const String suscripciones = '/suscripciones';
-  static const String avisos = '/avisos';
+  static const String analisis = '/analisis';
   static const String perfil = '/perfil';
   static const String ahorro = '/ahorro';
   static String detalle(int id) => '/suscripcion/$id';
 
   // Sin barra de pestañas.
+  static const String avisos = '/avisos'; // campana del encabezado
   static const String preferencias = '/preferencias';
   static const String depuracionDeteccion = '/depuracion/deteccion';
 
@@ -115,6 +118,8 @@ class Routers {
           historial: historial,
         );
     final historialSmsApp = historial ?? procesadorDetecciones.historial;
+    // Número de la campana de avisos (encabezados de las pestañas).
+    final avisosNuevos = AvisosNuevos(suscripcionService);
     return GoRouter(
       initialLocation: initialLocation,
       routes: [
@@ -231,8 +236,14 @@ class Routers {
             );
           },
         ),
+        // Avisos: se abre desde la campana, encima de la pestaña (sin barra).
+        GoRoute(
+          path: avisos,
+          builder: (context, state) =>
+              AvisosPage(suscripcionService: suscripcionService, avisosNuevos: avisosNuevos),
+        ),
         ShellRoute(
-          builder: (context, state, child) => AppShell(child: child),
+          builder: (context, state, child) => AppShell(avisosNuevos: avisosNuevos, child: child),
           routes: [
             GoRoute(
               path: dashboard,
@@ -252,8 +263,8 @@ class Routers {
               ),
             ),
             GoRoute(
-              path: avisos,
-              builder: (context, state) => AvisosPage(suscripcionService: suscripcionService),
+              path: analisis,
+              builder: (context, state) => AnalisisPage(suscripcionService: suscripcionService),
             ),
             GoRoute(
               path: ahorro,

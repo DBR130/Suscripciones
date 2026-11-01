@@ -5,6 +5,7 @@ import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
 import '../models/aviso.dart';
 import '../services/api_client.dart';
+import '../services/avisos_nuevos.dart';
 import '../services/suscripcion_service.dart';
 import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
@@ -28,9 +29,12 @@ String fechaRelativa(DateTime fecha, DateTime hoy) {
 /// Avisos (pantalla 11 del diseño, pestaña 3) con datos reales de
 /// GET /api/avisos: próximos cobros, pruebas que terminan y cambios de precio.
 class AvisosPage extends StatefulWidget {
-  const AvisosPage({super.key, required this.suscripcionService});
+  const AvisosPage({super.key, required this.suscripcionService, this.avisosNuevos});
 
   final SuscripcionService suscripcionService;
+
+  /// Al cargar, los avisos mostrados dejan de contar como nuevos (campana).
+  final AvisosNuevos? avisosNuevos;
 
   @override
   State<AvisosPage> createState() => _AvisosPageState();
@@ -56,6 +60,7 @@ class _AvisosPageState extends State<AvisosPage> {
         _dias = r.dias;
         _error = null;
       });
+      widget.avisosNuevos?.marcarVistos(r.avisos);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
     }
@@ -81,6 +86,11 @@ class _AvisosPageState extends State<AvisosPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Se abre desde la campana: vuelve a la pestaña.
+                  if (Navigator.canPop(context)) ...[
+                    AppBotonVolver(onPressed: () => Navigator.pop(context)),
+                    const SizedBox(height: 10),
+                  ],
                   const Text(
                     'Avisos',
                     style: TextStyle(color: AppColors.text, fontSize: 21, fontWeight: FontWeight.w800, letterSpacing: -0.5),

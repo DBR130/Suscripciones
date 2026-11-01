@@ -19,6 +19,8 @@ import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/app_marca.dart';
+import '../widgets/app_shell.dart';
+import '../widgets/campana_avisos.dart';
 import '../widgets/estado_vacio.dart';
 import '../widgets/suscripcion_card.dart';
 
@@ -115,7 +117,7 @@ class _DashboardPageState extends State<DashboardPage> {
         child: ListView(
           // Permite "jalar para recargar" aunque la lista sea corta.
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
+          padding: AppShell.rellenoInferior(context),
           children: [
             _Encabezado(
               resumen: _resumen,
@@ -273,6 +275,8 @@ class _Encabezado extends StatelessWidget {
             children: [
               const AppMarca.fila(altura: 26),
               const Spacer(),
+              const CampanaAvisos(),
+              const SizedBox(width: 8),
               Semantics(
                 button: true,
                 label: 'Perfil',

@@ -11,6 +11,7 @@ import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/app_shell.dart';
 import '../widgets/estado_vacio.dart';
 import '../widgets/logo_servicio.dart';
 
@@ -64,7 +65,7 @@ class _AhorroPageState extends State<AhorroPage> {
         onRefresh: _cargar,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
+          padding: AppShell.rellenoInferior(context),
           children: [
             _Encabezado(ahorro),
             Padding(

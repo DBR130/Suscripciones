@@ -1,5 +1,6 @@
 import '../deteccion/catalogo_servicios.dart';
 import '../models/ahorro.dart';
+import '../models/analisis.dart';
 import '../models/aviso.dart';
 import '../models/guia.dart';
 import '../models/resumen.dart';
@@ -66,6 +67,9 @@ class SuscripcionService {
 
   /// Ahorro por canceladas y gasto de los últimos 6 meses.
   Future<Ahorro> ahorro() async => Ahorro.fromJson(await _api.get('/api/ahorro'));
+
+  /// Todo lo de la pestaña Análisis en una sola petición.
+  Future<Analisis> analisis() async => Analisis.fromJson(await _api.get('/api/analisis'));
 
   Future<Resumen> resumen() async =>
       Resumen.fromJson(await _api.get('/api/resumen'));

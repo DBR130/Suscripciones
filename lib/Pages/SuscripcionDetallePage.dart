@@ -13,6 +13,7 @@ import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/app_shell.dart';
 import '../widgets/logo_servicio.dart';
 
 /// Detalle de una suscripción (pantalla 09 del diseño): datos, historial de
@@ -241,7 +242,7 @@ class _SuscripcionDetallePageState extends State<SuscripcionDetallePage> {
             child: RefreshIndicator(
               onRefresh: _cargar,
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 16) + AppShell.rellenoInferior(context),
                 children: [
                   if (marcada || cancelada) ...[
                     _AvisoAmbar(

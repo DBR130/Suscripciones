@@ -1,5 +1,6 @@
 import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
 import 'package:flutter_suscripciones/models/ahorro.dart';
+import 'package:flutter_suscripciones/models/analisis.dart';
 import 'package:flutter_suscripciones/models/aviso.dart';
 import 'package:flutter_suscripciones/models/guia.dart';
 import 'package:flutter_suscripciones/models/resumen.dart';
@@ -18,6 +19,7 @@ class FakeSuscripcionService implements SuscripcionService {
     this.listaAvisos = const [],
     this.guiaFija,
     this.ahorroFijo,
+    this.analisisFijo,
   }) : suscripciones = [...?iniciales];
 
   /// Guía que devuelve [guia] (por defecto, una genérica de 3 pasos).
@@ -25,6 +27,9 @@ class FakeSuscripcionService implements SuscripcionService {
 
   /// Lo que devuelve [ahorro] (por defecto, sin canceladas).
   final Ahorro? ahorroFijo;
+
+  /// Lo que devuelve [analisis] (por defecto, solo la cantidad de activas).
+  final Analisis? analisisFijo;
 
   final List<Suscripcion> suscripciones;
   final String? error;
@@ -93,6 +98,20 @@ class FakeSuscripcionService implements SuscripcionService {
   @override
   Future<Ahorro> ahorro() async =>
       ahorroFijo ?? const Ahorro(totales: [], canceladas: [], evolucion: []);
+
+  @override
+  Future<Analisis> analisis() async =>
+      analisisFijo ??
+      Analisis(
+        totales: const [],
+        cantidadActivas: suscripciones.where((s) => s.estado != EstadoSuscripcion.cancelada).length,
+        gastoMensual: const [],
+        porCategoria: const [],
+        proximosCobros: const [],
+        masCaras: const [],
+        ahorroTotales: const [],
+        canceladas: const [],
+      );
 
   @override
   Future<({List<Aviso> avisos, int dias})> avisos() async => (avisos: listaAvisos, dias: 3);

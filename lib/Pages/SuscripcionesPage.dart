@@ -12,6 +12,8 @@ import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
+import '../widgets/app_shell.dart';
+import '../widgets/campana_avisos.dart';
 import '../widgets/estado_vacio.dart';
 import '../widgets/logo_servicio.dart';
 import '../widgets/suscripcion_card.dart';
@@ -81,33 +83,40 @@ class _SuscripcionesPageState extends State<SuscripcionesPage> {
         onRefresh: _cargar,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
+          padding: AppShell.rellenoInferior(context),
           children: [
             AppHeader(
               padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  const Text(
-                    'Suscripciones',
-                    style: TextStyle(
-                      color: AppColors.text,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Suscripciones',
+                          style: TextStyle(
+                            color: AppColors.text,
+                            fontSize: 21,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _todas == null
+                              ? ' '
+                              : '${activas.length} activas · $canceladas canceladas · avisos ${_dias ?? 3} días antes',
+                          style: const TextStyle(
+                            color: AppColors.mutedOnGradient,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _todas == null
-                        ? ' '
-                        : '${activas.length} activas · $canceladas canceladas · avisos ${_dias ?? 3} días antes',
-                    style: const TextStyle(
-                      color: AppColors.mutedOnGradient,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  const CampanaAvisos(),
                 ],
               ),
             ),
