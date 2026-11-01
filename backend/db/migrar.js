@@ -10,6 +10,8 @@ import path from 'node:path';
 
 import pg from 'pg';
 
+import { verificarBdPermitida } from '../src/utils/candadoBd.js';
+
 const CARPETA = path.join(import.meta.dirname, 'migraciones');
 const PATRON = /^\d{3}_.+\.sql$/;
 const INICIAL = '001_inicial.sql';
@@ -19,6 +21,7 @@ const INICIAL = '001_inicial.sql';
  * Devuelve la lista de migraciones aplicadas en esta ejecución.
  */
 export async function migrar(connectionString, log = console.log) {
+  verificarBdPermitida(connectionString);
   const client = new pg.Client({ connectionString });
   await client.connect();
   try {

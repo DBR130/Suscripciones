@@ -6,6 +6,8 @@
 // necesitan.
 import pg from 'pg';
 
+import { verificarBdPermitida } from './utils/candadoBd.js';
+
 // Cómo convierte "pg" algunos tipos de PostgreSQL a JavaScript:
 // - NUMERIC (montos): por defecto llega como texto ("45900.00") para no perder
 //   precisión. Con 12 dígitos y 2 decimales un número de JS basta, así que se
@@ -17,6 +19,10 @@ const OID_NUMERIC = 1700;
 const OID_DATE = 1082;
 pg.types.setTypeParser(OID_NUMERIC, (valor) => Number(valor));
 pg.types.setTypeParser(OID_DATE, (valor) => valor);
+
+// Candado: bajo tests, falla aquí (sin conectar) si la base no termina en
+// "_test". Ver utils/candadoBd.js.
+verificarBdPermitida(process.env.DATABASE_URL);
 
 export const pool = new pg.Pool({
   // Toda la información (usuario, contraseña, host, puerto y base de datos)

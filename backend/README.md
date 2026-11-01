@@ -91,6 +91,11 @@ npm run db:demo   # crea o reinicia el usuario demo@subtrack.co / Demo1234
 
 Debe aparecer `API de SubTrack escuchando en http://0.0.0.0:3000`.
 
+> **Candado de pruebas.** Bajo `node --test` (o con `NODE_ENV=test`, que fija
+> `npm test`), `src/db.js` y los scripts de `db/` se niegan a conectarse a una
+> base cuyo nombre no termine en `_test` (`src/utils/candadoBd.js`). Así un
+> test mal escrito nunca toca la base real. Lo prueba `test/candado.test.js`.
+
 > La primera vez Windows puede preguntar si permite a Node.js acceder a la red.
 > Acepta en **redes privadas** para que el celular pueda conectarse.
 

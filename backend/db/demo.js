@@ -8,6 +8,7 @@
 import bcrypt from 'bcryptjs';
 import pg from 'pg';
 
+import { verificarBdPermitida } from '../src/utils/candadoBd.js';
 import { hoyColombia, sumarDias, sumarMeses } from '../src/utils/fechas.js';
 
 export const CORREO_DEMO = 'demo@subtrack.co';
@@ -55,6 +56,7 @@ function cobrosAnteriores(proximo, limite, hasta) {
 }
 
 export async function crearDemo(connectionString, hoy = hoyColombia()) {
+  verificarBdPermitida(connectionString);
   const client = new pg.Client({ connectionString });
   await client.connect();
   try {

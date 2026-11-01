@@ -9,7 +9,7 @@
     "dev": "node --watch --env-file=.env src/server.js",
     "start": "node --env-file=.env src/server.js",
     "db:migrate": "node --env-file=.env db/migrar.js",
-    "test": "node --env-file-if-exists=.env --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "test": "node --env-file-if-exists=.env --env-file=test/entorno-test.env --test --test-concurrency=1 \"test/**/*.test.js\"",
     "db:guias": "node --env-file=.env db/cargar-guias.js",
     "db:demo": "node --env-file=.env db/demo.js"
   },

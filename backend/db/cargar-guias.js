@@ -10,6 +10,8 @@ import path from 'node:path';
 
 import pg from 'pg';
 
+import { verificarBdPermitida } from '../src/utils/candadoBd.js';
+
 const ARCHIVO = path.join(import.meta.dirname, 'guias.json');
 
 /** Revisa que el JSON tenga la forma correcta. Lanza un error si no. */
@@ -44,6 +46,7 @@ export function validarGuias(guias) {
 /** Hace el upsert de `guias` en la BD. Devuelve cuántas se crearon o cambiaron. */
 export async function cargarGuias(connectionString, guias) {
   validarGuias(guias);
+  verificarBdPermitida(connectionString);
   const client = new pg.Client({ connectionString });
   await client.connect();
   try {
