@@ -1,7 +1,7 @@
 import { query, transaccion } from '../db.js';
 import { FRECUENCIAS, limpiarSuscripcion } from '../middlewares/validaciones.js';
 import {
-  COLUMNAS_CANDIDATO, enlazarPagos, procesarPagos, siguienteCobro,
+  COLUMNAS_CANDIDATO, enlazarPagos, procesarPagos, purgarComprasNormales, siguienteCobro,
 } from '../services/detecciones.js';
 import { hoyColombia } from '../utils/fechas.js';
 import { HttpError } from '../utils/httpError.js';
@@ -33,9 +33,9 @@ async function candidatoPendiente(client, id, usuarioId) {
   return candidato;
 }
 
-// POST /api/detecciones/pagos  {pagos: [...]}  (validado por validarPagosDetectados)
+// POST /api/detecciones/pagos  {pagos: [...], compartido?}  (validado por validarPagosDetectados)
 export async function registrarPagos(req, res) {
-  res.json(await procesarPagos(req.usuarioId, req.body.pagos));
+  res.json(await procesarPagos(req.usuarioId, req.body.pagos, { compartido: req.body.compartido }));
 }
 
 // GET /api/detecciones/candidatos?estado=pendiente  (por defecto, los pendientes)
@@ -111,16 +111,19 @@ export async function confirmarCandidato(req, res) {
 }
 
 // POST /api/detecciones/candidatos/:id/descartar
-// El comercio no se vuelve a proponer.
+// El comercio no se vuelve a proponer, y sus pagos detectados se borran (ya
+// no hacen falta: no es una suscripción).
 export async function descartarCandidato(req, res) {
   const id = idDeLaRuta(req);
   const candidato = await transaccion(async (client) => {
     await candidatoPendiente(client, id, req.usuarioId);
-    return (await client.query(
+    const descartado = (await client.query(
       `UPDATE candidatos_suscripcion SET estado = 'descartada'
        WHERE id = $1 RETURNING ${COLUMNAS_CANDIDATO}`,
       [id],
     )).rows[0];
+    await purgarComprasNormales(client, req.usuarioId);
+    return descartado;
   });
   res.json({ candidato });
 }

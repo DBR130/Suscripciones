@@ -1,7 +1,9 @@
 // Tareas automáticas del servidor.
 import cron from 'node-cron';
 
+import { transaccion } from './db.js';
 import { procesarCobros } from './services/cobros.js';
+import { purgarComprasNormales } from './services/detecciones.js';
 import { ZONA_COLOMBIA, hoyColombia } from './utils/fechas.js';
 
 async function correrCobros(motivo) {
@@ -15,12 +17,29 @@ async function correrCobros(motivo) {
   }
 }
 
+// Red de seguridad de la retención: los pagos detectados que no terminaron
+// en una suscripción o un candidato no se quedan en el servidor (ver
+// purgarComprasNormales en services/detecciones.js).
+async function correrRetencion(motivo) {
+  try {
+    const borrados = await transaccion((client) => purgarComprasNormales(client));
+    if (borrados > 0) console.log(`[retencion] ${motivo}: ${borrados} compras normales borradas`);
+  } catch (err) {
+    console.error(`[retencion] ${motivo}: falló:`, err.message);
+  }
+}
+
 export function iniciarTareas() {
   // Al arrancar: el portátil pudo estar apagado varios días.
   correrCobros('al arrancar');
+  correrRetencion('al arrancar');
 
   // Todos los días a las 00:05 hora de Colombia ("5 0 * * *" = minuto 5, hora 0).
   cron.schedule('5 0 * * *', () => correrCobros('tarea diaria'), {
+    timezone: ZONA_COLOMBIA,
+    noOverlap: true,
+  });
+  cron.schedule('20 0 * * *', () => correrRetencion('tarea diaria'), {
     timezone: ZONA_COLOMBIA,
     noOverlap: true,
   });

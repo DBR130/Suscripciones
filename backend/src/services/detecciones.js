@@ -28,6 +28,13 @@ const INTERVALOS = [
 /** Si ya hay un cobro registrado a ±3 días, el pago detectado es ese mismo. */
 const DIAS_MISMO_COBRO = 3;
 
+/**
+ * Un SMS sin fecha en el texto (Nequi) toma la hora de llegada, que cambia
+ * unos segundos según el camino (notificación o historial de SMS). Dentro de
+ * este margen, mismo banco, comercio y monto es el mismo cobro.
+ */
+export const MINUTOS_TOLERANCIA_SIN_FECHA = 5;
+
 export function frecuenciaDeIntervalo(dias) {
   return INTERVALOS.find((i) => dias >= i.min && dias <= i.max)?.frecuencia ?? null;
 }
@@ -92,11 +99,16 @@ export const COLUMNAS_CANDIDATO = `id, comercio_normalizado, monto, moneda, frec
  * - 'candidato_nuevo' / 'candidato_actualizado': casos b) o c).
  * - 'comercio_descartado': el usuario ya dijo que ese comercio no es suyo.
  * - 'ya_confirmado': el comercio ya se confirmó como suscripción.
- * - 'compra_normal': comercio desconocido sin pagos periódicos.
+ * - 'compra_normal': comercio desconocido sin pagos periódicos. No se guarda
+ *   (ver purgarComprasNormales).
+ *
+ * `compartido`: el usuario compartió el SMS con SubTrack para registrarlo. Si
+ * es de un comercio desconocido y sin pagos periódicos, igual se propone como
+ * suscripción (mensual): el usuario dice que lo es.
  *
  * @returns {{ resultados: object[], candidatos_nuevos: object[] }}
  */
-export async function procesarPagos(usuarioId, pagos) {
+export async function procesarPagos(usuarioId, pagos, { compartido = false } = {}) {
   return transaccion(async (client) => {
     // Bloquea al usuario: si llegan dos lotes suyos a la vez, el segundo espera
     // (así no se crean dos candidatos ni se leen montos viejos).
@@ -114,7 +126,7 @@ export async function procesarPagos(usuarioId, pagos) {
     const resultados = [];
     const candidatosNuevos = [];
     for (const pago of ordenados) {
-      const r = await procesarPago(client, usuarioId, pago, guias, suscripciones);
+      const r = await procesarPago(client, usuarioId, pago, guias, suscripciones, compartido);
       if (r.candidato && r.resultado === 'candidato_nuevo') candidatosNuevos.push(r.candidato);
       resultados.push({
         huella: pago.huella,
@@ -124,19 +136,24 @@ export async function procesarPagos(usuarioId, pagos) {
         cambio_precio: r.cambioPrecio ?? false,
       });
     }
+    // Al final del lote: las compras que no terminaron en una suscripción o
+    // un candidato no se quedan en el servidor.
+    await purgarComprasNormales(client, usuarioId, guias);
     return { resultados, candidatos_nuevos: candidatosNuevos };
   });
 }
 
-async function procesarPago(client, usuarioId, pago, guias, suscripciones) {
+async function procesarPago(client, usuarioId, pago, guias, suscripciones, compartido) {
+  const aproximada = pago.fecha_del_mensaje === false;
+  if (await esCobroRepetido(client, usuarioId, pago, aproximada)) return { resultado: 'repetido' };
   const insertado = await client.query(
     `INSERT INTO pagos_detectados
-       (usuario_id, comercio, comercio_normalizado, monto, moneda, fecha, banco, huella)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (usuario_id, comercio, comercio_normalizado, monto, moneda, fecha, banco, huella, fecha_aproximada)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (usuario_id, huella) DO NOTHING
      RETURNING id, monto`,
     [usuarioId, pago.comercio, pago.comercio_normalizado, pago.monto, pago.moneda, pago.fecha,
-      pago.banco, pago.huella],
+      pago.banco, pago.huella, aproximada],
   );
   if (insertado.rowCount === 0) return { resultado: 'repetido' };
   const { id: pagoId, monto } = insertado.rows[0];
@@ -163,13 +180,65 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones) {
   )).rows;
   const fechas = anteriores.filter((p) => montosSimilares(p.monto, monto)).map((p) => p.dia);
   const frecuencia = estimarFrecuencia(fechas);
-  if (!conocido && !frecuencia) return { resultado: 'compra_normal' };
+  if (!conocido && !frecuencia && !compartido) return { resultado: 'compra_normal' };
 
   return proponer(client, usuarioId, {
     nombre, monto, moneda: pago.moneda, banco: pago.banco, dia, conocido,
     // Con un solo pago de un servicio conocido se asume mensual (lo más común).
     frecuencia: frecuencia ?? 'mensual',
   });
+}
+
+/**
+ * El mismo cobro ya registrado por otro camino: misma huella (lo resuelve el
+ * INSERT) o, si alguna de las dos fechas es la hora de llegada (SMS sin
+ * fecha), mismo banco, comercio, monto y moneda a ±5 minutos.
+ */
+async function esCobroRepetido(client, usuarioId, pago, aproximada) {
+  const { rowCount } = await client.query(
+    `SELECT 1 FROM pagos_detectados
+     WHERE usuario_id = $1 AND banco = $2 AND lower(comercio_normalizado) = lower($3)
+       AND monto = $4 AND moneda = $5
+       AND ($7 OR fecha_aproximada)
+       AND fecha BETWEEN $6::timestamp - make_interval(mins => $8)
+                     AND $6::timestamp + make_interval(mins => $8)
+     LIMIT 1`,
+    [usuarioId, pago.banco, pago.comercio_normalizado, pago.monto, pago.moneda, pago.fecha, aproximada,
+      MINUTOS_TOLERANCIA_SIN_FECHA],
+  );
+  return rowCount > 0;
+}
+
+/**
+ * Minimización de datos: borra los pagos detectados del usuario que no están
+ * enlazados a una suscripción ni corresponden a un candidato pendiente o
+ * confirmado (compras normales y comercios que el usuario descartó). Se
+ * llama al final de cada lote, al descartar un candidato y en la tarea
+ * diaria (tareas.js).
+ *
+ * `usuarioId` null = todos los usuarios. Devuelve cuántos borró.
+ */
+export async function purgarComprasNormales(client, usuarioId = null, guias = null) {
+  const catalogo = guias ?? (await client.query(
+    'SELECT nombre_servicio, alias, es_generica FROM guias_cancelacion',
+  )).rows;
+  const sueltos = (await client.query(
+    `SELECT id, usuario_id, comercio_normalizado FROM pagos_detectados
+     WHERE suscripcion_id IS NULL AND ($1::int IS NULL OR usuario_id = $1)`,
+    [usuarioId],
+  )).rows;
+  if (sueltos.length === 0) return 0;
+  const vivos = (await client.query(
+    `SELECT usuario_id, comercio_normalizado FROM candidatos_suscripcion
+     WHERE estado IN ('pendiente', 'confirmada') AND ($1::int IS NULL OR usuario_id = $1)`,
+    [usuarioId],
+  )).rows;
+  const borrar = sueltos
+    .filter((p) => !vivos.some((c) => c.usuario_id === p.usuario_id
+      && mismoServicio(c.comercio_normalizado, p.comercio_normalizado, catalogo)))
+    .map((p) => p.id);
+  if (borrar.length > 0) await client.query('DELETE FROM pagos_detectados WHERE id = ANY($1)', [borrar]);
+  return borrar.length;
 }
 
 /**

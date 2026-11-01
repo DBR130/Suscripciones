@@ -252,11 +252,23 @@ export function validarPagosDetectados(req, res, next) {
     const banco = textoObligatorio(p.banco, BANCO_MAX);
     if (!banco) return error400(res, `${donde}: el banco es obligatorio (máx. ${BANCO_MAX} caracteres)`);
 
+    // false = el texto no traía fecha y es la hora de llegada (ver services/detecciones.js).
+    if (p.fecha_del_mensaje !== undefined && typeof p.fecha_del_mensaje !== 'boolean') {
+      return error400(res, `${donde}: fecha_del_mensaje debe ser true o false`);
+    }
+
     limpios.push({
       huella, comercio, comercio_normalizado: comercioNormalizado, monto, moneda: p.moneda, fecha, banco,
+      fecha_del_mensaje: p.fecha_del_mensaje ?? true,
     });
   }
-  req.body = { pagos: limpios };
+  const compartido = req.body.compartido;
+  if (compartido !== undefined && typeof compartido !== 'boolean') {
+    return error400(res, 'compartido debe ser true o false');
+  }
+  // Un SMS compartido es uno solo: lo eligió el usuario.
+  if (compartido && limpios.length !== 1) return error400(res, 'Un cobro compartido se envía solo');
+  req.body = { pagos: limpios, compartido: compartido === true };
   next();
 }
 

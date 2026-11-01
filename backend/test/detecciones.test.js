@@ -426,4 +426,118 @@ describe('endpoints de detecciones', () => {
       assert.equal(r.resultados[0].suscripcion_id, null);
     });
   });
+
+  describe('sin duplicados entre caminos (notificación, historial de SMS, compartir)', () => {
+    const claude = {
+      comercio: 'ANTHROPIC* CLAUDE SUB', comercio_normalizado: 'Claude', banco: 'Nequi', monto: 68139.27,
+    };
+
+    it('valida fecha_del_mensaje y compartido', async () => {
+      const auth = await crearUsuario();
+      await enviar(auth, [pago({ fecha_del_mensaje: 'no' })], 400);
+      const res = await request(app).post('/api/detecciones/pagos').set(auth)
+        .send({ pagos: [pago()], compartido: 'si' }).expect(400);
+      assert.match(res.body.error, /compartido/);
+      await request(app).post('/api/detecciones/pagos').set(auth)
+        .send({ pagos: [pago(), pago()], compartido: true }).expect(400);
+    });
+
+    it('un SMS sin fecha (Nequi) que llega con segundos de diferencia es el mismo cobro', async () => {
+      const auth = await crearUsuario();
+      // Notificación: postTime. Historial de SMS: la hora de recepción, 18 s antes.
+      let r = await enviar(auth, [pago({ ...claude, fecha: '2026-10-28T10:15:21', fecha_del_mensaje: false })]);
+      assert.equal(r.resultados[0].resultado, 'candidato_nuevo');
+      r = await enviar(auth, [pago({ ...claude, fecha: '2026-10-28T10:15:03', fecha_del_mensaje: false })]);
+      assert.equal(r.resultados[0].resultado, 'repetido');
+
+      // Fuera de la tolerancia (más de 5 minutos) es otro cobro.
+      r = await enviar(auth, [pago({ ...claude, fecha: '2026-10-28T10:25:00', fecha_del_mensaje: false })]);
+      assert.equal(r.resultados[0].resultado, 'candidato_actualizado');
+      const { rows } = await pool.query(
+        `SELECT count(*)::int AS n, bool_and(fecha_aproximada) AS aproximadas FROM pagos_detectados p
+         JOIN usuarios u ON u.id = p.usuario_id WHERE u.correo = $1`,
+        [`detecta${contador}@prueba.com`],
+      );
+      assert.deepEqual(rows[0], { n: 2, aproximadas: true });
+    });
+
+    it('con la fecha del propio mensaje en los dos, dos compras a minutos distintos son dos', async () => {
+      const auth = await crearUsuario();
+      const didi = { comercio: 'DIDI FOOD', comercio_normalizado: 'Didi Food', monto: 18900 };
+      const r = await enviar(auth, [
+        pago({ ...didi, fecha: '2026-10-30T13:10:00' }),
+        pago({ ...didi, fecha: '2026-10-30T13:12:00' }),
+      ]);
+      assert.deepEqual(r.resultados.map((x) => x.resultado), ['compra_normal', 'compra_normal']);
+    });
+
+    it('un cobro compartido de un comercio desconocido se propone como suscripción', async () => {
+      const auth = await crearUsuario();
+      const gym = { comercio: 'GIMNASIO LA 80', comercio_normalizado: 'Gimnasio La 80', monto: 89900 };
+      const res = await request(app).post('/api/detecciones/pagos').set(auth)
+        .send({ pagos: [pago(gym)], compartido: true }).expect(200);
+      assert.equal(res.body.resultados[0].resultado, 'candidato_nuevo');
+      assert.equal(res.body.candidatos_nuevos[0].frecuencia_estimada, 'mensual');
+      assert.equal(res.body.candidatos_nuevos[0].es_servicio_conocido, false);
+    });
+  });
+
+  describe('retención: las compras normales no se quedan en el servidor', () => {
+    async function pagosGuardados(auth) {
+      const { rows } = await pool.query(
+        `SELECT p.comercio_normalizado FROM pagos_detectados p
+         WHERE p.usuario_id = (SELECT id FROM usuarios WHERE correo = $1) ORDER BY p.fecha`,
+        [`detecta${auth.numero}@prueba.com`],
+      );
+      return rows.map((r) => r.comercio_normalizado);
+    }
+
+    async function usuarioNumerado() {
+      const auth = await crearUsuario();
+      return { auth, numero: contador };
+    }
+
+    it('una compra puntual se responde pero no se guarda', async () => {
+      const u = await usuarioNumerado();
+      const r = await enviar(u.auth, [pago({ comercio: 'DIDI FOOD', comercio_normalizado: 'Didi Food', monto: 18900 })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal');
+      assert.deepEqual(await pagosGuardados(u), []);
+    });
+
+    it('se conservan los pagos de candidatos y suscripciones, incluidos los alias del catálogo', async () => {
+      const u = await usuarioNumerado();
+      const gym = { comercio: 'BODYTECH*CHAPINERO', comercio_normalizado: 'Bodytech', banco: 'Davivienda', monto: 99900 };
+      await enviar(u.auth, [
+        pago({ ...gym, fecha: '2026-09-05T06:00:00' }),
+        pago({ ...gym, fecha: '2026-10-05T06:00:00' }),
+        // Servicio conocido con el nombre de un alias: el candidato queda como "Max".
+        pago({ comercio: 'HBO MAX', comercio_normalizado: 'HBO Max', monto: 26900, fecha: '2026-10-10T08:00:00' }),
+      ]);
+      assert.deepEqual(await pagosGuardados(u), ['Bodytech', 'Bodytech', 'HBO Max']);
+    });
+
+    it('al descartar un candidato se borran sus pagos', async () => {
+      const u = await usuarioNumerado();
+      const { candidatos_nuevos: [c] } = await enviar(u.auth, [pago()]);
+      assert.deepEqual(await pagosGuardados(u), ['Crunchyroll']);
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/descartar`).set(u.auth).expect(200);
+      assert.deepEqual(await pagosGuardados(u), []);
+    });
+
+    it('la tarea diaria borra las compras normales de todos los usuarios', async () => {
+      const u = await usuarioNumerado();
+      const { rows: [usuario] } = await pool.query('SELECT id FROM usuarios WHERE correo = $1', [`detecta${u.numero}@prueba.com`]);
+      // Una compra normal guardada antes de esta versión.
+      await pool.query(
+        `INSERT INTO pagos_detectados (usuario_id, comercio, comercio_normalizado, monto, moneda, fecha, banco, huella)
+         VALUES ($1, 'DIDI FOOD', 'Didi Food', 18900, 'COP', '2026-10-30T13:10:00', 'Bancolombia', $2)`,
+        [usuario.id, 'f'.repeat(64)],
+      );
+      const { transaccion } = await import('../src/db.js');
+      const { purgarComprasNormales } = await import('../src/services/detecciones.js');
+      const borrados = await transaccion((client) => purgarComprasNormales(client));
+      assert.ok(borrados >= 1);
+      assert.deepEqual(await pagosGuardados(u), []);
+    });
+  });
 });

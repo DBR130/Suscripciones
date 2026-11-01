@@ -48,15 +48,15 @@ const MESES_HISTORIAL = 6;
 
 // Detección automática (pantalla 05): pagos detectados en notificaciones y
 // los candidatos pendientes que generaron. Claude es un servicio conocido;
-// Bodytech se detectó por sus cobros mensuales; DiDi Food es una compra
-// normal y no genera candidato. haceDias: cuándo llegó cada cobro.
+// Bodytech se detectó por sus cobros mensuales. (Las compras normales, como
+// una en DiDi Food, no llegan al servidor: se quedan en el celular.)
+// haceDias: cuándo llegó cada cobro.
 const PAGOS_DETECTADOS = [
   { comercio: 'ANTHROPIC* CLAUDE SUB', normalizado: 'Claude', banco: 'Nequi', monto: 68139.27, haceDias: 33 },
   { comercio: 'ANTHROPIC* CLAUDE SUB', normalizado: 'Claude', banco: 'Nequi', monto: 69850.5, haceDias: 3 },
   { comercio: 'BODYTECH*CHAPINERO', normalizado: 'Bodytech', banco: 'Bancolombia', monto: 99900, haceMeses: 2 },
   { comercio: 'BODYTECH*CHAPINERO', normalizado: 'Bodytech', banco: 'Bancolombia', monto: 99900, haceMeses: 1 },
   { comercio: 'BODYTECH*CHAPINERO', normalizado: 'Bodytech', banco: 'Bancolombia', monto: 99900, haceDias: 4 },
-  { comercio: 'DIDI FOOD', normalizado: 'Didi Food', banco: 'Bancolombia', monto: 18900, haceDias: 2 },
 ];
 const CANDIDATOS = [
   { nombre: 'Claude', monto: 69850.5, banco: 'Nequi', conocido: true },
