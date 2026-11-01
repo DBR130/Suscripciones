@@ -218,8 +218,8 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
               style: TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w700),
             ),
             subtitle: const Text(
-              'Muestra el paquete y el título de cualquier notificación que llegue, sin leer '
-              'ni guardar su texto. Úsalo para encontrar el paquete del banco y de la app de SMS.',
+              'De las apps que no están en la lista muestra solo el paquete, sin leer su título '
+              'ni su texto. Úsalo para encontrar el paquete del banco y de la app de SMS.',
               style: TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600, height: 1.4),
             ),
           ),
@@ -392,7 +392,6 @@ class _TarjetaEvento extends StatelessWidget {
               style: TextStyle(color: color, fontWeight: FontWeight.w800, letterSpacing: 0.5),
             ),
             TextSpan(text: '${e.paquete}\n', style: const TextStyle(color: AppColors.text, fontWeight: FontWeight.w700)),
-            if (e.titulo.isNotEmpty) TextSpan(text: '${e.titulo}\n'),
             TextSpan(text: detalle, style: const TextStyle(color: AppColors.muted)),
           ],
         ),

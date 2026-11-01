@@ -40,7 +40,8 @@ enum TipoEvento {
   /// App permitida, pero el texto no parecía un cobro (no se guardó).
   descartada,
 
-  /// App no permitida (solo en modo descubrimiento; sin texto).
+  /// App no permitida (solo en modo descubrimiento): solo el paquete, sin
+  /// título ni texto.
   descubierta,
 }
 
@@ -49,7 +50,6 @@ class EventoDeteccion {
   const EventoDeteccion({
     required this.tipo,
     required this.paquete,
-    required this.titulo,
     required this.recibidaEn,
     this.notificacion,
     this.motivo,
@@ -57,7 +57,6 @@ class EventoDeteccion {
 
   final TipoEvento tipo;
   final String paquete;
-  final String titulo;
   final DateTime recibidaEn;
 
   /// Solo en [TipoEvento.guardada].
@@ -73,7 +72,6 @@ class EventoDeteccion {
       return EventoDeteccion(
         tipo: tipo,
         paquete: n.paquete,
-        titulo: n.titulo,
         recibidaEn: n.recibidaEn,
         notificacion: n,
       );
@@ -81,7 +79,6 @@ class EventoDeteccion {
     return EventoDeteccion(
       tipo: tipo,
       paquete: mapa['paquete'] as String,
-      titulo: mapa['titulo'] as String? ?? '',
       recibidaEn: DateTime.fromMillisecondsSinceEpoch((mapa['recibida_en'] as num).toInt()),
       motivo: mapa['motivo'] as String?,
     );

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -49,13 +50,16 @@ class Routers {
   static int _id(GoRouterState state) => int.tryParse(state.pathParameters['id']!) ?? 0;
 
   /// Crea el router. [initialLocation] permite abrir directo en el resumen
-  /// cuando ya hay una sesión guardada (ver main.dart).
+  /// cuando ya hay una sesión guardada (ver main.dart). [depuracion] agrega
+  /// la pantalla de depuración de la detección: por defecto solo en debug, así
+  /// en release la ruta no existe y el compilador elimina la pantalla.
   static GoRouter crear(
     AuthService authService,
     SuscripcionService suscripcionService, {
     RecordatoriosService? recordatorios,
     LectorNotificaciones? lector,
     String initialLocation = home,
+    bool depuracion = kDebugMode,
   }) {
     final lectorNotificaciones = lector ?? LectorNotificaciones();
     return GoRouter(
@@ -79,14 +83,15 @@ class Routers {
             ),
           ],
         ),
-        // Solo tiene contenido en modo debug (detección, hito 1).
-        GoRoute(
-          path: depuracionDeteccion,
-          builder: (context, state) => DepuracionDeteccionPage(
-            lector: lectorNotificaciones,
-            recordatorios: recordatorios,
+        // Solo en debug: en release esta ruta no se registra.
+        if (depuracion)
+          GoRoute(
+            path: depuracionDeteccion,
+            builder: (context, state) => DepuracionDeteccionPage(
+              lector: lectorNotificaciones,
+              recordatorios: recordatorios,
+            ),
           ),
-        ),
         GoRoute(
           path: preferencias,
           builder: (context, state) =>

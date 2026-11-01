@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_suscripciones/Common/AppTheme.dart';
+import 'package:flutter_suscripciones/Common/Routers.dart';
 import 'package:flutter_suscripciones/deteccion/depuracion_deteccion_page.dart';
 import 'package:flutter_suscripciones/deteccion/lector_notificaciones.dart';
 import 'package:flutter_suscripciones/deteccion/notificacion_capturada.dart';
+import 'package:flutter_suscripciones/services/api_client.dart';
+import 'package:flutter_suscripciones/services/auth_service.dart';
+import 'package:flutter_suscripciones/services/suscripcion_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -183,7 +188,8 @@ void main() {
         sink.success({
           'tipo': 'descubierta',
           'paquete': 'com.ejemplo.mensajes',
-          'titulo': 'Bancolombia',
+          // Aunque llegara un título (nombre de un contacto), no se muestra.
+          'titulo': 'Mamá',
           'recibida_en': DateTime(2026, 10, 31, 9).millisecondsSinceEpoch,
         });
       }),
@@ -213,6 +219,7 @@ void main() {
     expect(find.text('En vivo (1)'), findsOneWidget);
     expect(find.textContaining('com.ejemplo.mensajes', findRichText: true), findsOneWidget);
     expect(find.textContaining('Texto no leído', findRichText: true), findsOneWidget);
+    expect(find.textContaining('Mamá', findRichText: true), findsNothing);
 
     // Modo descubrimiento.
     await tester.tap(find.text('Modo descubrimiento'));
@@ -241,5 +248,21 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Se recuperaron 3 de la barra de notificaciones'), findsOneWidget);
+  });
+
+  group('ruta de depuración', () {
+    List<String> rutas({required bool depuracion}) {
+      final api = ApiClient();
+      final router = Routers.crear(AuthService(api), SuscripcionService(api), depuracion: depuracion);
+      return router.configuration.routes.whereType<GoRoute>().map((r) => r.path).toList();
+    }
+
+    test('en release (depuracion: false) la ruta no existe', () {
+      expect(rutas(depuracion: false), isNot(contains(Routers.depuracionDeteccion)));
+    });
+
+    test('en debug sí existe', () {
+      expect(rutas(depuracion: true), contains(Routers.depuracionDeteccion));
+    });
   });
 }
