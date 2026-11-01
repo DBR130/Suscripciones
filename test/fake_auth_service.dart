@@ -5,11 +5,14 @@ import 'package:flutter_suscripciones/services/auth_service.dart';
 /// AuthService falso para los tests: no usa red ni almacenamiento.
 /// Si [error] tiene valor, login y registro fallan con ese mensaje.
 class FakeAuthService implements AuthService {
-  FakeAuthService({this.error, this.dias = 3});
+  FakeAuthService({this.error, this.dias = 3, Usuario? usuario}) : _usuario = usuario; // ignore: prefer_initializing_formals
 
   final String? error;
   int dias;
   Usuario? _usuario;
+
+  @override
+  Future<void> Function()? alCerrarSesion;
 
   /// Datos recibidos en la última llamada (para verificarlos en el test).
   List<String>? ultimaLlamada;

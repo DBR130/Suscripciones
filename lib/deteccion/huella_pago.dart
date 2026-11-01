@@ -11,6 +11,11 @@ import 'parser_pagos.dart';
 /// La fecha es la del mensaje o, si no la trae (Nequi), la hora en que
 /// Android publicó la notificación (postTime). Así la misma notificación
 /// leída en vivo y recuperada después desde la barra da la misma huella.
+///
+/// Si el mismo SMS sin fecha llega por otro camino (el historial de SMS trae
+/// la hora de recepción, unos segundos distinta), la huella cambia: para eso
+/// están [AnalizadorPagos.mismoCobro] en el celular y la tolerancia de 5
+/// minutos del backend (fecha_del_mensaje = false).
 String huellaDePago(PagoExtraido p) {
   final datos = [p.banco, p.comercio, p.monto.toStringAsFixed(2), p.moneda, fechaParaApi(p.fecha)].join('|');
   return sha256.convert(utf8.encode(datos)).toString();
@@ -27,6 +32,9 @@ Map<String, Object> pagoParaEnviar(PagoExtraido p) => {
       'monto': p.monto.toStringAsFixed(2),
       'moneda': p.moneda,
       'fecha': fechaParaApi(p.fecha),
+      // false = el texto no traía fecha (Nequi) y es la hora de llegada: el
+      // backend tolera unos minutos de diferencia al buscar repetidos.
+      'fecha_del_mensaje': p.fechaDelMensaje,
       'banco': _recortar(p.banco, 50),
     };
 

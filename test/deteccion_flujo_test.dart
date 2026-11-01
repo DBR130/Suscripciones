@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_suscripciones/Common/AppTheme.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_suscripciones/deteccion/almacen_pagos_locales.dart';
 import 'package:flutter_suscripciones/deteccion/candidato_suscripcion.dart';
 import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
 import 'package:flutter_suscripciones/deteccion/deteccion_service.dart';
@@ -34,6 +36,17 @@ class FakeDeteccionService implements DeteccionService {
   final List<Map<String, Object>> enviados = [];
   final List<(int, double?, Frecuencia?)> confirmados = [];
   final List<int> descartados = [];
+
+  /// Lo que responde a un cobro compartido, y los que recibió.
+  ResultadoCompartido respuestaCompartido = (resultado: 'candidato_nuevo', suscripcionId: null, candidatoId: 9);
+  final List<Map<String, Object>> compartidos = [];
+
+  @override
+  Future<ResultadoCompartido> enviarCompartido(Map<String, Object> pago) async {
+    if (error != null) throw ApiException(error!);
+    compartidos.add(pago);
+    return respuestaCompartido;
+  }
 
   @override
   Future<List<CandidatoSuscripcion>> enviarPagos(List<Map<String, Object>> pagos) async {
@@ -128,7 +141,12 @@ void main() {
 
     test('lo que se envía al backend no lleva texto, título ni la tarjeta', () {
       final p = pagoParaEnviar(extraer(bancolombia, DateTime(2026, 10, 23, 7, 21)));
-      expect(p.keys, unorderedEquals(['huella', 'comercio', 'comercio_normalizado', 'monto', 'moneda', 'fecha', 'banco']));
+      expect(
+        p.keys,
+        unorderedEquals(
+            ['huella', 'comercio', 'comercio_normalizado', 'monto', 'moneda', 'fecha', 'fecha_del_mensaje', 'banco']),
+      );
+      expect(p, containsPair('fecha_del_mensaje', true));
       expect(p, containsPair('comercio', 'GOOGLE *Crunchyroll'));
       expect(p, containsPair('comercio_normalizado', 'Crunchyroll'));
       expect(p, containsPair('monto', '19900.00'));
@@ -154,6 +172,7 @@ void main() {
         };
 
     setUp(() {
+      FlutterSecureStorage.setMockInitialValues({});
       permiso = true;
       borrados = [];
       cola = [
@@ -184,27 +203,39 @@ void main() {
           lector: LectorNotificaciones(disponible: true),
           servicio: servicio,
           cargarCatalogo: () async => falla ? throw const ApiException('sin conexión') : catalogo,
+          almacen: AlmacenPagosLocales(),
           esperaConexion: Duration.zero,
         );
 
-    test('envía solo los cobros y borra de la cola todo lo revisado', () async {
+    test('envía solo los servicios conocidos y borra de la cola todo lo revisado', () async {
       final servicio = FakeDeteccionService(nuevos: [candidato(1, 'Crunchyroll', 19900), candidato(2, 'Claude', 68139.27)]);
       final r = await procesador(servicio).procesar();
       expect(r.revisadas, 4);
       expect(r.cobros, 3);
+      expect(r.enviados, 2);
       expect(r.candidatosNuevos.map((c) => c.nombre), ['Crunchyroll', 'Claude']);
-      expect(servicio.enviados.map((p) => p['comercio_normalizado']), ['Crunchyroll', 'Claude', 'Didi Food']);
+      // DiDi Food es una compra puntual: se queda en el celular.
+      expect(servicio.enviados.map((p) => p['comercio_normalizado']), ['Crunchyroll', 'Claude']);
       // Nequi no trae fecha: se usa la de llegada (postTime).
       expect(servicio.enviados[1]['fecha'], '2026-10-28T10:15:00.000');
       expect(borrados, ['n0', 'n1', 'n2', 'personal']);
     });
 
-    test('si el backend no responde, la cola queda intacta', () async {
+    test('sin catálogo la cola queda intacta; si falla el envío, lo interpretado se reintenta después', () async {
       await expectLater(procesador(FakeDeteccionService(), falla: true).procesar(), throwsA(isA<ApiException>()));
       expect(borrados, isEmpty);
+
+      // El envío falla: el texto crudo sale de la cola (ya se interpretó) y los
+      // pagos esperan en el almacén local, sin perderse.
       final servicio = FakeDeteccionService(error: 'No se pudo conectar con el servidor');
       await expectLater(procesador(servicio).procesar(), throwsA(isA<ApiException>()));
-      expect(borrados, isEmpty);
+      expect(borrados, ['n0', 'n1', 'n2', 'personal']);
+
+      cola = [];
+      servicio.error = null;
+      final r = await procesador(servicio).procesar();
+      expect(r.enviados, 2);
+      expect(servicio.enviados.map((p) => p['comercio_normalizado']), ['Crunchyroll', 'Claude']);
     });
 
     test('con la cola vacía no llama al backend', () async {
@@ -219,7 +250,7 @@ void main() {
       final servicio = FakeDeteccionService();
       final p = procesador(servicio);
       await Future.wait([p.procesar(), p.procesar()]);
-      expect(servicio.enviados.length, 3);
+      expect(servicio.enviados.length, 2);
     });
   });
 
@@ -311,6 +342,7 @@ void main() {
     final mensajero = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
 
     setUp(() {
+      FlutterSecureStorage.setMockInitialValues({});
       mensajero.setMockMethodCallHandler(metodos, (call) async => switch (call.method) {
             'estado' => {'permiso': true, 'conectado': true, 'es_debug': true, 'modo_descubrimiento': false},
             'recuperarActivas' => 0,
@@ -334,6 +366,7 @@ void main() {
           lector: LectorNotificaciones(disponible: true),
           servicio: s,
           cargarCatalogo: () async => catalogo,
+          almacen: AlmacenPagosLocales(),
           esperaConexion: Duration.zero,
         );
 

@@ -2,6 +2,11 @@ import '../models/suscripcion.dart';
 import '../services/api_client.dart';
 import 'candidato_suscripcion.dart';
 
+/// Qué hizo el backend con un cobro compartido: "candidato_nuevo",
+/// "candidato_actualizado", "suscripcion_existente", "ya_confirmado",
+/// "comercio_descartado" o "repetido".
+typedef ResultadoCompartido = ({String resultado, int? suscripcionId, int? candidatoId});
+
 /// Llamadas al backend de detecciones (/api/detecciones). Todas lanzan
 /// [ApiException] si fallan.
 class DeteccionService {
@@ -25,6 +30,22 @@ class DeteccionService {
           .map((c) => CandidatoSuscripcion.fromJson(c as Map<String, dynamic>)));
     }
     return nuevos;
+  }
+
+  /// Un cobro que el usuario compartió con SubTrack a propósito: aunque sea de
+  /// un comercio desconocido y el único, el backend lo propone como
+  /// suscripción (el usuario dice que lo es). Devuelve qué pasó.
+  Future<ResultadoCompartido> enviarCompartido(Map<String, Object> pago) async {
+    final json = await _api.post('$_ruta/pagos', {
+      'pagos': [pago],
+      'compartido': true,
+    });
+    final r = (json['resultados'] as List).first as Map<String, dynamic>;
+    return (
+      resultado: r['resultado'] as String,
+      suscripcionId: r['suscripcion_id'] as int?,
+      candidatoId: r['candidato_id'] as int?,
+    );
   }
 
   /// Candidatos pendientes de confirmar o descartar.

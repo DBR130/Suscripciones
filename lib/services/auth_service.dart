@@ -52,9 +52,14 @@ class AuthService {
     }
   }
 
-  Future<void> cerrarSesion() {
+  /// Se llama al cerrar sesión o eliminar la cuenta: borra los datos de ese
+  /// usuario que viven solo en el celular (los pagos detectados locales).
+  Future<void> Function()? alCerrarSesion;
+
+  Future<void> cerrarSesion() async {
     _usuario = null;
-    return _api.borrarToken();
+    await _api.borrarToken();
+    await alCerrarSesion?.call();
   }
 
   /// Días de anticipación global para los recordatorios.
