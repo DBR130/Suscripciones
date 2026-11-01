@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
+import '../deteccion/aviso_deteccion_pausada.dart';
+import '../deteccion/vigilante_deteccion.dart';
 import '../models/resumen.dart';
 import '../models/suscripcion.dart';
 import '../services/api_client.dart';
@@ -27,6 +29,7 @@ class DashboardPage extends StatefulWidget {
     required this.authService,
     required this.suscripcionService,
     this.recordatorios,
+    this.vigilante,
   });
 
   final AuthService authService;
@@ -34,6 +37,10 @@ class DashboardPage extends StatefulWidget {
 
   /// null en los tests; en web no programa nada.
   final RecordatoriosService? recordatorios;
+
+  /// Si la detección está pausada (permiso sí, lector desconectado), se
+  /// muestra un aviso con el botón al ajuste.
+  final VigilanteDeteccion? vigilante;
 
   @override
   State<DashboardPage> createState() => _DashboardPageState();
@@ -115,6 +122,16 @@ class _DashboardPageState extends State<DashboardPage> {
               proximo: suscripciones.isEmpty ? null : suscripciones.first.fechaClave,
               onPerfil: () => context.go(Routers.perfil),
             ),
+            if (widget.vigilante != null)
+              ValueListenableBuilder<EstadoDeteccion>(
+                valueListenable: widget.vigilante!.estado,
+                builder: (context, estado, _) => estado == EstadoDeteccion.pausada
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: AvisoDeteccionPausada(onAbrirAjuste: widget.vigilante!.lector.abrirAjustesAcceso),
+                      )
+                    : const SizedBox.shrink(),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 16),
               child: _cuerpo(pronto, despues, tarjeta, diasGlobales, porCobrar(suscripciones, hoy)),

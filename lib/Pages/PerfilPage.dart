@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
-import '../deteccion/lector_notificaciones.dart';
+import '../deteccion/vigilante_deteccion.dart';
 import '../models/ahorro.dart';
 import '../models/usuario.dart';
 import '../services/api_client.dart';
@@ -27,14 +27,14 @@ class PerfilPage extends StatefulWidget {
     required this.authService,
     this.suscripcionService,
     this.recordatorios,
-    this.lector,
+    this.vigilante,
   });
 
   final AuthService authService;
 
-  /// Lector de notificaciones (detección): el interruptor "Permiso de
-  /// notificaciones" muestra si el acceso está concedido. Solo en Android.
-  final LectorNotificaciones? lector;
+  /// Estado real de la detección: el interruptor "Permiso de notificaciones"
+  /// distingue permiso concedido de lector conectado. Solo en Android.
+  final VigilanteDeteccion? vigilante;
 
   /// Para reprogramar los recordatorios al cambiar las preferencias.
   final SuscripcionService? suscripcionService;
@@ -58,10 +58,8 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
   bool _permiso = false;
   bool _xiaomi = false;
 
-  // Detección automática: null mientras se consulta (o si no hay lector).
-  bool? _deteccion;
-
-  LectorNotificaciones? get _lector => widget.lector?.disponible ?? false ? widget.lector : null;
+  VigilanteDeteccion? get _vigilante =>
+      widget.vigilante?.lector.disponible ?? false ? widget.vigilante : null;
 
   RecordatoriosService? get _rec =>
       widget.recordatorios?.disponible ?? false ? widget.recordatorios : null;
@@ -74,25 +72,26 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     _cargar();
     _cargarRecordatorios();
     _cargarAhorro();
-    _cargarDeteccion();
+    _vigilante?.verificar(motivo: 'perfil');
   }
 
-  Future<void> _cargarDeteccion() async {
-    final lector = _lector;
-    if (lector == null) return;
-    final permiso = (await lector.estado()).permiso;
-    if (mounted) setState(() => _deteccion = permiso);
-  }
-
-  /// Encender: la pantalla de permisos (03), que sigue con el escaneo.
-  /// Apagar: el permiso solo se quita desde los ajustes de Android.
-  Future<void> _cambiarDeteccion(bool activar) async {
-    if (activar) {
-      await context.push(Routers.permisos);
-    } else {
-      await _lector!.abrirAjustesAcceso();
+  /// Según el estado real: sin permiso abre la pantalla de permisos (03);
+  /// pausada abre el ajuste para apagar y encender el acceso; activa abre los
+  /// ajustes para quitarlo (solo se puede quitar ahí).
+  Future<void> _cambiarDeteccion(EstadoDeteccion estado) async {
+    final vigilante = _vigilante!;
+    switch (estado) {
+      case EstadoDeteccion.sinPermiso:
+        await context.push(Routers.permisos);
+      case EstadoDeteccion.pausada:
+        mostrarToast(context, 'Desactiva y vuelve a activar el acceso de SubTrack');
+        await vigilante.lector.abrirAjustesAcceso();
+      case EstadoDeteccion.activa:
+        await vigilante.lector.abrirAjustesAcceso();
+      case EstadoDeteccion.comprobando || EstadoDeteccion.noDisponible:
+        return;
     }
-    _cargarDeteccion();
+    vigilante.verificar(motivo: 'perfil');
   }
 
   Future<void> _cargarAhorro() async {
@@ -129,7 +128,7 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _cargarRecordatorios();
-      _cargarDeteccion();
+      _vigilante?.verificar(motivo: 'perfil');
     }
   }
 
@@ -391,16 +390,18 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                   ),
                 ),
                 const SizedBox(height: 14),
-                if (_deteccion != null) ...[
-                  AppCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: _FilaInterruptor(
-                      titulo: 'Permiso de notificaciones',
-                      descripcion: _deteccion!
-                          ? 'Activo · detección automática encendida'
-                          : 'Desactivado · solo registro manual',
-                      valor: _deteccion!,
-                      onChanged: _cambiarDeteccion,
+                if (_vigilante != null) ...[
+                  ValueListenableBuilder<EstadoDeteccion>(
+                    valueListenable: _vigilante!.estado,
+                    builder: (context, estado, _) => AppCard(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: _FilaInterruptor(
+                        titulo: 'Permiso de notificaciones',
+                        descripcion: textoInterruptorDeteccion(estado),
+                        // "Activo" solo si el lector está conectado de verdad.
+                        valor: estado == EstadoDeteccion.activa || estado == EstadoDeteccion.comprobando,
+                        onChanged: estado == EstadoDeteccion.comprobando ? null : (_) => _cambiarDeteccion(estado),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -457,6 +458,14 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     );
   }
 }
+
+/// Texto del interruptor "Permiso de notificaciones" según el estado real.
+String textoInterruptorDeteccion(EstadoDeteccion estado) => switch (estado) {
+      EstadoDeteccion.activa => 'Activo · detección automática encendida',
+      EstadoDeteccion.pausada => 'Detección pausada · toca para reactivarla',
+      EstadoDeteccion.comprobando => 'Comprobando la detección…',
+      EstadoDeteccion.sinPermiso || EstadoDeteccion.noDisponible => 'Desactivado · solo registro manual',
+    };
 
 class _FilaInterruptor extends StatelessWidget {
   const _FilaInterruptor({

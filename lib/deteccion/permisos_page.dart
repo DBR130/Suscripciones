@@ -6,7 +6,9 @@ import '../Common/Routers.dart';
 import '../services/recordatorios_service.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
+import 'aviso_deteccion_pausada.dart';
 import 'lector_notificaciones.dart';
+import 'vigilante_deteccion.dart';
 
 /// Pantalla 03: permiso para leer notificaciones de pago. "Dar permiso y
 /// detectar" abre los ajustes de "Acceso a notificaciones" y, al volver con
@@ -15,9 +17,12 @@ import 'lector_notificaciones.dart';
 /// [inicio] = viene del registro (onboarding): al final sigue la pantalla 06.
 /// Si no, se abrió desde Perfil.
 class PermisosPage extends StatefulWidget {
-  const PermisosPage({super.key, required this.lector, this.recordatorios, this.inicio = false});
+  const PermisosPage({super.key, required this.vigilante, this.recordatorios, this.inicio = false});
 
-  final LectorNotificaciones lector;
+  /// Distingue permiso concedido de lector conectado: con el permiso ya dado
+  /// pero el lector desconectado, guía a apagar y encender el acceso.
+  final VigilanteDeteccion vigilante;
+  LectorNotificaciones get lector => vigilante.lector;
 
   /// Para abrir la información de la app ("Permitir ajustes restringidos").
   final RecordatoriosService? recordatorios;
@@ -31,6 +36,10 @@ class _PermisosPageState extends State<PermisosPage> with WidgetsBindingObserver
   /// Fue a los ajustes y volvió sin el permiso: puede ser "Ajuste restringido".
   bool _volvioSinPermiso = false;
   bool _esperandoAjustes = false;
+
+  /// Permiso concedido pero el lector no conecta (HyperOS tras reinstalar).
+  bool _pausada = false;
+  bool _comprobando = false;
 
   @override
   void initState() {
@@ -54,19 +63,40 @@ class _PermisosPageState extends State<PermisosPage> with WidgetsBindingObserver
     final permiso = (await widget.lector.estado()).permiso;
     if (!mounted) return;
     if (permiso) {
-      _irAEscaneo();
+      await _comprobarYSeguir();
     } else {
-      setState(() => _volvioSinPermiso = true);
+      setState(() {
+        _volvioSinPermiso = true;
+        _pausada = false;
+      });
     }
   }
 
   Future<void> _darPermiso() async {
     if ((await widget.lector.estado()).permiso) {
-      _irAEscaneo();
+      await _comprobarYSeguir();
       return;
     }
+    await _abrirAjustes();
+  }
+
+  Future<void> _abrirAjustes() async {
     _esperandoAjustes = true;
     await widget.lector.abrirAjustesAcceso();
+  }
+
+  /// Con el permiso concedido, espera a que el lector conecte (intentando
+  /// reconectarlo). Si conecta, sigue al escaneo; si no, explica qué hacer.
+  Future<void> _comprobarYSeguir() async {
+    setState(() => _comprobando = true);
+    final estado = await widget.vigilante.verificar(motivo: 'pantalla de permisos');
+    if (!mounted) return;
+    setState(() {
+      _comprobando = false;
+      _pausada = estado == EstadoDeteccion.pausada;
+      _volvioSinPermiso = estado == EstadoDeteccion.sinPermiso;
+    });
+    if (estado == EstadoDeteccion.activa) _irAEscaneo();
   }
 
   void _irAEscaneo() {
@@ -158,9 +188,16 @@ class _PermisosPageState extends State<PermisosPage> with WidgetsBindingObserver
                       const SizedBox(height: 14),
                       _AjusteRestringido(onAbrirInfo: widget.recordatorios?.abrirAjustesApp),
                     ],
+                    if (_pausada) ...[
+                      const SizedBox(height: 14),
+                      AvisoDeteccionPausada(onAbrirAjuste: _abrirAjustes),
+                    ],
                     const Spacer(),
                     const SizedBox(height: 24),
-                    FilledButton(onPressed: _darPermiso, child: const Text('Dar permiso y detectar')),
+                    FilledButton(
+                      onPressed: _comprobando ? null : _darPermiso,
+                      child: Text(_comprobando ? 'Comprobando el lector…' : 'Dar permiso y detectar'),
+                    ),
                     const SizedBox(height: 10),
                     AppBotonSecundario(texto: 'Prefiero agregarlas a mano', ambar: true, onPressed: _aMano),
                   ],

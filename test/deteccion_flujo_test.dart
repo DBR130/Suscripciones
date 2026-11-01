@@ -14,6 +14,7 @@ import 'package:flutter_suscripciones/deteccion/parser_pagos.dart';
 import 'package:flutter_suscripciones/deteccion/permisos_page.dart';
 import 'package:flutter_suscripciones/deteccion/procesador_detecciones.dart';
 import 'package:flutter_suscripciones/deteccion/resultados_deteccion_page.dart';
+import 'package:flutter_suscripciones/deteccion/vigilante_deteccion.dart';
 import 'package:flutter_suscripciones/Pages/PerfilPage.dart';
 import 'package:flutter_suscripciones/models/suscripcion.dart';
 import 'package:flutter_suscripciones/services/api_client.dart';
@@ -63,6 +64,13 @@ class FakeDeteccionService implements DeteccionService {
   @override
   Future<void> descartar(int id) async => descartados.add(id);
 }
+
+/// Vigilante con espera corta (el real espera 9 s a que el lector conecte).
+VigilanteDeteccion vigilanteCorto() => VigilanteDeteccion(
+      LectorNotificaciones(disponible: true),
+      espera: const Duration(milliseconds: 200),
+      intervalo: const Duration(milliseconds: 50),
+    );
 
 CandidatoSuscripcion candidato(int id, String nombre, double monto, {int pagos = 1}) => CandidatoSuscripcion(
       id: id,
@@ -265,7 +273,7 @@ void main() {
     testWidgets('abre los ajustes; si vuelve sin permiso explica el ajuste restringido, y con permiso pasa al escaneo',
         (tester) async {
       await abrir(tester, '/permisos?inicio=1', {
-        '/permisos': (s) => PermisosPage(lector: LectorNotificaciones(disponible: true), inicio: true),
+        '/permisos': (s) => PermisosPage(vigilante: vigilanteCorto(), inicio: true),
         '/escaneo': (s) => destino('ESCANEO inicio=${s.uri.queryParameters['inicio']}'),
       });
       expect(find.text('Permiso para leer notificaciones de pago'), findsOneWidget);
@@ -369,7 +377,7 @@ void main() {
     tearDown(() => mensajero.setMockMethodCallHandler(metodos, null));
 
     Future<void> abrirPerfil(WidgetTester tester) => abrir(tester, '/perfil', {
-          '/perfil': (s) => PerfilPage(authService: FakeAuthService(), lector: LectorNotificaciones(disponible: true)),
+          '/perfil': (s) => PerfilPage(authService: FakeAuthService(), vigilante: vigilanteCorto()),
           '/permisos': (s) => destino('PERMISOS'),
         });
 
