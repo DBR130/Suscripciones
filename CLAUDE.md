@@ -7,10 +7,15 @@ PostgreSQL. Responde y documenta **en español**.
 
 ## Estado
 
-- Fases 1 a 5 terminadas. La 5 fue el despliegue en la nube: backend en
-  **Render** (`https://subtrack-api-4150.onrender.com`, plan gratis, se duerme
-  a los 15 min y tarda ~1 min en despertar) y base de datos en **Neon**.
-  Guía: [docs/despliegue.md](docs/despliegue.md).
+- Fases terminadas:
+  1. Autenticación (login, registro, JWT).
+  2. Suscripciones manuales y dashboard.
+  3. Recordatorios locales, historial de pagos y cambios de precio.
+  4. Cancelación con guías y ahorro.
+  5. Despliegue en la nube: backend en **Render**
+     (`https://subtrack-api-4150.onrender.com`, plan gratis, se duerme a los
+     15 min y tarda ~1 min en despertar) y base de datos en **Neon**. Guía:
+     [docs/despliegue.md](docs/despliegue.md).
 - **Detección automática**, hitos 1 a 5 hechos: lector de notificaciones
   (app de SMS predeterminada + lista fija), parser en Dart, backend de pagos y
   candidatos, pantallas 03/04/05, búsqueda opcional en el historial de SMS,
@@ -34,10 +39,19 @@ PostgreSQL. Responde y documenta **en español**.
 
 `README.md` de la raíz es la plantilla de Flutter (sin contenido propio).
 
+## Ramas y versiones
+
+| Rama | Qué es |
+|---|---|
+| `main` | Versión estable. Etiqueta **`v1.0`** (antes de la búsqueda en el historial de SMS) |
+| `develop` | Versión de pruebas. **Render despliega desde `develop`** |
+| `David` | Donde trabaja Claude Code |
+
 ## Reglas de trabajo
 
 - **Solo en la rama `David`.** Commits pequeños y descriptivos. **No hacer
-  push ni merge.**
+  push ni merge** (tampoco a `develop` ni a `main`: un merge a `develop`
+  despliega en Render).
 - **No cambiar el `applicationId`** (`com.example.flutter_suscripciones`): se
   perderían los datos, la sesión y el acceso a notificaciones al reinstalar.
 - **No tocar `backend/.env` ni `backend/.env.produccion`** (están en
@@ -110,8 +124,9 @@ Xiaomi 25080RABDG, HyperOS, Android 16, por USB. Probadores: Santiago
 ## Pendientes conocidos
 
 - Probar el hito 5 en el Xiaomi (historial de SMS, rechazo del permiso,
-  "Compartir") y aplicar la **migración 007** en local y en Neon (borra las
-  compras normales ya guardadas).
+  "Compartir").
+- Aplicar la **migración 007** en la base **local** (`npm run db:migrate`;
+  borra las compras normales ya guardadas). En Neon ya está aplicada.
 - Confirmar el nombre del permiso de Xiaomi para los "SMS de servicio".
 - Los avisos de Truecaller se probaron con textos de ejemplo, no capturas
   reales.
@@ -122,3 +137,18 @@ Xiaomi 25080RABDG, HyperOS, Android 16, por USB. Probadores: Santiago
   esto sin que David lo pida.
 - Limitaciones de la detección: ver "Limitaciones conocidas" en
   [docs/deteccion.md](docs/deteccion.md#limitaciones-conocidas).
+
+**Para después del diseño (detección):**
+
+- **Procesadores de pago** (EBANX, PayU, dLocal, Mercado Pago, PayPal,
+  Stripe): un probador vio "Servicios Web Ebanx Co" como suscripción.
+  Preguntar "¿Qué servicio es?", permitir editar el nombre en la pantalla 05,
+  sugerir el servicio por el monto y separar por monto los cobros del mismo
+  procesador.
+- **Aviso al instante con la app cerrada** (WorkManager): hoy la cola se
+  procesa al abrir la app.
+- **Servicios ambiguos** (Rappi Pro, Apple, PlayStation Plus, Xbox Game Pass,
+  YouTube Premium): proponerlos solo con patrón de cobros, no desde el primer
+  pago.
+- **Deshacer un descarte** ("Detecciones descartadas" en Perfil) y aviso
+  "Registramos un pago de X en Y".
