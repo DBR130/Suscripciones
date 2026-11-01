@@ -237,6 +237,18 @@
     ]
   },
   {
+    "nombre_servicio": "Claude",
+    "alias": ["Claude Pro", "Claude Max", "Anthropic"],
+    "duracion_minutos": 2,
+    "enlace_directo": null,
+    "pasos": [
+      "Abre Claude en el navegador e inicia sesión con la cuenta de la suscripción.",
+      "Entra a Configuración (desde tu perfil) y busca la sección de facturación o plan.",
+      "Elige cancelar el plan y confirma.",
+      "Si te suscribiste desde la app del celular, la cancelación se hace en Google Play o App Store."
+    ]
+  },
+  {
     "nombre_servicio": "Otro servicio",
     "es_generica": true,
     "alias": [],

@@ -35,6 +35,12 @@ describe('normalizar y buscarGuia', () => {
     assert.equal(guiaPara('Adobe Photoshop').guia.nombre_servicio, 'Adobe');
   });
 
+  it('Claude se encuentra también como Anthropic (detección de pagos)', () => {
+    assert.equal(guiaPara('Claude Pro').guia.nombre_servicio, 'Claude');
+    assert.equal(guiaPara('Anthropic').guia.nombre_servicio, 'Claude');
+    assert.equal(guiaPara('ANTHROPIC* CLAUDE SUB').guia.nombre_servicio, 'Claude');
+  });
+
   it('acepta el nombre con el plan', () => {
     assert.equal(guiaPara('Netflix Estándar').guia.nombre_servicio, 'Netflix');
     assert.equal(guiaPara('Spotify Premium Familiar').guia.nombre_servicio, 'Spotify');
