@@ -1,0 +1,56 @@
+{
+  "_comentario": "Textos de SMS reales del plan de deteccion, con los digitos de la tarjeta enmascarados (*0000). recibida_en es una hora de llegada de prueba. 'esperado' es lo que debe extraer el parser (lib/deteccion/parser_pagos.dart); fecha null = no trae fecha y se usa la de llegada.",
+  "notificaciones": [
+    {
+      "caso": "Bancolombia, Crunchyroll con pasarela de Google",
+      "paquete": "com.google.android.apps.messaging",
+      "titulo": "",
+      "texto": "Bancolombia: Compraste $19.900,00 en GOOGLE *Crunchyroll con tu T.Deb *0000, el 23/10/2026 a las 07:20. Si tienes dudas, encuentranos aqui: 6045109095 o 018000931987. Estamos cerca.",
+      "recibida_en": "2026-10-23T07:21:00",
+      "esperado": {
+        "banco": "Bancolombia",
+        "monto": 19900,
+        "moneda": "COP",
+        "comercio": "Crunchyroll",
+        "servicio": "Crunchyroll",
+        "fecha": "2026-10-23T07:20:00",
+        "medio": "T.Deb",
+        "indica_suscripcion": false
+      }
+    },
+    {
+      "caso": "Nequi, Claude (SUB indica suscripcion), sin fecha",
+      "paquete": "com.google.android.apps.messaging",
+      "titulo": "",
+      "texto": "NEQUI: Pagaste 68.139,27 en ANTHROPIC* CLAUDE SUB",
+      "recibida_en": "2026-10-28T10:15:00",
+      "esperado": {
+        "banco": "Nequi",
+        "monto": 68139.27,
+        "moneda": "COP",
+        "comercio": "Claude",
+        "servicio": "Claude",
+        "fecha": null,
+        "medio": null,
+        "indica_suscripcion": true
+      }
+    },
+    {
+      "caso": "Bancolombia, DiDi Food: compra normal (no es un servicio del catalogo)",
+      "paquete": "com.google.android.apps.messaging",
+      "titulo": "",
+      "texto": "Bancolombia: Compraste $18.900,00 en DIDI FOOD con tu T.Deb *0000, el 30/10/2026 a las 13:10.",
+      "recibida_en": "2026-10-30T13:11:00",
+      "esperado": {
+        "banco": "Bancolombia",
+        "monto": 18900,
+        "moneda": "COP",
+        "comercio": "Didi Food",
+        "servicio": null,
+        "fecha": "2026-10-30T13:10:00",
+        "medio": "T.Deb",
+        "indica_suscripcion": false
+      }
+    }
+  ]
+}
