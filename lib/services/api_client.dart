@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
@@ -25,8 +26,13 @@ class ApiException implements Exception {
 /// Por defecto usa 10.0.2.2, que es el "localhost" del PC visto desde el
 /// emulador de Android.
 class ApiClient {
-  ApiClient({http.Client? client, FlutterSecureStorage? storage})
-      : _client = client ?? http.Client(),
+  ApiClient({
+    http.Client? client,
+    FlutterSecureStorage? storage,
+    this.timeoutNormal = const Duration(seconds: 10),
+    this.timeoutDespertar = const Duration(seconds: 75),
+    this.avisoDespertarTras = const Duration(seconds: 4),
+  })  : _client = client ?? http.Client(),
         _storage = storage ?? const FlutterSecureStorage();
 
   static const String baseUrl = String.fromEnvironment(
@@ -37,9 +43,35 @@ class ApiClient {
   static const String errorConexion = 'No se pudo conectar con el servidor';
   static const String errorSesionExpirada =
       'Tu sesión expiró. Inicia sesión de nuevo.';
+  static const String errorDespertar =
+      'El servidor está tardando en despertar. Inténtalo de nuevo en un momento.';
+  static const String mensajeDespertando = 'Despertando el servidor, puede tardar hasta un minuto…';
 
   static const String _tokenKey = 'auth_token';
-  static const Duration _timeout = Duration(seconds: 10);
+  /// Límite de una petición con el servidor despierto.
+  final Duration timeoutNormal;
+
+  /// Límite cuando el servidor puede estar dormido: en Render (plan gratuito)
+  /// se duerme tras 15 minutos sin tráfico y tarda cerca de 1 minuto en
+  /// despertar. La petición NO se reintenta: Render la retiene mientras
+  /// despierta y después la procesa, así que repetirla podría duplicar un
+  /// registro o una suscripción.
+  final Duration timeoutDespertar;
+
+  /// Si la espera pasa de este tiempo, se avisa con [despertando].
+  final Duration avisoDespertarTras;
+
+  /// Sin respuestas del servidor por más de esto, puede estar dormido.
+  static const Duration _inactividadAntesDeDormir = Duration(minutes: 14);
+
+  /// true mientras alguna petición espera a que el servidor despierte. La app
+  /// muestra [mensajeDespertando] (ver widgets/aviso_despertando.dart).
+  final ValueNotifier<bool> despertando = ValueNotifier(false);
+  int _esperandoDespertar = 0;
+  DateTime? _ultimaRespuesta;
+
+  bool get _puedeEstarDormido =>
+      _ultimaRespuesta == null || DateTime.now().difference(_ultimaRespuesta!) > _inactividadAntesDeDormir;
 
   final http.Client _client;
   final FlutterSecureStorage _storage;
@@ -101,14 +133,30 @@ class ApiClient {
       request.headers['Authorization'] = 'Bearer $token';
     }
 
+    // La primera petición (o la primera tras un rato sin uso) espera más y,
+    // si tarda, avisa que el servidor está despertando.
+    final dormido = _puedeEstarDormido;
+    final limite = dormido ? timeoutDespertar : timeoutNormal;
+    var avisando = false;
+    final aviso = dormido
+        ? Timer(avisoDespertarTras, () {
+            avisando = true;
+            despertando.value = ++_esperandoDespertar > 0;
+          })
+        : null;
+
     final http.Response res;
     try {
-      final streamed = await _client.send(request).timeout(_timeout);
-      res = await http.Response.fromStream(streamed).timeout(_timeout);
+      final streamed = await _client.send(request).timeout(limite);
+      res = await http.Response.fromStream(streamed).timeout(limite);
+      _ultimaRespuesta = DateTime.now();
     } on http.ClientException {
       throw const ApiException(errorConexion);
     } on TimeoutException {
-      throw const ApiException(errorConexion);
+      throw ApiException(dormido ? errorDespertar : errorConexion);
+    } finally {
+      aviso?.cancel();
+      if (avisando) despertando.value = --_esperandoDespertar > 0;
     }
 
     if (autenticado && res.statusCode == 401) await _sesionExpirada();

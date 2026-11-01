@@ -13,6 +13,8 @@ import 'services/api_client.dart';
 import 'services/auth_service.dart';
 import 'services/recordatorios_service.dart';
 import 'services/suscripcion_service.dart';
+import 'widgets/app_marca.dart';
+import 'widgets/aviso_despertando.dart';
 
 Future<void> main() async {
   // Necesario para usar plugins (secure storage, notificaciones) antes de runApp.
@@ -44,6 +46,9 @@ Future<void> main() async {
   );
 
   // Si hay un token guardado y el servidor lo acepta, se abre directo el resumen.
+  // Con el servidor dormido (Render) esto puede tardar cerca de 1 minuto:
+  // mientras tanto se muestra la pantalla de arranque con el aviso.
+  runApp(PantallaArranque(despertando: api.despertando));
   final haySesion = await authService.haySesionActiva();
 
   final router = Routers.crear(
@@ -74,7 +79,7 @@ Future<void> main() async {
   final deteccion = _DeteccionEnSegundoPlano(api, lector, procesador, recordatorios, router);
   WidgetsBinding.instance.addObserver(deteccion);
 
-  runApp(MyApp(router: router));
+  runApp(MyApp(router: router, despertando: api.despertando));
 
   WidgetsBinding.instance.addPostFrameCallback((_) {
     // La app estaba cerrada y se abrió tocando un aviso.
@@ -137,9 +142,12 @@ class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, required this.router});
+  const MyApp({super.key, required this.router, this.despertando});
 
   final GoRouter router;
+
+  /// true mientras el servidor despierta: se muestra un aviso sobre cualquier pantalla.
+  final ValueListenable<bool>? despertando;
 
   @override
   Widget build(BuildContext context) {
@@ -148,10 +156,47 @@ class MyApp extends StatelessWidget {
       title: 'SubTrack',
       theme: AppTheme.dark,
       routerConfig: router,
+      builder: (context, child) {
+        final pantalla = child ?? const SizedBox.shrink();
+        final aviso = despertando;
+        return aviso == null ? pantalla : AvisoDespertando(despertando: aviso, child: pantalla);
+      },
       // Textos de Material (calendario, botones) en español de Colombia.
       locale: const Locale('es', 'CO'),
       supportedLocales: const [Locale('es', 'CO'), Locale('es')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    );
+  }
+}
+
+/// Mientras se comprueba la sesión guardada al abrir la app: la marca y, si el
+/// servidor está dormido, el aviso "Despertando el servidor…".
+class PantallaArranque extends StatelessWidget {
+  const PantallaArranque({super.key, required this.despertando});
+
+  final ValueListenable<bool> despertando;
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'SubTrack',
+      theme: AppTheme.dark,
+      home: AvisoDespertando(
+        despertando: despertando,
+        child: const Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppMarca(),
+                SizedBox(height: 24),
+                SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
