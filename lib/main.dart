@@ -9,6 +9,7 @@ import 'Common/Routers.dart';
 import 'deteccion/deteccion_service.dart';
 import 'deteccion/lector_notificaciones.dart';
 import 'deteccion/procesador_detecciones.dart';
+import 'deteccion/receptor_compartir.dart';
 import 'deteccion/vigilante_deteccion.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
@@ -48,6 +49,9 @@ Future<void> main() async {
   // Estado real de la detección (permiso + lector conectado), para Perfil,
   // el dashboard y la pantalla de permisos.
   final vigilante = VigilanteDeteccion(lector);
+  // Los pagos detectados que viven solo en el celular son del usuario de la
+  // sesión: se borran al cerrarla.
+  authService.alCerrarSesion = procesador.almacen.borrarTodo;
 
   // Si hay un token guardado y el servidor lo acepta, se abre directo el resumen.
   // Con el servidor dormido (Render) esto puede tardar cerca de 1 minuto:
@@ -81,12 +85,16 @@ Future<void> main() async {
   // Flujo B: al tocar "¿Tienes una suscripción a…?", los resultados (05).
   recordatorios.onAbrirCandidato = (_) => router.push(Routers.deteccion);
 
+  // "Compartir" un SMS con SubTrack desde la app de mensajes.
+  final compartir = ReceptorCompartir();
+  compartir.escuchar((texto) => router.push(Routers.compartir, extra: texto));
+
   final deteccion = _DeteccionEnSegundoPlano(api, vigilante, procesador, recordatorios, router);
   WidgetsBinding.instance.addObserver(deteccion);
 
   runApp(MyApp(router: router, despertando: api.despertando));
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
     // La app estaba cerrada y se abrió tocando un aviso.
     if (haySesion && payloadInicial != null) {
       final candidato = RecordatoriosService.candidatoDelPayload(payloadInicial);
@@ -98,6 +106,9 @@ Future<void> main() async {
       }
     }
     deteccion.ejecutar();
+    // La app se abrió compartiendo un SMS.
+    final texto = await compartir.textoPendiente();
+    if (texto != null) router.push(Routers.compartir, extra: texto);
   });
 }
 
@@ -122,6 +133,7 @@ class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
     Routers.escaneo,
     Routers.deteccion,
     Routers.depuracionDeteccion,
+    Routers.historialSms,
   };
 
   @override

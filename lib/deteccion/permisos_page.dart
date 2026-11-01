@@ -7,6 +7,7 @@ import '../services/recordatorios_service.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import 'aviso_deteccion_pausada.dart';
+import 'historial_sms.dart';
 import 'lector_notificaciones.dart';
 import 'vigilante_deteccion.dart';
 
@@ -17,7 +18,7 @@ import 'vigilante_deteccion.dart';
 /// [inicio] = viene del registro (onboarding): al final sigue la pantalla 06.
 /// Si no, se abrió desde Perfil.
 class PermisosPage extends StatefulWidget {
-  const PermisosPage({super.key, required this.vigilante, this.recordatorios, this.inicio = false});
+  const PermisosPage({super.key, required this.vigilante, this.recordatorios, this.historial, this.inicio = false});
 
   /// Distingue permiso concedido de lector conectado: con el permiso ya dado
   /// pero el lector desconectado, guía a apagar y encender el acceso.
@@ -26,6 +27,10 @@ class PermisosPage extends StatefulWidget {
 
   /// Para abrir la información de la app ("Permitir ajustes restringidos").
   final RecordatoriosService? recordatorios;
+
+  /// Versión "completa": después del acceso a notificaciones se ofrece, aparte
+  /// y opcional, buscar en el historial de SMS.
+  final HistorialSms? historial;
   final bool inicio;
 
   @override
@@ -99,9 +104,12 @@ class _PermisosPageState extends State<PermisosPage> with WidgetsBindingObserver
     if (estado == EstadoDeteccion.activa) _irAEscaneo();
   }
 
-  void _irAEscaneo() {
+  Future<void> _irAEscaneo() async {
+    final conHistorial = await widget.historial?.disponible() ?? false;
     if (!mounted) return;
-    context.pushReplacement(Routers.rutaEscaneo(inicio: widget.inicio));
+    context.pushReplacement(conHistorial
+        ? Routers.rutaHistorialSms(inicio: widget.inicio, trasPermisos: true)
+        : Routers.rutaEscaneo(inicio: widget.inicio));
   }
 
   Future<void> _aMano() async {

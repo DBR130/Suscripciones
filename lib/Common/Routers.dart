@@ -5,7 +5,10 @@ import 'package:go_router/go_router.dart';
 import '../Pages/AhorroPage.dart';
 import '../deteccion/depuracion_deteccion_page.dart';
 import '../deteccion/deteccion_service.dart';
+import '../deteccion/compartir_page.dart';
 import '../deteccion/escaneo_page.dart';
+import '../deteccion/historial_sms.dart';
+import '../deteccion/historial_sms_page.dart';
 import '../deteccion/lector_notificaciones.dart';
 import '../deteccion/permisos_page.dart';
 import '../deteccion/procesador_detecciones.dart';
@@ -57,9 +60,28 @@ class Routers {
   static const String escaneo = '/escaneo';
   static const String deteccion = '/deteccion';
   static String rutaPermisos({bool inicio = false}) => inicio ? '$permisos?inicio=1' : permisos;
-  static String rutaEscaneo({bool inicio = false}) => inicio ? '$escaneo?inicio=1' : escaneo;
   static String rutaDeteccion({bool inicio = false}) => inicio ? '$deteccion?inicio=1' : deteccion;
-  static bool _inicio(GoRouterState state) => state.uri.queryParameters['inicio'] == '1';
+
+  /// [historial]: además de las notificaciones, busca en los SMS (con permiso).
+  static String rutaEscaneo({bool inicio = false, bool historial = false}) =>
+      _conParametros(escaneo, {'inicio': inicio, 'historial': historial});
+
+  /// "¿Buscamos suscripciones que ya pagas?" (divulgación antes de READ_SMS).
+  /// [trasPermisos]: viene de la pantalla 03 ("Ahora no" sigue al escaneo).
+  static const String historialSms = '/historial-sms';
+  static String rutaHistorialSms({bool inicio = false, bool trasPermisos = false}) =>
+      _conParametros(historialSms, {'inicio': inicio, 'tras': trasPermisos});
+
+  /// Un SMS compartido con SubTrack desde la app de mensajes (texto en "extra").
+  static const String compartir = '/compartir';
+
+  static String _conParametros(String ruta, Map<String, bool> banderas) {
+    final activas = [for (final MapEntry(:key, :value) in banderas.entries) if (value) '$key=1'];
+    return activas.isEmpty ? ruta : '$ruta?${activas.join('&')}';
+  }
+
+  static bool _bandera(GoRouterState state, String nombre) => state.uri.queryParameters[nombre] == '1';
+  static bool _inicio(GoRouterState state) => _bandera(state, 'inicio');
   static const String nuevaSuscripcion = '/suscripcion/nueva';
   static String editarSuscripcion(int id) => '/suscripcion/$id/editar';
   static String cancelar(int id) => '/suscripcion/$id/cancelar';
@@ -78,6 +100,7 @@ class Routers {
     DeteccionService? deteccionService,
     ProcesadorDetecciones? procesador,
     VigilanteDeteccion? vigilante,
+    HistorialSms? historial,
     String initialLocation = home,
     bool depuracion = kDebugMode,
   }) {
@@ -89,7 +112,9 @@ class Routers {
           lector: lectorNotificaciones,
           servicio: servicioDeteccion,
           cargarCatalogo: suscripcionService.catalogoServicios,
+          historial: historial,
         );
+    final historialSmsApp = historial ?? procesadorDetecciones.historial;
     return GoRouter(
       initialLocation: initialLocation,
       routes: [
@@ -125,13 +150,36 @@ class Routers {
           path: permisos,
           builder: (context, state) => PermisosPage(
             vigilante: vigilanteDeteccion,
+            historial: historialSmsApp,
             recordatorios: recordatorios,
             inicio: _inicio(state),
           ),
         ),
         GoRoute(
           path: escaneo,
-          builder: (context, state) => EscaneoPage(procesador: procesadorDetecciones, inicio: _inicio(state)),
+          builder: (context, state) => EscaneoPage(
+            procesador: procesadorDetecciones,
+            inicio: _inicio(state),
+            historial: _bandera(state, 'historial'),
+          ),
+        ),
+        GoRoute(
+          path: historialSms,
+          builder: (context, state) => HistorialSmsPage(
+            historial: historialSmsApp,
+            inicio: _inicio(state),
+            trasPermisos: _bandera(state, 'tras'),
+          ),
+        ),
+        GoRoute(
+          path: compartir,
+          builder: (context, state) => CompartirPage(
+            texto: state.extra is String ? state.extra as String : '',
+            servicio: servicioDeteccion,
+            cargarCatalogo: suscripcionService.catalogoServicios,
+            almacen: procesadorDetecciones.almacen,
+            authService: authService,
+          ),
         ),
         GoRoute(
           path: deteccion,
@@ -222,6 +270,7 @@ class Routers {
                 suscripcionService: suscripcionService,
                 recordatorios: recordatorios,
                 vigilante: vigilanteDeteccion,
+                historial: historialSmsApp,
               ),
             ),
             GoRoute(

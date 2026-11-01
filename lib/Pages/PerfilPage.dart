@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
+import '../deteccion/historial_sms.dart';
 import '../deteccion/vigilante_deteccion.dart';
 import '../models/ahorro.dart';
 import '../models/usuario.dart';
@@ -28,9 +29,14 @@ class PerfilPage extends StatefulWidget {
     this.suscripcionService,
     this.recordatorios,
     this.vigilante,
+    this.historial,
   });
 
   final AuthService authService;
+
+  /// "Buscar suscripciones en mis SMS": solo si la versión lo incluye
+  /// (completa) y en Android.
+  final HistorialSms? historial;
 
   /// Estado real de la detección: el interruptor "Permiso de notificaciones"
   /// distingue permiso concedido de lector conectado. Solo en Android.
@@ -57,6 +63,7 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
   bool _resumen = true;
   bool _permiso = false;
   bool _xiaomi = false;
+  bool _conHistorial = false;
 
   VigilanteDeteccion? get _vigilante =>
       widget.vigilante?.lector.disponible ?? false ? widget.vigilante : null;
@@ -73,6 +80,9 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     _cargarRecordatorios();
     _cargarAhorro();
     _vigilante?.verificar(motivo: 'perfil');
+    widget.historial?.disponible().then((si) {
+      if (mounted && si) setState(() => _conHistorial = true);
+    });
   }
 
   /// Según el estado real: sin permiso abre la pantalla de permisos (03);
@@ -420,6 +430,16 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                           detalle: _textoAhorro,
                           colorDetalle: AppColors.link,
                           onTap: _abrirAhorro,
+                        ),
+                        const Divider(height: 1, color: AppColors.divider),
+                      ],
+                      // Repetible: lo ya enviado no se duplica (huella y AnalizadorPagos).
+                      if (_conHistorial) ...[
+                        _FilaEnlace(
+                          texto: 'Buscar suscripciones en mis SMS',
+                          detalle: '›',
+                          colorDetalle: AppColors.muted,
+                          onTap: () => context.push(Routers.historialSms),
                         ),
                         const Divider(height: 1, color: AppColors.divider),
                       ],
