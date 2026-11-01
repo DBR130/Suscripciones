@@ -1,0 +1,15 @@
+{
+  "_comentario": "Avisos que Truecaller (y otras apps de SMS con identificador de llamadas) publican y que NO son SMS de cobro: llamadas, llamadas perdidas, alertas de spam. Muchos traen un numero de telefono que parece un monto. Ninguno debe pasar el filtro nativo (FiltroCobrosTest.kt) ni el parser (deteccion_parser_test.dart). Textos de ejemplo escritos para las pruebas; los numeros son inventados.",
+  "avisos": [
+    { "caso": "llamada perdida con numero internacional", "texto": "Llamada perdida de +57 300 123 4567" },
+    { "caso": "llamada perdida de un comercio con 'pago' en el nombre", "texto": "Llamada perdida: Pagos y Cobros SAS 3001234567" },
+    { "caso": "identificador de llamadas", "texto": "Bancolombia te está llamando · 6045109095" },
+    { "caso": "alerta de spam con numero de reportes", "texto": "Posible spam: +57 601 765 4321 · reportado 1.234 veces" },
+    { "caso": "llamada bloqueada", "texto": "Truecaller bloqueó una llamada de 3109876543" },
+    { "caso": "alerta de estafa que nombra un pago", "texto": "Alerta de estafa: este número pide un pago de $50.000 por un premio" },
+    { "caso": "identificador con 'pago' en el nombre y solo un celular", "texto": "Pago Facil Colombia · 3001234567" },
+    { "caso": "identificador con numero internacional", "texto": "Compra y Venta El Paisa +57 604 444 5566" },
+    { "caso": "en ingles: missed call", "texto": "Missed call from +57 300 123 4567" },
+    { "caso": "en ingles: spam call", "texto": "Spam call: Payment Services 3001234567" }
+  ]
+}

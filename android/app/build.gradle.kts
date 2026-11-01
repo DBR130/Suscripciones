@@ -54,4 +54,8 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // Tests del filtro nativo (src/test): corren en el PC, sin celular.
+    // org.json real, porque el de Android en los tests de JVM es solo un esqueleto.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

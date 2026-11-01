@@ -168,6 +168,13 @@ void main() {
     });
   });
 
+  test('los SMS de prueba de docs/probar-la-app.md se reconocen', () {
+    final b = cobro(r'Bancolombia: Compraste $19.900,00 en NETFLIX con tu T.Deb *1234, el 01/11/2026 a las 10:30.');
+    expect((b.banco, b.monto, b.servicio), ('Bancolombia', 19900, 'Netflix'));
+    final n = cobro('NEQUI: Pagaste 26.900 en SPOTIFY');
+    expect((n.banco, n.monto, n.servicio), ('Nequi', 26900, 'Spotify'));
+  });
+
   group('textos que NO son cobros', () {
     test('transferencias recibidas', () {
       expect(motivo('NEQUI: Recibiste 50.000 de JUAN PEREZ'), 'dinero recibido');
@@ -204,5 +211,14 @@ void main() {
           'no dice "compraste/pagaste <monto> en <comercio>"');
       expect(motivo(''), 'sin texto');
     });
+
+    // Truecaller como app de SMS: también avisa de llamadas y spam. El filtro
+    // nativo los descarta (FiltroCobrosTest.kt); el parser, por si acaso, tampoco
+    // los acepta.
+    final avisos = (jsonDecode(File('test/fixtures/avisos_no_sms.json').readAsStringSync())
+        as Map<String, Object?>)['avisos'] as List<Object?>;
+    for (final a in avisos.cast<Map<String, Object?>>()) {
+      test('aviso que no es SMS: ${a['caso']}', () => motivo(a['texto'] as String));
+    }
   });
 }
