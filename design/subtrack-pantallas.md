@@ -57,7 +57,7 @@ Acompaña a `subtrack-simulacion.html` (misma carpeta). Ese archivo se abre en c
 
 **Orbes decorativos:** dos círculos con degradado radial azul (`rgba(59,130,246,.45)` y `rgba(37,99,235,.38)`) arriba a la derecha y a la izquierda, detrás del contenido.
 
-**Colores de marca de los servicios** (fondo del logo): Disney+ `#113CCF`, GeForce NOW `#3F6B00`, Netflix `#C1121F`, Spotify `#12833F`, iCloud+ `#2F3437`, Smart Fit `#8A7A00`, Adobe Photoshop `#0A2F52`, Canva Pro `#0B7285`, Paramount+ `#0064FF`. Las suscripciones manuales usan `#334155`.
+**Colores de marca de los servicios** (fondo del logo): Disney+ `#113CCF`, GeForce NOW `#3F6B00`, Netflix `#C1121F`, Spotify `#12833F`, iCloud+ `#2F3437`, Smart Fit `#8A7A00`, Adobe Photoshop `#0A2F52`, Canva Pro `#0B7285`, Paramount+ `#0064FF`. Además, en la app (`LogoServicio.colorDe`): Max `#002BE7`, Prime Video `#00A8E1`, YouTube `#FF0000`, Google One `#4285F4`, Crunchyroll `#F47521`, ChatGPT `#10A37F`, Claude `#D97757`, Adobe `#EB1000`, Microsoft 365 `#D83B01`, Xbox `#107C10`, PlayStation `#003791`, Rappi `#FF441F`, DiDi `#FC6B21`, Duolingo `#58CC02`. Sin color de marca conocido (y las manuales con otro nombre) usan `#334155`.
 
 ### Tipografía
 
