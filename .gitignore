@@ -57,3 +57,5 @@ backend/node_modules/
 # Postman (pruebas locales del backend)
 .postman/
 postman/
+# Contexto para Claude Code (solo local)
+CLAUDE.md
