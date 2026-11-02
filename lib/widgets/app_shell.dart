@@ -39,8 +39,10 @@ class AppShell extends StatefulWidget {
     (ruta: Routers.dashboard, icono: Icons.home_outlined, activo: Icons.home_rounded, texto: 'Resumen'),
     (
       ruta: Routers.suscripciones,
-      icono: Icons.format_list_bulleted,
-      activo: Icons.format_list_bulleted_rounded,
+      // Flechas de renovación: "cobro que se repite" (las líneas de lista
+      // parecían un menú).
+      icono: Icons.autorenew_rounded,
+      activo: Icons.autorenew_rounded,
       texto: 'Suscripciones',
     ),
     (ruta: Routers.analisis, icono: Icons.insights_outlined, activo: Icons.insights_rounded, texto: 'Análisis'),
@@ -125,7 +127,7 @@ class _BarraFlotante extends StatelessWidget {
                   child: _Pestanas(activa: activa, onPestana: onPestana),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Semantics(
                 button: true,
                 label: 'Agregar suscripción',
@@ -193,56 +195,38 @@ class _Vidrio extends StatelessWidget {
   }
 }
 
-/// Las 4 pestañas con la "píldora" de la activa, que se desliza entre ellas.
+/// Las 4 pestañas. Las inactivas muestran solo el ícono; la activa, ícono y
+/// nombre dentro de una píldora que se ensancha con una animación suave.
 class _Pestanas extends StatelessWidget {
   const _Pestanas({required this.activa, required this.onPestana});
 
   final int activa;
   final ValueChanged<int> onPestana;
 
+  Widget _pestana(int i, ({String ruta, IconData icono, IconData activo, String texto}) p) => _Pestana(
+        icono: i == activa ? p.activo : p.icono,
+        texto: p.texto,
+        activa: i == activa,
+        onTap: () => onPestana(i),
+      );
+
   @override
   Widget build(BuildContext context) {
-    final reducir = MediaQuery.of(context).disableAnimations;
-    const n = 4;
-    return LayoutBuilder(builder: (context, restricciones) {
-      final ancho = restricciones.maxWidth / n;
-      return Stack(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          AnimatedPositioned(
-            duration: reducir ? Duration.zero : const Duration(milliseconds: 320),
-            curve: Curves.easeOutCubic,
-            left: (activa < 0 ? 0 : activa) * ancho + 5,
-            width: ancho - 10,
-            top: 7,
-            bottom: 7,
-            child: AnimatedOpacity(
-              opacity: activa < 0 ? 0 : 1,
-              duration: reducir ? Duration.zero : const Duration(milliseconds: 200),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.28),
-                  borderRadius: BorderRadius.circular(99),
-                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
-                ),
-              ),
-            ),
-          ),
-          Row(
-            children: [
-              for (final (i, p) in AppShell._pestanas.indexed)
-                Expanded(
-                  child: _Pestana(
-                    icono: i == activa ? p.activo : p.icono,
-                    texto: p.texto,
-                    activa: i == activa,
-                    onTap: () => onPestana(i),
-                  ),
-                ),
-            ],
-          ),
+          for (final (i, p) in AppShell._pestanas.indexed)
+            if (i == activa)
+              // Solo la activa es flexible: toma el ancho de su nombre y, en
+              // pantallas angostas, se ajusta en vez de desbordarse.
+              Flexible(child: _pestana(i, p))
+            else
+              _pestana(i, p),
         ],
-      );
-    });
+      ),
+    );
   }
 }
 
@@ -259,32 +243,67 @@ class _Pestana extends StatelessWidget {
   final bool activa;
   final VoidCallback onTap;
 
+  static const Duration _duracion = Duration(milliseconds: 300);
+
   @override
   Widget build(BuildContext context) {
-    final color = activa ? AppColors.text : AppColors.muted;
+    final duracion = MediaQuery.of(context).disableAnimations ? Duration.zero : _duracion;
+    // Lectores de pantalla: el nombre siempre (también en las inactivas). Al
+    // mantener presionado se ve el nombre en un tooltip.
     return Semantics(
+      container: true,
       selected: activa,
       button: true,
-      child: Presionable(
-        onTap: onTap,
-        escala: 0.9,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icono, size: 21, color: activa ? AppColors.link : AppColors.muted),
-              const SizedBox(height: 3),
-              // "Suscripciones" se reduce un poco en pantallas angostas.
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  texto,
-                  maxLines: 1,
-                  style: TextStyle(color: color, fontSize: 10.5, fontWeight: FontWeight.w700),
-                ),
+      label: texto,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: texto,
+        excludeFromSemantics: true,
+        child: Presionable(
+          onTap: onTap,
+          escala: 0.92,
+          child: AnimatedContainer(
+            duration: duracion,
+            curve: Curves.easeOutCubic,
+            height: 46,
+            constraints: const BoxConstraints(minWidth: 42),
+            padding: EdgeInsets.symmetric(horizontal: activa ? 12 : 10),
+            decoration: BoxDecoration(
+              color: activa ? AppColors.primary.withValues(alpha: 0.28) : AppColors.primary.withValues(alpha: 0),
+              borderRadius: BorderRadius.circular(99),
+              border: Border.all(
+                color: activa ? AppColors.accent.withValues(alpha: 0.35) : AppColors.accent.withValues(alpha: 0),
               ),
-            ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icono, size: 22, color: activa ? AppColors.link : AppColors.muted),
+                // El nombre aparece y la píldora crece a su ancho.
+                Flexible(
+                  child: AnimatedSize(
+                    duration: duracion,
+                    curve: Curves.easeOutCubic,
+                    child: activa
+                        ? Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: Text(
+                              texto,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.fade,
+                              style: const TextStyle(
+                                color: AppColors.text,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

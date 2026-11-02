@@ -228,6 +228,58 @@ void main() {
           diasRestantes: 3,
         );
 
+    testWidgets('en el Xiaomi (393 dp) "Suscripciones" cabe completo en la píldora', (tester) async {
+      tester.view.physicalSize = const Size(1179, 2556);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(cargarInter);
+      final router = GoRouter(
+        initialLocation: Routers.suscripciones,
+        routes: [
+          ShellRoute(
+            builder: (context, state, child) => AppShell(child: child),
+            routes: [GoRoute(path: Routers.suscripciones, builder: (_, _) => const Scaffold())],
+          ),
+        ],
+      );
+      await tester.pumpWidget(MaterialApp.router(theme: AppTheme.dark, routerConfig: router));
+      await tester.pumpAndSettle();
+      final texto = tester.renderObject<RenderParagraph>(find.text('Suscripciones'));
+      expect(texto.didExceedMaxLines, isFalse);
+      // Mismo tamaño de letra que las demás etiquetas.
+      expect(tester.widget<Text>(find.text('Suscripciones')).style!.fontSize, 13);
+    });
+
+    testWidgets('en pantalla de 360 dp con letra grande la barra no se desborda', (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 2;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(cargarInter);
+      final router = GoRouter(
+        initialLocation: Routers.suscripciones,
+        routes: [
+          ShellRoute(
+            builder: (context, state, child) => AppShell(child: child),
+            routes: [
+              for (final ruta in [Routers.dashboard, Routers.suscripciones, Routers.analisis, Routers.perfil])
+                GoRoute(path: ruta, builder: (_, _) => const Scaffold()),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(RepaintBoundary(
+        key: const Key('captura'),
+        child: MediaQuery(
+          data: const MediaQueryData(size: Size(360, 800), textScaler: TextScaler.linear(1.3)),
+          child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.text('Suscripciones'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await capturar(tester, 'barra-360');
+    });
+
     test('cuenta solo los avisos que no se han visto', () {
       final contador = AvisosNuevos(FakeSuscripcionService());
       final avisos = [aviso(1), aviso(2), aviso(3)];
@@ -264,16 +316,21 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      // Cada pestaña tiene su nombre para lectores de pantalla y tooltip;
+      // solo la activa lo muestra escrito.
       for (final texto in ['Resumen', 'Suscripciones', 'Análisis', 'Perfil']) {
-        expect(find.text(texto), findsWidgets);
+        expect(find.bySemanticsLabel(texto), findsOneWidget);
+        expect(find.byTooltip(texto), findsOneWidget);
       }
+      expect(find.text('Suscripciones'), findsNothing);
       expect(find.bySemanticsLabel('Avisos, 2 nuevos'), findsOneWidget);
       expect(find.text('2'), findsOneWidget);
       await capturar(tester, 'barra');
 
-      await tester.tap(find.text('Perfil'));
+      await tester.tap(find.byTooltip('Perfil'));
       await tester.pumpAndSettle();
       expect(find.text('PESTAÑA ${Routers.perfil}'), findsOneWidget);
+      expect(find.text('Perfil'), findsOneWidget); // la píldora activa muestra el nombre
 
       final cambiosAntes = AppShell.cambios.value;
       await tester.tap(find.bySemanticsLabel('Agregar suscripción'));
@@ -284,7 +341,7 @@ void main() {
       expect(AppShell.cambios.value, cambiosAntes + 1);
 
       // Al ver los avisos, el contador vuelve a 0.
-      await tester.tap(find.text('Análisis'));
+      await tester.tap(find.byTooltip('Análisis'));
       await tester.pumpAndSettle();
       await contador.marcarVistos(servicio.listaAvisos);
       await tester.pumpAndSettle();
