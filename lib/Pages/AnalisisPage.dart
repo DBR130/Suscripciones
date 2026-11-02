@@ -192,6 +192,7 @@ class _AnalisisPageState extends State<AnalisisPage> {
           (s) => s.moneda == _moneda,
           orElse: () => EvolucionMoneda(moneda: _moneda, meses: const []),
         ),
+        proximo: a.proximosCobros.where((c) => c.moneda == _moneda).firstOrNull,
       ),
       _GastoPorCategoria(
         moneda: _moneda,
@@ -414,9 +415,12 @@ class _BarraRelativa extends StatelessWidget {
 
 /// Barras del gasto pagado en los últimos 6 meses; el mes actual resaltado.
 class _GastoSeisMeses extends StatefulWidget {
-  const _GastoSeisMeses({required this.serie});
+  const _GastoSeisMeses({required this.serie, this.proximo});
 
   final EvolucionMoneda serie;
+
+  /// Próximo cobro en la moneda de la gráfica (para el mes actual sin cobros).
+  final CobroProximo? proximo;
 
   @override
   State<_GastoSeisMeses> createState() => _GastoSeisMesesState();
@@ -444,18 +448,32 @@ class _GastoSeisMesesState extends State<_GastoSeisMeses> {
           if (!serie.tieneDatos)
             const _SinDatos('Aún no hay pagos registrados en estos meses. Aparecen al pasar cada fecha de cobro.')
           else ...[
-            Text(
-              elegido == null ? '' : Formato.moneda(elegido.total, moneda),
-              style: _cifras.copyWith(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.w800),
-            ),
-            Text(
-              elegido == null
-                  ? ''
-                  : elegido == actual
-                      ? 'Pagado este mes'
-                      : 'Pagado en ${Formato.mesAnio(elegido.mes)}',
-              style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
+            if (elegido == actual && actual != null && actual.total == 0) ...[
+              // Mes actual aún sin cobros: en vez de "$0", cuándo viene el próximo.
+              Text(
+                'Aún sin cobros en ${Formato.mes(actual.mes)}',
+                style: const TextStyle(color: AppColors.text, fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+              Text(
+                widget.proximo == null
+                    ? 'No hay cobros en los próximos 30 días'
+                    : 'Próximo: ${widget.proximo!.nombreServicio} el ${Formato.fechaLarga(widget.proximo!.fecha)}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ] else ...[
+              Text(
+                elegido == null ? '' : Formato.moneda(elegido.total, moneda),
+                style: _cifras.copyWith(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.w800),
+              ),
+              Text(
+                elegido == null
+                    ? ''
+                    : elegido == actual
+                        ? 'Pagado este mes'
+                        : 'Pagado en ${Formato.mesAnio(elegido.mes)}',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ],
             const SizedBox(height: 14),
             SizedBox(
               height: 150,

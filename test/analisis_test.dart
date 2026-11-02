@@ -12,6 +12,7 @@ import 'package:flutter_suscripciones/models/analisis.dart';
 import 'package:flutter_suscripciones/models/aviso.dart';
 import 'package:flutter_suscripciones/models/suscripcion.dart';
 import 'package:flutter_suscripciones/services/avisos_nuevos.dart';
+import 'package:flutter_suscripciones/utils/formato.dart';
 import 'package:flutter_suscripciones/widgets/app_shell.dart';
 import 'package:flutter_suscripciones/widgets/campana_avisos.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -184,6 +185,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Software'), findsOneWidget);
       expect(find.text('Streaming'), findsNothing);
+    });
+
+    testWidgets('si el mes actual va en \$0, dice cuándo es el próximo cobro', (tester) async {
+      telefono(tester, alto: 6400);
+      final datos = respuesta();
+      final meses = (datos['gasto_mensual'] as List).first['meses'] as List;
+      (meses.last as Map)['total'] = 0;
+      final mes = DateTime(2026, 11);
+      await tester.pumpWidget(app(FakeSuscripcionService(analisisFijo: Analisis.fromJson(datos))));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pagado este mes'), findsNothing);
+      expect(find.text('Aún sin cobros en ${Formato.mes(mes)}'), findsOneWidget);
+      // El primero de los próximos 30 días en COP: la prueba de Max.
+      expect(find.text('Próximo: Max el 3 de noviembre'), findsOneWidget);
     });
 
     testWidgets('sin datos muestra el estado vacío', (tester) async {

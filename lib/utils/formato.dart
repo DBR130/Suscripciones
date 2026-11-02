@@ -37,6 +37,9 @@ class Formato {
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
   ];
 
+  /// "noviembre"
+  static String mes(DateTime fecha) => _mesesLargos[fecha.month - 1];
+
   /// "20 de septiembre"
   static String fechaLarga(DateTime fecha) =>
       '${fecha.day} de ${_mesesLargos[fecha.month - 1]}';

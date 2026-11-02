@@ -255,7 +255,7 @@ Para cada pantalla se indica: **ruta sugerida**, **datos**, estructura y textos 
   1. **Proyección anual**: número grande que cuenta hasta su valor, otras monedas debajo y "Si nada cambia · {gasto}/mes".
   2. **Las más caras**: las 3 de mayor gasto mensual equivalente, con logo, monto al mes y una barra relativa a la primera.
   3. Selector **"Gráficas en" COP / USD** (solo si hay dos monedas).
-  4. **Gasto de los últimos 6 meses**: barras de lo pagado (historial de pagos); el mes actual en `accent`, los demás `primary` al 55 %. Al tocar una barra arriba sale su monto.
+  4. **Gasto de los últimos 6 meses**: barras de lo pagado (historial de pagos); el mes actual en `accent`, los demás `primary` al 55 %. Al tocar una barra arriba sale su monto. Si el mes actual va en $0: "Aún sin cobros en {mes}" y "Próximo: {servicio} el {fecha}".
   5. **Gasto mensual por categoría**: dona con el total en el centro y leyenda con color, monto y porcentaje. En pantallas de menos de 330 px la leyenda va debajo.
   6. **Próximos 30 días**: línea de tiempo con fecha ("Hoy", "Mañana", "5 nov"), logo, servicio y monto. Las pruebas gratis aparecen el día que pasan a pago ("Termina la prueba gratis" en ámbar). Arriba, el total por moneda.
   7. **Ahorro por cancelaciones**: total anual en `link` y lista de canceladas con fecha y ahorro.
