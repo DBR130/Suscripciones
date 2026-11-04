@@ -14,6 +14,7 @@ class PagoExtraido {
     required this.fechaDelMensaje,
     this.medio,
     this.servicio,
+    this.servicioAmbiguo = false,
     this.indicaSuscripcion = false,
   });
 
@@ -45,6 +46,10 @@ class PagoExtraido {
   final bool indicaSuscripcion;
 
   bool get esServicioConocido => servicio != null;
+
+  /// El servicio es ambiguo en el catálogo (Rappi Pro, Apple...): un cobro
+  /// suelto sin señal de suscripción puede ser una compra cualquiera.
+  final bool servicioAmbiguo;
 }
 
 /// Resultado del parser: un cobro con sus campos, o el motivo por el que no lo es.
@@ -101,6 +106,7 @@ class ParserPagos {
       comercioOriginal: original,
       comercio: comercio.nombre,
       servicio: comercio.servicio,
+      servicioAmbiguo: comercio.servicio != null && catalogo.esAmbiguo(comercio.servicio!),
       indicaSuscripcion: comercio.indicaSuscripcion,
       fecha: fecha ?? recibidaEn,
       fechaDelMensaje: fecha != null,

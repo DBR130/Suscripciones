@@ -53,6 +53,7 @@
   },
   {
     "nombre_servicio": "Prime Video",
+    "es_ambigua": true,
     "alias": ["Amazon Prime Video", "Amazon Prime", "Prime"],
     "duracion_minutos": 4,
     "enlace_directo": null,
@@ -66,6 +67,7 @@
   },
   {
     "nombre_servicio": "YouTube Premium",
+    "es_ambigua": true,
     "alias": ["YouTube", "YouTube Music", "YouTube Music Premium"],
     "duracion_minutos": 2,
     "enlace_directo": "https://www.youtube.com/paid_memberships",
@@ -78,6 +80,7 @@
   },
   {
     "nombre_servicio": "Apple",
+    "es_ambigua": true,
     "alias": ["iCloud", "iCloud+", "Apple Music", "Apple TV+", "Apple TV", "Apple One", "Apple Arcade"],
     "duracion_minutos": 2,
     "enlace_directo": "https://support.apple.com/HT202039",
@@ -91,6 +94,7 @@
   },
   {
     "nombre_servicio": "Google One",
+    "es_ambigua": true,
     "alias": ["Google Drive", "Almacenamiento de Google"],
     "duracion_minutos": 2,
     "enlace_directo": "https://play.google.com/store/account/subscriptions",
@@ -153,6 +157,7 @@
   },
   {
     "nombre_servicio": "Microsoft 365",
+    "es_ambigua": true,
     "alias": ["Office 365", "Microsoft Office", "Office", "OneDrive"],
     "duracion_minutos": 3,
     "enlace_directo": "https://account.microsoft.com/services",
@@ -165,6 +170,7 @@
   },
   {
     "nombre_servicio": "Adobe",
+    "es_ambigua": true,
     "alias": ["Adobe Photoshop", "Photoshop", "Adobe Creative Cloud", "Creative Cloud", "Lightroom", "Adobe Acrobat", "Acrobat"],
     "duracion_minutos": 5,
     "enlace_directo": "https://account.adobe.com/plans",
@@ -178,6 +184,7 @@
   },
   {
     "nombre_servicio": "Xbox Game Pass",
+    "es_ambigua": true,
     "alias": ["Game Pass", "Xbox", "PC Game Pass"],
     "duracion_minutos": 3,
     "enlace_directo": "https://account.microsoft.com/services",
@@ -190,6 +197,7 @@
   },
   {
     "nombre_servicio": "PlayStation Plus",
+    "es_ambigua": true,
     "alias": ["PS Plus", "PlayStation"],
     "duracion_minutos": 3,
     "enlace_directo": null,
@@ -226,6 +234,7 @@
   },
   {
     "nombre_servicio": "Rappi Pro",
+    "es_ambigua": true,
     "alias": ["Rappi Prime", "Rappi"],
     "duracion_minutos": 2,
     "enlace_directo": null,

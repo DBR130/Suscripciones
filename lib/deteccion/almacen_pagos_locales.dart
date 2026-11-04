@@ -124,6 +124,7 @@ class PagoLocal {
         'fecha_del_mensaje': pago.fechaDelMensaje,
         'medio': pago.medio,
         'servicio': pago.servicio,
+        'servicio_ambiguo': pago.servicioAmbiguo,
         'indica_suscripcion': pago.indicaSuscripcion,
         'enviado': enviado,
       };
@@ -139,6 +140,7 @@ class PagoLocal {
           fechaDelMensaje: j['fecha_del_mensaje'] as bool? ?? true,
           medio: j['medio'] as String?,
           servicio: j['servicio'] as String?,
+          servicioAmbiguo: j['servicio_ambiguo'] as bool? ?? false,
           indicaSuscripcion: j['indica_suscripcion'] as bool? ?? false,
         ),
         enviado: j['enviado'] as bool? ?? false,

@@ -54,6 +54,28 @@ void main() {
       expect(AnalizadorPagos.seleccionarParaEnviar([netflix]), [netflix]);
     });
 
+    test('servicios ambiguos (T2): sin señal, solo con patrón', () {
+      // Pedido suelto de comida por Rappi: no es Rappi Pro.
+      final pedido = cobro(bancolombia('RAPPI', '32.500,00', '05/10/2026'));
+      expect(pedido.servicio, 'Rappi Pro');
+      expect(AnalizadorPagos.seleccionarParaEnviar([pedido]), isEmpty);
+
+      // Dos cobros mensuales iguales de Rappi: sí.
+      final mensual = [
+        cobro(bancolombia('RAPPI', '24.900,00', '05/09/2026')),
+        cobro(bancolombia('RAPPI', '24.900,00', '05/10/2026')),
+      ];
+      expect(AnalizadorPagos.seleccionarParaEnviar(mensual), hasLength(2));
+
+      // Con señal de suscripción, desde el primer cobro.
+      final youtube = cobro(bancolombia('GOOGLE *YouTubePremium', '26.900,00', '05/10/2026'));
+      expect(AnalizadorPagos.seleccionarParaEnviar([youtube]), [youtube]);
+
+      // Un juego suelto de PlayStation: no.
+      final juego = cobro(bancolombia('PLAYSTATION NETWORK', '259.900,00', '12/10/2026'));
+      expect(AnalizadorPagos.seleccionarParaEnviar([juego]), isEmpty);
+    });
+
     test('una compra puntual no sale', () {
       final didi = cobro(bancolombia('DIDI FOOD', '18.900,00', '30/10/2026'));
       expect(AnalizadorPagos.seleccionarParaEnviar([didi]), isEmpty);
@@ -122,6 +144,12 @@ void main() {
       final pendientes = await almacen.pendientesDeEnviar();
       expect(pendientes.map((p) => p.comercio), ['Claude']);
       await almacen.marcarEnviados(pendientes);
+      expect(await almacen.pendientesDeEnviar(), isEmpty);
+    });
+
+    test('un pedido suelto de un servicio ambiguo no sale, ni después de guardarse', () async {
+      final almacen = AlmacenPagosLocales(ahora: () => hoy);
+      await almacen.agregar([cobro(bancolombia('RAPPI', '32.500,00', '05/10/2026'))]);
       expect(await almacen.pendientesDeEnviar(), isEmpty);
     });
 

@@ -10,7 +10,9 @@ class CatalogoServicios {
   /// comercio se reconoce como servicio conocido.
   static const vacio = CatalogoServicios([]);
 
-  final List<({String nombre, List<String> alias})> servicios;
+  /// [ambiguo]: el comercio también vende cosas sueltas (Rappi, Apple,
+  /// PlayStation...): solo se propone con patrón o señal de suscripción.
+  final List<({String nombre, List<String> alias, bool ambiguo})> servicios;
 
   /// Acepta la respuesta de GET /api/guias (`{guias: [...]}`) o el arreglo de
   /// guias.json. La guía genérica ("Otro servicio") no es un servicio.
@@ -22,11 +24,15 @@ class CatalogoServicios {
           (
             nombre: g['nombre_servicio'] as String,
             alias: ((g['alias'] as List?) ?? const []).cast<String>(),
+            ambiguo: g['es_ambigua'] == true,
           ),
     ]);
   }
 
   bool get estaVacio => servicios.isEmpty;
+
+  /// true si [servicio] (un nombre del catálogo) es ambiguo.
+  bool esAmbiguo(String servicio) => servicios.any((s) => s.nombre == servicio && s.ambiguo);
 
   /// Nombre del servicio cuyo nombre o alias aparece en [texto] como palabras
   /// completas ("anthropic claude sub" contiene "claude"). Si varios

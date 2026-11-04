@@ -4,7 +4,9 @@ import 'parser_pagos.dart';
 /// se interpretaron, decide cuáles pueden salir hacia el backend.
 ///
 /// Salen solo:
-///  - los pagos a servicios conocidos del catálogo de guías, y
+///  - los pagos a servicios conocidos del catálogo de guías (si el servicio
+///    es ambiguo, como Rappi o Apple, solo con señal de suscripción o con
+///    patrón), y
 ///  - los de comercios con patrón recurrente: 2 o más cobros con montos
 ///    similares (±10 %) y periodicidad semanal, mensual o anual.
 ///
@@ -87,13 +89,20 @@ class AnalizadorPagos {
     final seleccion = <PagoExtraido>[];
     for (final grupo in porComercio.values) {
       grupo.sort((a, b) => a.fecha.compareTo(b.fecha));
-      if (grupo.any((p) => p.esServicioConocido)) {
+      final conocido = grupo.any((p) => p.esServicioConocido);
+      final ambiguo = grupo.any((p) => p.servicioAmbiguo);
+      if (conocido && !ambiguo) {
         seleccion.addAll(grupo);
         continue;
       }
+      // Ambiguo: los cobros con señal ("RAPPI PRO", "YouTubePremium") salen
+      // solos; el resto, solo si forma una serie periódica.
+      if (ambiguo) seleccion.addAll(grupo.where((p) => p.indicaSuscripcion));
       // Comercio desconocido: series de montos similares que sean periódicas.
       for (final serie in _seriesPorMonto(grupo)) {
-        if (estimarFrecuencia([for (final p in serie) p.fecha]) != null) seleccion.addAll(serie);
+        if (estimarFrecuencia([for (final p in serie) p.fecha]) != null) {
+          seleccion.addAll(serie.where((p) => !seleccion.contains(p)));
+        }
       }
     }
     seleccion.sort((a, b) => a.fecha.compareTo(b.fecha));
