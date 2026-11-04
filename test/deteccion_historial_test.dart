@@ -31,9 +31,11 @@ import 'fake_auth_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final catalogo = CatalogoServicios.fromJson(
-    jsonDecode(File('backend/db/guias.json').readAsStringSync()) as Object,
-  );
+  // Igual que GET /api/guias: catálogo y procesadores.
+  final catalogo = CatalogoServicios.fromJson({
+    'guias': jsonDecode(File('backend/db/guias.json').readAsStringSync()),
+    'procesadores': jsonDecode(File('backend/db/procesadores.json').readAsStringSync()),
+  });
   final parser = ParserPagos(catalogo);
   final hoy = DateTime(2026, 11, 1, 9);
 
@@ -74,6 +76,22 @@ void main() {
       // Un juego suelto de PlayStation: no.
       final juego = cobro(bancolombia('PLAYSTATION NETWORK', '259.900,00', '12/10/2026'));
       expect(AnalizadorPagos.seleccionarParaEnviar([juego]), isEmpty);
+    });
+
+    test('procesadores (T3): solo con patrón y separados por monto', () {
+      // El formato del SMS real de Nequi (test/fixtures/sms_reales_nequi_2026_09.json).
+      PagoExtraido ebanx(String monto, DateTime llegada) =>
+          cobro('NEQUI: Pagaste $monto en SERVICIOS WEB EBANX CO', llegada);
+      final pagos = [
+        ebanx('19.900,00', DateTime(2026, 9, 16, 12, 43)),
+        ebanx('19.900,00', DateTime(2026, 10, 16, 12, 44)),
+        ebanx('34.900,00', DateTime(2026, 9, 20, 9, 10)),
+        ebanx('34.900,00', DateTime(2026, 10, 20, 9, 11)),
+      ];
+      expect(pagos.map((p) => p.procesador).toSet(), {'EBANX'});
+      expect(AnalizadorPagos.seleccionarParaEnviar(pagos), hasLength(4));
+      // Un solo cobro de un procesador no sale (necesita patrón).
+      expect(AnalizadorPagos.seleccionarParaEnviar([pagos.first]), isEmpty);
     });
 
     test('una compra puntual no sale', () {
@@ -151,6 +169,12 @@ void main() {
       final almacen = AlmacenPagosLocales(ahora: () => hoy);
       await almacen.agregar([cobro(bancolombia('RAPPI', '32.500,00', '05/10/2026'))]);
       expect(await almacen.pendientesDeEnviar(), isEmpty);
+    });
+
+    test('el procesador se conserva al guardarse', () async {
+      final almacen = AlmacenPagosLocales(ahora: () => hoy);
+      await almacen.agregar([cobro('NEQUI: Pagaste 19.900,00 en SERVICIOS WEB EBANX CO')]);
+      expect((await almacen.leer()).single.pago.procesador, 'EBANX');
     });
 
     test('la compra puntual sale cuando se vuelve recurrente', () async {

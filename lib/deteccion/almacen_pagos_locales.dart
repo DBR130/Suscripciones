@@ -125,6 +125,7 @@ class PagoLocal {
         'medio': pago.medio,
         'servicio': pago.servicio,
         'servicio_ambiguo': pago.servicioAmbiguo,
+        'procesador': pago.procesador,
         'indica_suscripcion': pago.indicaSuscripcion,
         'enviado': enviado,
       };
@@ -141,6 +142,7 @@ class PagoLocal {
           medio: j['medio'] as String?,
           servicio: j['servicio'] as String?,
           servicioAmbiguo: j['servicio_ambiguo'] as bool? ?? false,
+          procesador: j['procesador'] as String?,
           indicaSuscripcion: j['indica_suscripcion'] as bool? ?? false,
         ),
         enviado: j['enviado'] as bool? ?? false,
