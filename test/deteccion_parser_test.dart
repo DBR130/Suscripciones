@@ -181,6 +181,11 @@ void main() {
       expect(p.indicaSuscripcion, isFalse);
     });
 
+    test('DLO* es el prefijo de dLocal: queda el comercio real (DiDi, SMS real)', () {
+      final p = cobro('NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin');
+      expect((p.banco, p.monto, p.comercio, p.servicio), ('Nequi', 18900, 'DiDi Food', null));
+    });
+
     test('"PRO" solo cuenta como palabra completa', () {
       expect(cobro(r'Bancolombia: Compraste $25.000,00 en PRODUCTOS RAPPI').indicaSuscripcion, isFalse);
       expect(cobro(r'Bancolombia: Compraste $25.000,00 en RAPPI PRO').indicaSuscripcion, isTrue);

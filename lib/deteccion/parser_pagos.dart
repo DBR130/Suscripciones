@@ -134,7 +134,7 @@ class ParserPagos {
       }
     }
     // Teléfono pegado al final ("STEAMGAMES.COM 4259522985", SMS real de Nequi).
-    limpio = limpio.replaceAll(_telefonoAlFinal, '');
+    limpio = limpio.replaceAll(_telefonoAlFinal, '').replaceAll(_sufijoDlocal, '');
     final indicaSuscripcion = tieneSenalDeSuscripcion(limpio);
     limpio = limpio.replaceAll(_suscripcion, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
     // "APPLE.COM/BILL" solo: el comercio es la pasarela misma.
@@ -207,6 +207,8 @@ String _presentable(String comercio) {
   if (c.isEmpty) return comercio.trim();
   return c.split(' ').map((p) {
     if (p.contains(RegExp(r'\d'))) return p;
+    // Ya viene con mayúsculas y minúsculas mezcladas ("DiDi"): se respeta.
+    if (p.contains(RegExp('[a-z]')) && p.contains(RegExp('[A-Z]'))) return p;
     return p[0].toUpperCase() + p.substring(1).toLowerCase();
   }).join(' ');
 }
@@ -260,7 +262,12 @@ final _pasarelas = [
   (RegExp(r'^apple\.com/bill\s*', caseSensitive: false), 'Apple'),
   (RegExp(r'^paypal\s*\*\s*', caseSensitive: false), 'PayPal'),
   (RegExp(r'^ebanx\s*\*?\s*', caseSensitive: false), 'EBANX'),
+  // dLocal: "DLO*DiDi Food CO Payin" (SMS real de Nequi).
+  (RegExp(r'^dlo\s*\*\s*', caseSensitive: false), 'dLocal'),
 ];
+
+/// Sufijo de dLocal después del comercio: "CO Payin" (país y tipo de pago).
+final _sufijoDlocal = RegExp(r'\s+(?:co\s+)?pay(?:in|out)\s*$', caseSensitive: false);
 
 /// Un número de 7 dígitos o más al final del comercio es un teléfono.
 final _telefonoAlFinal = RegExp(r'\s+\+?\d{7,}\s*$');
