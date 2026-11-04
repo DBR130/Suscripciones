@@ -133,6 +133,8 @@ class ParserPagos {
         break;
       }
     }
+    // Teléfono pegado al final ("STEAMGAMES.COM 4259522985", SMS real de Nequi).
+    limpio = limpio.replaceAll(_telefonoAlFinal, '');
     final indicaSuscripcion = tieneSenalDeSuscripcion(limpio);
     limpio = limpio.replaceAll(_suscripcion, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
     // "APPLE.COM/BILL" solo: el comercio es la pasarela misma.
@@ -259,6 +261,9 @@ final _pasarelas = [
   (RegExp(r'^paypal\s*\*\s*', caseSensitive: false), 'PayPal'),
   (RegExp(r'^ebanx\s*\*?\s*', caseSensitive: false), 'EBANX'),
 ];
+
+/// Un número de 7 dígitos o más al final del comercio es un teléfono.
+final _telefonoAlFinal = RegExp(r'\s+\+?\d{7,}\s*$');
 
 /// "SUB" (y variantes) en el comercio indica una suscripción y se quita del nombre.
 final _suscripcion = RegExp(r'\b(sub|subs|subscription|suscripcion|suscripción)\b', caseSensitive: false, unicode: true);

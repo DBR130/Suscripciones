@@ -174,6 +174,17 @@ void main() {
       expect(p.servicio, 'YouTube Premium');
       expect(p.indicaSuscripcion, isTrue);
     });
+
+    test('un teléfono pegado al comercio no es parte del nombre (Steam, SMS real)', () {
+      final p = cobro('NEQUI: Pagaste 39.381,00 en STEAMGAMES.COM 4259522985');
+      expect((p.banco, p.monto, p.comercio), ('Nequi', 39381, 'Steamgames'));
+      expect(p.indicaSuscripcion, isFalse);
+    });
+
+    test('"PRO" solo cuenta como palabra completa', () {
+      expect(cobro(r'Bancolombia: Compraste $25.000,00 en PRODUCTOS RAPPI').indicaSuscripcion, isFalse);
+      expect(cobro(r'Bancolombia: Compraste $25.000,00 en RAPPI PRO').indicaSuscripcion, isTrue);
+    });
   });
 
   test('los SMS de prueba de docs/probar-la-app.md se reconocen', () {
