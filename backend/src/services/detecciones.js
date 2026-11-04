@@ -6,6 +6,18 @@
 import { transaccion } from '../db.js';
 import { avanzarCiclo, diasEntre } from '../utils/fechas.js';
 import { buscarGuia, normalizar } from './guias.js';
+
+/**
+ * Palabras que indican una suscripción en el comercio, como palabra completa
+ * y con las palabras pegadas separadas. La misma lista está en
+ * lib/deteccion/parser_pagos.dart (palabrasSenalSuscripcion).
+ */
+const PALABRAS_SENAL = ['sub', 'subs', 'subscription', 'suscripcion', 'membresia', 'prime', 'pro', 'plus', 'premium'];
+
+/** true si el comercio trae una señal clara de suscripción ("RAPPI PRO", "YouTubePremium"). */
+export function tieneSenalDeSuscripcion(comercio) {
+  return normalizar(comercio, { separarPegadas: true }).split(' ').some((p) => PALABRAS_SENAL.includes(p));
+}
 import { ESTADOS_EN_CURSO } from './resumen.js';
 
 /** Caso c): dos pagos son "del mismo monto" si difieren máximo un 10 %. */
@@ -114,7 +126,7 @@ export async function procesarPagos(usuarioId, pagos, { compartido = false } = {
     // (así no se crean dos candidatos ni se leen montos viejos).
     await client.query('SELECT 1 FROM usuarios WHERE id = $1 FOR UPDATE', [usuarioId]);
     const guias = (await client.query(
-      'SELECT nombre_servicio, alias, es_generica FROM guias_cancelacion',
+      'SELECT nombre_servicio, alias, es_generica, es_ambigua FROM guias_cancelacion',
     )).rows;
     const suscripciones = (await client.query(
       `SELECT id, nombre_servicio, monto, moneda FROM suscripciones
@@ -166,9 +178,12 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
     return { resultado: 'suscripcion_existente', suscripcionId: suscripcion.id, cambioPrecio };
   }
 
-  // b) Servicio conocido: candidato desde el primer pago.
+  // b) Servicio conocido: candidato desde el primer pago. Si es ambiguo
+  // (Rappi, Apple, PlayStation...), solo con señal de suscripción; si no,
+  // necesita patrón como un comercio desconocido (caso c).
   const { guia, esGenerica } = buscarGuia(pago.comercio_normalizado, guias);
   const conocido = !esGenerica && guia !== null;
+  const desdeElPrimero = conocido && (!guia.es_ambigua || tieneSenalDeSuscripcion(pago.comercio));
   const nombre = conocido ? guia.nombre_servicio : pago.comercio_normalizado;
 
   // c) Comercio desconocido: hacen falta 2 o más pagos de monto similar y periódicos.
@@ -180,7 +195,7 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
   )).rows;
   const fechas = anteriores.filter((p) => montosSimilares(p.monto, monto)).map((p) => p.dia);
   const frecuencia = estimarFrecuencia(fechas);
-  if (!conocido && !frecuencia && !compartido) return { resultado: 'compra_normal' };
+  if (!desdeElPrimero && !frecuencia && !compartido) return { resultado: 'compra_normal' };
 
   return proponer(client, usuarioId, {
     nombre, monto, moneda: pago.moneda, banco: pago.banco, dia, conocido,

@@ -130,6 +130,9 @@ describe('endpoints de guías', () => {
     assert.equal(body.guias.length, GUIAS.length - 1);
     const max = body.guias.find((g) => g.nombre_servicio === 'Max');
     assert.deepEqual(max.alias, ['HBO Max', 'HBO']);
+    // T2: la app necesita saber qué servicios son ambiguos.
+    assert.equal(max.es_ambigua, false);
+    assert.equal(body.guias.find((g) => g.nombre_servicio === 'Rappi Pro').es_ambigua, true);
   });
 
   it('GET /api/suscripciones/:id/guia encuentra la guía o la genérica', async () => {

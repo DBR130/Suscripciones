@@ -182,6 +182,34 @@ describe('endpoints de detecciones', () => {
       assert.equal(c.es_servicio_conocido, true);
     });
 
+    it('servicios ambiguos (T2): sin señal, solo con patrón', async () => {
+      const auth = await crearUsuario();
+      // Pedido suelto de comida por Rappi: compra normal.
+      const rappi = { comercio: 'RAPPI', comercio_normalizado: 'Rappi Pro' };
+      let r = await enviar(auth, [pago({ ...rappi, monto: 32500, fecha: '2026-10-05T20:00:00' })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal');
+
+      // Un juego suelto de PlayStation: compra normal.
+      r = await enviar(auth, [pago({
+        comercio: 'PLAYSTATION NETWORK', comercio_normalizado: 'PlayStation Plus', monto: 259900,
+      })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal');
+
+      // Dos cobros mensuales iguales de Rappi: candidato "Rappi Pro".
+      r = await enviar(auth, [
+        pago({ ...rappi, monto: 24900, fecha: '2026-09-05T06:00:00' }),
+        pago({ ...rappi, monto: 24900, fecha: '2026-10-05T06:00:00' }),
+      ]);
+      assert.equal(r.candidatos_nuevos[0]?.comercio_normalizado, 'Rappi Pro');
+      assert.equal(r.candidatos_nuevos[0].es_servicio_conocido, true);
+    });
+
+    it('un servicio ambiguo con señal se propone desde el primer pago (T2)', async () => {
+      const auth = await crearUsuario();
+      const r = await enviar(auth, [pago({ comercio: 'RAPPI PRO', comercio_normalizado: 'Rappi Pro', monto: 24900 })]);
+      assert.equal(r.resultados[0].resultado, 'candidato_nuevo');
+    });
+
     it('usa el nombre del catálogo aunque llegue una variante', async () => {
       const auth = await crearUsuario();
       const { candidatos_nuevos: [c] } = await enviar(auth, [pago({ comercio: 'HBO MAX', comercio_normalizado: 'HBO Max' })]);
