@@ -7,9 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   // El mismo catálogo que carga el backend (GET /api/guias).
-  final catalogo = CatalogoServicios.fromJson(
-    jsonDecode(File('backend/db/guias.json').readAsStringSync()) as Object,
-  );
+  final catalogo = CatalogoServicios.fromJson({
+    'guias': jsonDecode(File('backend/db/guias.json').readAsStringSync()),
+    'procesadores': jsonDecode(File('backend/db/procesadores.json').readAsStringSync()),
+  });
   final parser = ParserPagos(catalogo);
   final llegada = DateTime(2026, 10, 31, 9, 30);
 
@@ -25,11 +26,12 @@ void main() {
     return r.motivo;
   }
 
-  group('notificaciones reales (test/fixtures/notificaciones_reales.json)', () {
-    final fixtures = (jsonDecode(File('test/fixtures/notificaciones_reales.json').readAsStringSync())
-        as Map)['notificaciones'] as List;
+  group('notificaciones reales (test/fixtures/)', () {
+    List<Map> leer(String archivo) =>
+        ((jsonDecode(File('test/fixtures/$archivo').readAsStringSync()) as Map)['notificaciones'] as List).cast<Map>();
+    final fixtures = leer('notificaciones_reales.json');
 
-    for (final f in fixtures.cast<Map>()) {
+    for (final f in [...fixtures, ...leer('sms_reales_nequi_2026_09.json')]) {
       test(f['caso'] as String, () {
         final esperado = f['esperado'] as Map;
         final r = parser.interpretar(
@@ -46,6 +48,7 @@ void main() {
         expect(p.servicio, esperado['servicio']);
         expect(p.medio, esperado['medio']);
         expect(p.indicaSuscripcion, esperado['indica_suscripcion']);
+        if (esperado.containsKey('procesador')) expect(p.procesador, esperado['procesador']);
         if (esperado['fecha'] == null) {
           expect(p.fechaDelMensaje, isFalse);
           expect(p.fecha, DateTime.parse(f['recibida_en'] as String));
@@ -57,7 +60,7 @@ void main() {
     }
 
     test('los dígitos de la tarjeta y los teléfonos no quedan en ningún campo', () {
-      final p = cobro((fixtures.first as Map)['texto'] as String);
+      final p = cobro(fixtures.first['texto'] as String);
       final campos = [p.banco, p.comercio, p.comercioOriginal, p.medio, p.moneda].join(' ');
       expect(campos, isNot(contains('0000')));
       expect(campos, isNot(contains('6045109095')));
@@ -184,6 +187,16 @@ void main() {
     test('DLO* es el prefijo de dLocal: queda el comercio real (DiDi, SMS real)', () {
       final p = cobro('NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin');
       expect((p.banco, p.monto, p.comercio, p.servicio), ('Nequi', 18900, 'DiDi Food', null));
+    });
+
+    test('procesadores (T3): solo cuando el SMS no trae el servicio', () {
+      expect(cobro('NEQUI: Pagaste 19.900,00 en SERVICIOS WEB EBANX CO').procesador, 'EBANX');
+      // El catálogo tiene prioridad: PayPal cobra, pero el SMS dice Netflix.
+      final netflix = cobro(r'Bancolombia: Compraste $44.900,00 en PAYPAL *NETFLIX');
+      expect((netflix.servicio, netflix.procesador), ('Netflix', null));
+      // Con DLO* el SMS trae el comercio real: no es un "pago procesado por dLocal".
+      expect(cobro('NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin').procesador, isNull);
+      expect(cobro(r'Bancolombia: Compraste $50.000,00 en MERCADOPAGO*COLOMBIA').procesador, 'Mercado Pago');
     });
 
     test('"PRO" solo cuenta como palabra completa', () {

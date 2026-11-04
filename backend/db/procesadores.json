@@ -1,0 +1,16 @@
+[
+  { "nombre": "EBANX", "alias": ["ebanx"] },
+  { "nombre": "PayU", "alias": ["payu"] },
+  { "nombre": "dLocal", "alias": ["dlocal", "dlo"] },
+  { "nombre": "Mercado Pago", "alias": ["mercado pago", "mercadopago"] },
+  { "nombre": "PayPal", "alias": ["paypal"] },
+  { "nombre": "Stripe", "alias": ["stripe"] },
+  { "nombre": "2Checkout", "alias": ["2checkout", "2co", "verifone"] },
+  { "nombre": "Paddle", "alias": ["paddle"] },
+  { "nombre": "FastSpring", "alias": ["fastspring"] },
+  { "nombre": "ePayco", "alias": ["epayco"] },
+  { "nombre": "Wompi", "alias": ["wompi"] },
+  { "nombre": "PlacetoPay", "alias": ["placetopay", "evertec"] },
+  { "nombre": "Kushki", "alias": ["kushki"] },
+  { "nombre": "Bold", "alias": ["bold"] }
+]

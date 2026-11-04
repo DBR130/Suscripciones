@@ -15,6 +15,7 @@ class PagoExtraido {
     this.medio,
     this.servicio,
     this.servicioAmbiguo = false,
+    this.procesador,
     this.indicaSuscripcion = false,
   });
 
@@ -50,6 +51,11 @@ class PagoExtraido {
   /// El servicio es ambiguo en el catálogo (Rappi Pro, Apple...): un cobro
   /// suelto sin señal de suscripción puede ser una compra cualquiera.
   final bool servicioAmbiguo;
+
+  /// Procesador de pagos ("EBANX") cuando el SMS no trae el servicio real:
+  /// "Pagaste 19.900 en SERVICIOS WEB EBANX CO". null si el comercio es un
+  /// servicio del catálogo o un comercio cualquiera.
+  final String? procesador;
 }
 
 /// Resultado del parser: un cobro con sus campos, o el motivo por el que no lo es.
@@ -107,6 +113,7 @@ class ParserPagos {
       comercio: comercio.nombre,
       servicio: comercio.servicio,
       servicioAmbiguo: comercio.servicio != null && catalogo.esAmbiguo(comercio.servicio!),
+      procesador: comercio.procesador,
       indicaSuscripcion: comercio.indicaSuscripcion,
       fecha: fecha ?? recibidaEn,
       fechaDelMensaje: fecha != null,
@@ -128,7 +135,7 @@ class ParserPagos {
     return null;
   }
 
-  ({String nombre, String? servicio, bool indicaSuscripcion}) _normalizarComercio(String original) {
+  ({String nombre, String? servicio, String? procesador, bool indicaSuscripcion}) _normalizarComercio(String original) {
     var limpio = original;
     String? marca;
     for (final (patron, nombre) in _pasarelas) {
@@ -147,7 +154,15 @@ class ParserPagos {
     if (limpio.isEmpty) limpio = marca ?? original;
 
     final servicio = catalogo.buscar(limpio);
-    return (nombre: servicio ?? _presentable(limpio), servicio: servicio, indicaSuscripcion: indicaSuscripcion);
+    // El catálogo tiene prioridad: el procesador solo cuenta si el SMS no
+    // trae un servicio conocido ("PAYPAL *NETFLIX" es Netflix).
+    final procesador = servicio == null ? catalogo.procesadorDe(limpio) : null;
+    return (
+      nombre: servicio ?? _presentable(limpio),
+      servicio: servicio,
+      procesador: procesador,
+      indicaSuscripcion: indicaSuscripcion,
+    );
   }
 }
 

@@ -1,0 +1,95 @@
+{
+  "_comentario": "SMS REALES de Nequi de un probador (Santiago), septiembre de 2026. En su Truecaller el remitente aparece como 'Robocall · Potential fraud', pero llegan igual. Nequi no trae fecha en el texto: se usa la de llegada (recibida_en). 'procesador' = el comercio es un procesador de pagos y el SMS no trae el servicio real (backend/db/procesadores.json). Mismo formato que notificaciones_reales.json.",
+  "notificaciones": [
+    {
+      "caso": "EBANX: el SMS trae el procesador, no el servicio (Crunchyroll)",
+      "paquete": "com.truecaller",
+      "titulo": "",
+      "texto": "NEQUI: Pagaste 19.900,00 en SERVICIOS WEB EBANX CO",
+      "recibida_en": "2026-09-16T12:43:00",
+      "esperado": {
+        "banco": "Nequi",
+        "monto": 19900,
+        "moneda": "COP",
+        "comercio": "Servicios Web Ebanx Co",
+        "servicio": null,
+        "procesador": "EBANX",
+        "fecha": null,
+        "medio": null,
+        "indica_suscripcion": false
+      }
+    },
+    {
+      "caso": "Steam: el teléfono pegado al comercio no es monto ni nombre (compra puntual)",
+      "paquete": "com.truecaller",
+      "titulo": "",
+      "texto": "NEQUI: Pagaste 39.381,00 en STEAMGAMES.COM 4259522985",
+      "recibida_en": "2026-09-16T20:44:00",
+      "esperado": {
+        "banco": "Nequi",
+        "monto": 39381,
+        "moneda": "COP",
+        "comercio": "Steamgames",
+        "servicio": null,
+        "procesador": null,
+        "fecha": null,
+        "medio": null,
+        "indica_suscripcion": false
+      }
+    },
+    {
+      "caso": "Claude de septiembre (convertido de USD, con centavos)",
+      "paquete": "com.truecaller",
+      "titulo": "",
+      "texto": "NEQUI: Pagaste 64.925,65 en ANTHROPIC* CLAUDE SUB",
+      "recibida_en": "2026-09-19T18:10:00",
+      "esperado": {
+        "banco": "Nequi",
+        "monto": 64925.65,
+        "moneda": "COP",
+        "comercio": "Claude",
+        "servicio": "Claude",
+        "procesador": null,
+        "fecha": null,
+        "medio": null,
+        "indica_suscripcion": true
+      }
+    },
+    {
+      "caso": "DiDi Food por dLocal (DLO*): queda el comercio real, primer pedido",
+      "paquete": "com.truecaller",
+      "titulo": "",
+      "texto": "NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin",
+      "recibida_en": "2026-09-25T19:44:00",
+      "esperado": {
+        "banco": "Nequi",
+        "monto": 18900,
+        "moneda": "COP",
+        "comercio": "DiDi Food",
+        "servicio": null,
+        "procesador": null,
+        "fecha": null,
+        "medio": null,
+        "indica_suscripcion": false
+      }
+    },
+    {
+      "caso": "DiDi Food por dLocal (DLO*): segundo pedido el mismo día, otro monto",
+      "paquete": "com.truecaller",
+      "titulo": "",
+      "texto": "NEQUI: Pagaste 16.140,00 en DLO*DiDi Food CO Payin",
+      "recibida_en": "2026-09-25T19:46:00",
+      "esperado": {
+        "banco": "Nequi",
+        "monto": 16140,
+        "moneda": "COP",
+        "comercio": "DiDi Food",
+        "servicio": null,
+        "procesador": null,
+        "fecha": null,
+        "medio": null,
+        "indica_suscripcion": false
+      }
+    }
+  ]
+}

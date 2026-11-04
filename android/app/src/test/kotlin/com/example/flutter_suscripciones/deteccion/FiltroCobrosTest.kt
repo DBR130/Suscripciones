@@ -31,7 +31,9 @@ class FiltroCobrosTest {
 
     @Test
     fun `los SMS de cobro reales pasan, lleguen por la app de SMS que sea`() {
-        for (n in fixture("notificaciones_reales.json", "notificaciones")) {
+        val reales = fixture("notificaciones_reales.json", "notificaciones") +
+            fixture("sms_reales_nequi_2026_09.json", "notificaciones")
+        for (n in reales) {
             assertNull(n.getString("caso"), motivo(n.getString("texto")))
         }
     }
