@@ -168,6 +168,14 @@ void main() {
     });
   });
 
+  group('limpieza del comercio (SMS reales, T1)', () {
+    test('nombres pegados: GOOGLE *YouTubePremium es YouTube Premium, con señal de suscripción', () {
+      final p = cobro(r'Bancolombia: Compraste $26.900,00 en GOOGLE *YouTubePremium con tu T.Deb *0000, el 05/10/2026 a las 08:00.');
+      expect(p.servicio, 'YouTube Premium');
+      expect(p.indicaSuscripcion, isTrue);
+    });
+  });
+
   test('los SMS de prueba de docs/probar-la-app.md se reconocen', () {
     final b = cobro(r'Bancolombia: Compraste $19.900,00 en NETFLIX con tu T.Deb *1234, el 01/11/2026 a las 10:30.');
     expect((b.banco, b.monto, b.servicio), ('Bancolombia', 19900, 'Netflix'));

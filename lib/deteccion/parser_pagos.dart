@@ -133,7 +133,7 @@ class ParserPagos {
         break;
       }
     }
-    final indicaSuscripcion = _suscripcion.hasMatch(limpio);
+    final indicaSuscripcion = tieneSenalDeSuscripcion(limpio);
     limpio = limpio.replaceAll(_suscripcion, ' ').replaceAll(RegExp(r'\s+'), ' ').trim();
     // "APPLE.COM/BILL" solo: el comercio es la pasarela misma.
     if (limpio.isEmpty) limpio = marca ?? original;
@@ -260,5 +260,19 @@ final _pasarelas = [
   (RegExp(r'^ebanx\s*\*?\s*', caseSensitive: false), 'EBANX'),
 ];
 
-/// "SUB" (y variantes) al final del comercio indica una suscripción.
+/// "SUB" (y variantes) en el comercio indica una suscripción y se quita del nombre.
 final _suscripcion = RegExp(r'\b(sub|subs|subscription|suscripcion|suscripción)\b', caseSensitive: false, unicode: true);
+
+/// Palabras que indican una suscripción. Las de [_suscripcion] se quitan del
+/// nombre; estas otras son parte del nombre ("YouTube Premium", "Rappi Pro").
+/// La misma lista está en backend/src/services/detecciones.js.
+const palabrasSenalSuscripcion = [
+  'sub', 'subs', 'subscription', 'suscripcion', 'membresia', 'prime', 'pro', 'plus', 'premium',
+];
+
+/// true si el comercio trae una señal clara de suscripción, como palabra
+/// completa y con las palabras pegadas separadas ("YouTubePremium").
+bool tieneSenalDeSuscripcion(String comercio) {
+  final palabras = normalizarNombre(comercio, separarPegadas: true).split(' ');
+  return palabras.any(palabrasSenalSuscripcion.contains);
+}

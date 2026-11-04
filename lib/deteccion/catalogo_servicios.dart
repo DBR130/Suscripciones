@@ -31,14 +31,21 @@ class CatalogoServicios {
   /// Nombre del servicio cuyo nombre o alias aparece en [texto] como palabras
   /// completas ("anthropic claude sub" contiene "claude"). Si varios
   /// coinciden, gana el más largo, igual que buscarGuia en el backend.
+  ///
+  /// Se compara de dos formas: tal cual ("YOUTUBE PREMIUM") y con las
+  /// palabras pegadas separadas en los dos lados ("YouTubePremium" y la
+  /// clave "YouTube Premium" quedan como "you tube premium").
   String? buscar(String texto) {
     final t = ' ${normalizarNombre(texto)} ';
+    final tSeparado = ' ${normalizarNombre(texto, separarPegadas: true)} ';
     String? mejor;
     var largoMejor = 0;
     for (final s in servicios) {
       for (final clave in [s.nombre, ...s.alias]) {
         final c = normalizarNombre(clave);
-        if (c.isNotEmpty && t.contains(' $c ') && c.length > largoMejor) {
+        final cSeparada = normalizarNombre(clave, separarPegadas: true);
+        final coincide = t.contains(' $c ') || tSeparado.contains(' $cSeparada ');
+        if (c.isNotEmpty && coincide && c.length > largoMejor) {
           mejor = s.nombre;
           largoMejor = c.length;
         }
@@ -56,7 +63,11 @@ const _tildes = {
 
 /// Minúsculas, sin tildes, "+" como "plus" y cualquier otro signo como
 /// espacio. Es la misma regla que normalizar() en backend/src/services/guias.js.
-String normalizarNombre(String texto) {
+///
+/// [separarPegadas]: antes, separa las palabras pegadas por mayúsculas
+/// ("YouTubePremium" -> "You Tube Premium").
+String normalizarNombre(String texto, {bool separarPegadas = false}) {
+  if (separarPegadas) texto = texto.replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]} ${m[2]}');
   final sinTildes = texto.toLowerCase().split('').map((c) => _tildes[c] ?? c).join();
   return sinTildes
       .replaceAll('+', ' plus ')
