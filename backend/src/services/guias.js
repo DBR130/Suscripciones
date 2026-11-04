@@ -7,8 +7,12 @@
  * - "+" se lee como "plus" ("Disney+" → "disney plus"),
  * - cualquier otro signo cuenta como espacio.
  */
-export function normalizar(texto) {
-  return String(texto)
+export function normalizar(texto, { separarPegadas = false } = {}) {
+  let t = String(texto);
+  // "YouTubePremium" -> "You Tube Premium" (igual que normalizarNombre en
+  // lib/deteccion/catalogo_servicios.dart).
+  if (separarPegadas) t = t.replace(/([a-z])([A-Z])/g, '$1 $2');
+  return t
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '') // quita las tildes que quedaron separadas
     .toLowerCase()
@@ -28,14 +32,19 @@ export function normalizar(texto) {
  * @returns {{ guia: object, esGenerica: boolean }}
  */
 export function buscarGuia(nombreServicio, guias) {
+  // Se compara tal cual ("YOUTUBE PREMIUM") y con las palabras pegadas
+  // separadas en los dos lados ("YouTubePremium" y "YouTube Premium").
   const nombre = ` ${normalizar(nombreServicio)} `;
+  const nombreSeparado = ` ${normalizar(nombreServicio, { separarPegadas: true })} `;
   let mejor = null;
   let largoMejor = 0;
   for (const g of guias) {
     if (g.es_generica) continue;
     for (const clave of [g.nombre_servicio, ...(g.alias ?? [])]) {
       const c = normalizar(clave);
-      if (c && nombre.includes(` ${c} `) && c.length > largoMejor) {
+      const coincide = nombre.includes(` ${c} `)
+        || nombreSeparado.includes(` ${normalizar(clave, { separarPegadas: true })} `);
+      if (c && coincide && c.length > largoMejor) {
         mejor = g;
         largoMejor = c.length;
       }

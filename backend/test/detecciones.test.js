@@ -173,6 +173,15 @@ describe('endpoints de detecciones', () => {
       assert.equal(c.monto, 68139.27);
     });
 
+    it('reconoce nombres pegados: YouTubePremium es YouTube Premium (T1)', async () => {
+      const auth = await crearUsuario();
+      const { candidatos_nuevos: [c] } = await enviar(auth, [pago({
+        comercio: 'GOOGLE *YouTubePremium', comercio_normalizado: 'YouTubePremium', monto: 26900,
+      })]);
+      assert.equal(c?.comercio_normalizado, 'YouTube Premium');
+      assert.equal(c.es_servicio_conocido, true);
+    });
+
     it('usa el nombre del catálogo aunque llegue una variante', async () => {
       const auth = await crearUsuario();
       const { candidatos_nuevos: [c] } = await enviar(auth, [pago({ comercio: 'HBO MAX', comercio_normalizado: 'HBO Max' })]);
