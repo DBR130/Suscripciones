@@ -133,6 +133,9 @@ describe('endpoints de guías', () => {
     // T2: la app necesita saber qué servicios son ambiguos.
     assert.equal(max.es_ambigua, false);
     assert.equal(body.guias.find((g) => g.nombre_servicio === 'Rappi Pro').es_ambigua, true);
+    // T5: precio de referencia solo donde se conoce (Crunchyroll, de un SMS real).
+    assert.equal(body.guias.find((g) => g.nombre_servicio === 'Crunchyroll').precio_referencia_cop, 19900);
+    assert.equal(max.precio_referencia_cop, null);
   });
 
   it('GET /api/suscripciones/:id/guia encuentra la guía o la genérica', async () => {

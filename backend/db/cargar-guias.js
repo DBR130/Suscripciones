@@ -41,6 +41,9 @@ export function validarGuias(guias) {
     if (g.es_ambigua !== undefined && typeof g.es_ambigua !== 'boolean') {
       throw new Error(`${donde}: es_ambigua debe ser true o false`);
     }
+    if (g.precio_referencia_cop != null && !(Number.isFinite(g.precio_referencia_cop) && g.precio_referencia_cop > 0)) {
+      throw new Error(`${donde}: precio_referencia_cop debe ser un número mayor que 0`);
+    }
     if (g.es_generica) genericas += 1;
   }
   if (genericas !== 1) throw new Error('Debe haber exactamente una guía con "es_generica": true');
@@ -60,8 +63,9 @@ export async function cargarGuias(connectionString, guias) {
       // solo cuando algo es distinto (IS DISTINCT FROM también compara NULL).
       const { rowCount } = await client.query(
         `INSERT INTO guias_cancelacion
-           (nombre_servicio, pasos, enlace_directo, alias, duracion_minutos, es_generica, es_ambigua)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+           (nombre_servicio, pasos, enlace_directo, alias, duracion_minutos, es_generica, es_ambigua,
+            precio_referencia_cop)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (nombre_servicio) DO UPDATE SET
            pasos = EXCLUDED.pasos,
            enlace_directo = EXCLUDED.enlace_directo,
@@ -69,13 +73,15 @@ export async function cargarGuias(connectionString, guias) {
            duracion_minutos = EXCLUDED.duracion_minutos,
            es_generica = EXCLUDED.es_generica,
            es_ambigua = EXCLUDED.es_ambigua,
+           precio_referencia_cop = EXCLUDED.precio_referencia_cop,
            actualizada_en = NOW()
          WHERE (guias_cancelacion.pasos, guias_cancelacion.enlace_directo, guias_cancelacion.alias,
                 guias_cancelacion.duracion_minutos, guias_cancelacion.es_generica,
-                guias_cancelacion.es_ambigua)
+                guias_cancelacion.es_ambigua, guias_cancelacion.precio_referencia_cop)
            IS DISTINCT FROM
                (EXCLUDED.pasos, EXCLUDED.enlace_directo, EXCLUDED.alias,
-                EXCLUDED.duracion_minutos, EXCLUDED.es_generica, EXCLUDED.es_ambigua)`,
+                EXCLUDED.duracion_minutos, EXCLUDED.es_generica, EXCLUDED.es_ambigua,
+                EXCLUDED.precio_referencia_cop)`,
         [
           g.nombre_servicio,
           JSON.stringify(g.pasos),
@@ -84,6 +90,7 @@ export async function cargarGuias(connectionString, guias) {
           g.duracion_minutos ?? null,
           g.es_generica === true,
           g.es_ambigua === true,
+          g.precio_referencia_cop ?? null,
         ],
       );
       cambios += rowCount;

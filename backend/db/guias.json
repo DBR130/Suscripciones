@@ -107,6 +107,7 @@
   },
   {
     "nombre_servicio": "Crunchyroll",
+    "precio_referencia_cop": 19900,
     "alias": ["Crunchyroll Premium"],
     "duracion_minutos": 3,
     "enlace_directo": null,

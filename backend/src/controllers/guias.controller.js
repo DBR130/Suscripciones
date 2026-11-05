@@ -7,10 +7,11 @@ const COLUMNAS_GUIA = `nombre_servicio, pasos, enlace_directo, alias, duracion_m
   actualizada_en, es_generica`;
 
 // GET /api/guias
-// Catálogo de guías (nombre, alias y si el servicio es ambiguo), sin la genérica.
+// Catálogo de guías (nombre, alias, si el servicio es ambiguo y su precio de
+// referencia en COP), sin la genérica.
 export async function listarGuias(req, res) {
   const { rows } = await query(
-    `SELECT id, nombre_servicio, alias, es_ambigua FROM guias_cancelacion
+    `SELECT id, nombre_servicio, alias, es_ambigua, precio_referencia_cop FROM guias_cancelacion
      WHERE NOT es_generica ORDER BY nombre_servicio`,
   );
   // Los procesadores de pago van con el catálogo: la app los usa para
