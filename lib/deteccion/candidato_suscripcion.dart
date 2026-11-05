@@ -46,6 +46,10 @@ class CandidatoSuscripcion {
   /// "Pago procesado por EBANX" o el nombre del comercio.
   String get titulo => esDeProcesador ? 'Pago procesado por $procesador' : nombre;
 
+  /// Lo que se le pregunta en la pantalla 05: con un motivo (cobro por el
+  /// valor exacto o descarte reabierto), "¿Es tu suscripción a X?".
+  String get pregunta => !esDeProcesador && motivo != null ? '¿Es tu suscripción a $nombre?' : titulo;
+
   factory CandidatoSuscripcion.fromJson(Map<String, dynamic> json) => CandidatoSuscripcion(
         id: json['id'] as int,
         nombre: json['comercio_normalizado'] as String,

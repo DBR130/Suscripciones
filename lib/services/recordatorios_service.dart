@@ -125,8 +125,9 @@ List<RecordatorioPlan> planificarRecordatorios(
 /// o "Detectamos 3 cobros de $89.900 con la misma periodicidad."
 /// Título del aviso del flujo B. Un cobro de un procesador no trae el
 /// servicio: "Pago procesado por EBANX" en vez de "¿…a EBANX?".
-String tituloAvisoCandidato(CandidatoSuscripcion c) =>
-    c.esDeProcesador ? c.titulo : '¿Tienes una suscripción a ${c.nombre}?';
+String tituloAvisoCandidato(CandidatoSuscripcion c) => c.esDeProcesador || c.motivo != null
+    ? c.pregunta
+    : '¿Tienes una suscripción a ${c.nombre}?';
 
 /// Avisos de pagos registrados en suscripciones existentes (T8): uno por pago
 /// ("Registramos un pago de $44.900 en Netflix" o "Netflix subió de A a B")

@@ -210,6 +210,29 @@ void main() {
     });
   });
 
+  group('precio de referencia (YouTube Premium, SMS reales)', () {
+    final youtube = CandidatoSuscripcion.fromJson({
+      'id': 11,
+      'comercio_normalizado': 'YouTube Premium',
+      'monto': 13300,
+      'moneda': 'COP',
+      'frecuencia_estimada': 'mensual',
+      'fecha_ultimo_pago': '2026-06-21',
+      'es_servicio_conocido': true,
+      'motivo': 'Cobro por el valor exacto de YouTube Premium',
+    });
+
+    testWidgets('se propone como pregunta, con el motivo', (tester) async {
+      await abrir(tester, FakeDeteccionService(lista: [youtube]));
+      expect(find.text('¿Es tu suscripción a YouTube Premium?'), findsOneWidget);
+      expect(find.text('Cobro por el valor exacto de YouTube Premium'), findsOneWidget);
+    });
+
+    test('el aviso del flujo B también pregunta', () {
+      expect(tituloAvisoCandidato(youtube), '¿Es tu suscripción a YouTube Premium?');
+    });
+  });
+
   group('reapertura (T7)', () {
     final reabierto = CandidatoSuscripcion.fromJson({
       'id': 4,

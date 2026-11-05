@@ -429,7 +429,7 @@ class _FilaCandidato extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      nombre ?? c.titulo,
+                      nombre ?? c.pregunta,
                       style: const TextStyle(
                         color: AppColors.text,
                         fontSize: 14.5,
