@@ -246,6 +246,22 @@ describe('endpoints de detecciones', () => {
       assert.equal(r.resultados[0].cambio_precio, false);
     });
 
+    it('casos reales: un pedido de Rappi no es Rappi Pro; Google One mensual sí (simulado)', async () => {
+      const auth = await crearUsuario();
+      let r = await enviar(auth, [pago({
+        comercio: 'RAPPI COLOMBIA*DL', comercio_normalizado: 'Rappi Pro', monto: 30300, fecha: '2026-06-21T13:24:00',
+      })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal');
+
+      // Google One: SIMULADO (no hay SMS real todavía).
+      const one = { comercio: 'GOOGLE *Google One', comercio_normalizado: 'Google One', monto: 8500 };
+      r = await enviar(auth, [
+        pago({ ...one, fecha: '2026-09-05T08:00:00' }),
+        pago({ ...one, fecha: '2026-10-05T08:00:00' }),
+      ]);
+      assert.equal(r.candidatos_nuevos[0]?.comercio_normalizado, 'Google One');
+    });
+
     it('un servicio ambiguo con señal se propone desde el primer pago (T2)', async () => {
       const auth = await crearUsuario();
       const r = await enviar(auth, [pago({ comercio: 'RAPPI PRO', comercio_normalizado: 'Rappi Pro', monto: 24900 })]);

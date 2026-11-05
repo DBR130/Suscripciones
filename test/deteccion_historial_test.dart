@@ -132,6 +132,37 @@ void main() {
       expect(AnalizadorPagos.seleccionarParaEnviar([domicilio]), isEmpty);
     });
 
+    test('YouTube Premium y Google One vuelven sin falsos positivos (casos reales y simulados)', () {
+      // Reales: los dos cobros de YouTube (sin "Premium", con un mes sin SMS).
+      final youtube = [
+        cobro(r'Bancolombia: Compraste $13.300,00 en GOOGLE YouTube con tu T.Deb *0000, el 21/06/2026 a las 12:41.'),
+        cobro(r'Bancolombia: Compraste $13.300,00 en GOOGLE YouTube con tu T.Deb *0000, el 21/08/2026 a las 00:42.'),
+      ];
+      // Google One: SIMULADO (no hay SMS real todavía), formato de Bancolombia.
+      final googleOne = [
+        cobro(bancolombia('GOOGLE *Google One', '8.500,00', '05/09/2026')),
+        cobro(bancolombia('GOOGLE *Google One', '8.500,00', '05/10/2026')),
+      ];
+      // Falsos positivos que no deben volver: pedido real de Rappi y una compra
+      // suelta en Google Play.
+      final rappi = cobro(r'Bancolombia: Compraste $30.300,00 en RAPPI COLOMBIA*DL con tu T.Deb *0000, el 21/06/2026 a las 13:24.');
+      expect(rappi.servicio, 'Rappi Pro');
+      final juego = cobro(bancolombia('GOOGLE *Clash Royale', '22.900,00', '12/10/2026'));
+
+      final seleccion = AnalizadorPagos.seleccionarParaEnviar([...youtube, ...googleOne, rappi, juego]);
+      expect(seleccion.map((p) => p.servicio).toSet(), {'YouTube Premium', 'Google One'});
+      expect(seleccion, hasLength(4));
+    });
+
+    test('un retiro no es un cobro (SMS real)', () {
+      final r = parser.interpretar(
+        'Bancolombia: Retiraste \$70.000,00 en VIVA_ENVIG7 de tu T.Deb **0000 el 14/06/2026 a las 15:36.',
+        recibidaEn: hoy,
+      );
+      expect(r.esCobro, isFalse);
+      expect(r.motivo, 'retiro de dinero');
+    });
+
     test('una compra puntual no sale', () {
       final didi = cobro(bancolombia('TIENDAS D1', '18.900,00', '30/10/2026'));
       expect(AnalizadorPagos.seleccionarParaEnviar([didi]), isEmpty);
