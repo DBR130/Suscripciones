@@ -121,6 +121,39 @@ export async function confirmarCandidato(req, res) {
   res.status(201).json(resultado);
 }
 
+// GET /api/detecciones/descartadas
+// Comercios que el usuario descartó ("Detecciones descartadas" en Perfil).
+export async function listarDescartados(req, res) {
+  const { rows } = await query(
+    `SELECT ${COLUMNAS_CANDIDATO} FROM candidatos_suscripcion
+     WHERE usuario_id = $1 AND estado = 'descartada'
+     ORDER BY comercio_normalizado, id`,
+    [req.usuarioId],
+  );
+  res.json({ candidatos: rows });
+}
+
+// POST /api/detecciones/candidatos/:id/restaurar
+// "Volver a proponer" o "Deshacer": el candidato descartado vuelve a
+// pendiente. 404 si no existe o es de otro usuario; 409 si no está descartado.
+export async function restaurarCandidato(req, res) {
+  const id = idDeLaRuta(req);
+  const candidato = await transaccion(async (client) => {
+    const actual = (await client.query(
+      'SELECT estado FROM candidatos_suscripcion WHERE id = $1 AND usuario_id = $2 FOR UPDATE',
+      [id, req.usuarioId],
+    )).rows[0];
+    if (!actual) throw new HttpError(404, NO_ENCONTRADO);
+    if (actual.estado !== 'descartada') throw new HttpError(409, `Este candidato no está descartado (${actual.estado})`);
+    return (await client.query(
+      `UPDATE candidatos_suscripcion SET estado = 'pendiente'
+       WHERE id = $1 RETURNING ${COLUMNAS_CANDIDATO}`,
+      [id],
+    )).rows[0];
+  });
+  res.json({ candidato });
+}
+
 // POST /api/detecciones/candidatos/:id/descartar
 // El comercio no se vuelve a proponer, y sus pagos detectados se borran (ya
 // no hacen falta: no es una suscripción).

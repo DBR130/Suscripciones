@@ -500,6 +500,32 @@ describe('endpoints de detecciones', () => {
     });
   });
 
+  describe('deshacer descartes (T6)', () => {
+    it('lista los descartados, restaura uno y responde 404 si es de otro usuario', async () => {
+      const ana = await crearUsuario();
+      const beto = await crearUsuario();
+      const { candidatos_nuevos: [c] } = await enviar(ana, [pago()]);
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/descartar`).set(ana).expect(200);
+
+      await request(app).get('/api/detecciones/descartadas').expect(401);
+      let res = await request(app).get('/api/detecciones/descartadas').set(ana).expect(200);
+      assert.deepEqual(res.body.candidatos.map((x) => [x.id, x.estado]), [[c.id, 'descartada']]);
+      res = await request(app).get('/api/detecciones/descartadas').set(beto).expect(200);
+      assert.deepEqual(res.body.candidatos, []);
+
+      // Restaurar un descarte de otro usuario: 404, y sigue descartado.
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/restaurar`).set(beto).expect(404);
+      await request(app).post('/api/detecciones/candidatos/999999/restaurar').set(ana).expect(404);
+
+      res = await request(app).post(`/api/detecciones/candidatos/${c.id}/restaurar`).set(ana).expect(200);
+      assert.equal(res.body.candidato.estado, 'pendiente');
+      assert.equal((await candidatos(ana))[0].id, c.id);
+
+      // Ya no está descartado.
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/restaurar`).set(ana).expect(409);
+    });
+  });
+
   describe('aislamiento entre usuarios', () => {
     it('nadie ve, confirma ni descarta candidatos de otro usuario', async () => {
       const ana = await crearUsuario();
