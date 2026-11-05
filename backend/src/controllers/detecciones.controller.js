@@ -76,11 +76,33 @@ export async function listarCandidatos(req, res) {
 // Cuerpo opcional con los datos corregidos por el usuario (los mismos campos
 // que una suscripción). Lo que no venga se toma del candidato. Crea la
 // suscripción con origen 'notificacion' y enlaza los pagos detectados.
+//
+// "Unir" (el mismo servicio detectado dos veces, por ejemplo Crunchyroll por
+// EBANX y por Google Play): con unir_con_suscripcion los pagos se agregan a
+// esa suscripción sin crear otra; con unir_con_candidato el otro candidato
+// pendiente queda confirmado en la misma suscripción nueva. 404 si es de
+// otro usuario.
 export async function confirmarCandidato(req, res) {
   const id = idDeLaRuta(req);
   const resultado = await transaccion(async (client) => {
     const c = await candidatoPendiente(client, id, req.usuarioId);
-    const cambios = req.body ?? {};
+    const { unir_con_candidato: unirCandidato, unir_con_suscripcion: unirSuscripcion, ...cambios } = req.body ?? {};
+
+    if (unirSuscripcion !== undefined) {
+      const existente = (await client.query(
+        `SELECT ${COLUMNAS} FROM suscripciones WHERE id = $1 AND usuario_id = $2`,
+        [idValido(unirSuscripcion, 'Suscripción no encontrada'), req.usuarioId],
+      )).rows[0];
+      if (!existente) throw new HttpError(404, 'Suscripción no encontrada');
+      const candidato = await confirmarEn(client, c, existente);
+      const pagosEnlazados = await enlazarPagos(client, req.usuarioId, c, existente);
+      return { suscripcion: existente, candidato, pagos_enlazados: pagosEnlazados };
+    }
+    // El otro candidato se valida antes de crear la suscripción.
+    const otro = unirCandidato === undefined
+      ? null
+      : await candidatoPendiente(client, idValido(unirCandidato, NO_ENCONTRADO), req.usuarioId);
+
     const frecuencia = cambios.frecuencia ?? c.frecuencia_estimada;
     const { datos, error } = limpiarSuscripcion({
       nombre_servicio: c.comercio_normalizado,
@@ -111,15 +133,31 @@ export async function confirmarCandidato(req, res) {
     );
     const suscripcion = rows[0];
 
-    const candidato = (await client.query(
-      `UPDATE candidatos_suscripcion SET estado = 'confirmada', suscripcion_id = $2
-       WHERE id = $1 RETURNING ${COLUMNAS_CANDIDATO}`,
-      [id, suscripcion.id],
-    )).rows[0];
-    const pagosEnlazados = await enlazarPagos(client, req.usuarioId, c, suscripcion);
+    const candidato = await confirmarEn(client, c, suscripcion);
+    let pagosEnlazados = await enlazarPagos(client, req.usuarioId, c, suscripcion);
+    if (otro) {
+      await confirmarEn(client, otro, suscripcion);
+      pagosEnlazados += await enlazarPagos(client, req.usuarioId, otro, suscripcion);
+    }
     return { suscripcion, candidato, pagos_enlazados: pagosEnlazados };
   });
   res.status(201).json(resultado);
+}
+
+/** Deja el candidato confirmado en la suscripción. */
+async function confirmarEn(client, candidato, suscripcion) {
+  return (await client.query(
+    `UPDATE candidatos_suscripcion SET estado = 'confirmada', suscripcion_id = $2
+     WHERE id = $1 RETURNING ${COLUMNAS_CANDIDATO}`,
+    [candidato.id, suscripcion.id],
+  )).rows[0];
+}
+
+/** Un id del cuerpo: entero positivo, o 404 con `mensaje`. */
+function idValido(valor, mensaje) {
+  const id = Number(valor);
+  if (!Number.isInteger(id) || id < 1 || id > MAX_ID) throw new HttpError(404, mensaje);
+  return id;
 }
 
 // GET /api/detecciones/descartadas

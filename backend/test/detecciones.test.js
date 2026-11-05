@@ -619,6 +619,73 @@ describe('endpoints de detecciones', () => {
     });
   });
 
+  describe('unir candidatos del mismo servicio (Crunchyroll duplicado, caso real)', () => {
+    const ebanx = {
+      comercio: 'SERVICIOS WEB EBANX CO', comercio_normalizado: 'Servicios Web Ebanx Co', banco: 'Nequi',
+      monto: 19900, fecha_del_mensaje: false,
+    };
+    const google = { comercio: 'GOOGLE *Crunchyroll', comercio_normalizado: 'Crunchyroll', monto: 19900 };
+
+    async function casoSantiago(auth) {
+      await enviar(auth, [
+        ...['06', '07', '08', '09', '10'].map((mes) => pago({ ...ebanx, fecha: `2026-${mes}-16T12:43:00` })),
+        pago({ ...google, fecha: '2026-10-23T07:20:00' }),
+      ]);
+      const lista = await candidatos(auth);
+      return { porEbanx: lista.find((c) => c.procesador === 'EBANX'), directo: lista.find((c) => !c.procesador) };
+    }
+
+    async function suscripcionesDe(auth) {
+      return (await request(app).get('/api/suscripciones').set(auth).expect(200)).body.suscripciones;
+    }
+
+    it('"Unir" con otro candidato: una sola suscripción con los pagos de los dos', async () => {
+      const auth = await crearUsuario();
+      const { porEbanx, directo } = await casoSantiago(auth);
+      const { body } = await request(app).post(`/api/detecciones/candidatos/${porEbanx.id}/confirmar`).set(auth)
+        .send({ nombre_servicio: 'Crunchyroll', unir_con_candidato: directo.id }).expect(201);
+      assert.equal(body.pagos_enlazados, 6);
+
+      const suscripciones = await suscripcionesDe(auth);
+      assert.deepEqual(suscripciones.map((s) => [s.nombre_servicio, s.monto]), [['Crunchyroll', 19900]]);
+      const detalle = (await request(app).get(`/api/suscripciones/${body.suscripcion.id}`).set(auth).expect(200)).body;
+      assert.ok(detalle.pagado_total >= 6 * 19900);
+      assert.equal((await candidatos(auth, '?estado=confirmada')).filter((c) => c.suscripcion_id === body.suscripcion.id).length, 2);
+
+      // Los cobros siguientes de los dos caminos van a esa misma suscripción.
+      let r = await enviar(auth, [pago({ ...ebanx, fecha: '2026-11-16T12:40:00' })]);
+      assert.equal(r.resultados[0].suscripcion_id, body.suscripcion.id);
+      r = await enviar(auth, [pago({ ...google, fecha: '2026-11-23T07:20:00' })]);
+      assert.equal(r.resultados[0].suscripcion_id, body.suscripcion.id);
+      assert.equal((await suscripcionesDe(auth)).length, 1);
+    });
+
+    it('"Unir" con una suscripción que ya tiene: los pagos se agregan a ella', async () => {
+      const auth = await crearUsuario();
+      const existente = await crearSuscripcion(auth, { nombre_servicio: 'Crunchyroll', monto: 19900 });
+      await enviar(auth, ['06', '07'].map((mes) => pago({ ...ebanx, fecha: `2026-${mes}-16T12:43:00` })));
+      const [c] = await candidatos(auth);
+      const { body } = await request(app).post(`/api/detecciones/candidatos/${c.id}/confirmar`).set(auth)
+        .send({ unir_con_suscripcion: existente.id }).expect(201);
+      assert.equal(body.suscripcion.id, existente.id);
+      assert.equal(body.pagos_enlazados, 2);
+      assert.equal((await suscripcionesDe(auth)).length, 1);
+    });
+
+    it('no se puede unir con algo de otro usuario (404)', async () => {
+      const ana = await crearUsuario();
+      const beto = await crearUsuario();
+      const { porEbanx } = await casoSantiago(ana);
+      const { directo: deBeto } = await casoSantiago(beto);
+      const suscripcionDeBeto = await crearSuscripcion(beto, { nombre_servicio: 'Netflix' });
+      await request(app).post(`/api/detecciones/candidatos/${porEbanx.id}/confirmar`).set(ana)
+        .send({ unir_con_candidato: deBeto.id }).expect(404);
+      await request(app).post(`/api/detecciones/candidatos/${porEbanx.id}/confirmar`).set(ana)
+        .send({ unir_con_suscripcion: suscripcionDeBeto.id }).expect(404);
+      assert.equal((await suscripcionesDe(ana)).length, 0);
+    });
+  });
+
   describe('deshacer descartes (T6)', () => {
     it('lista los descartados, restaura uno y responde 404 si es de otro usuario', async () => {
       const ana = await crearUsuario();
