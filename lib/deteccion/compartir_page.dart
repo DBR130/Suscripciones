@@ -14,6 +14,7 @@ import 'catalogo_servicios.dart';
 import 'deteccion_service.dart';
 import 'huella_pago.dart';
 import 'parser_pagos.dart';
+import 'turno.dart';
 
 /// Un SMS compartido con SubTrack desde la app de mensajes (sin permisos;
 /// funciona en las dos versiones). Se interpreta en el celular con el mismo
@@ -23,7 +24,7 @@ import 'parser_pagos.dart';
 /// El texto no sale del celular: solo los campos extraídos, y solo si el
 /// usuario toca "Usar este cobro".
 class CompartirPage extends StatefulWidget {
-  const CompartirPage({
+  CompartirPage({
     super.key,
     required this.texto,
     required this.servicio,
@@ -31,7 +32,10 @@ class CompartirPage extends StatefulWidget {
     required this.almacen,
     required this.authService,
     DateTime Function()? ahora,
-  }) : _ahora = ahora ?? DateTime.now;
+    Turno? turno,
+    this.esperaTurno = Turno.esperaUsuario,
+  })  : _ahora = ahora ?? DateTime.now,
+        turno = turno ?? Turno('app');
 
   final String texto;
   final DeteccionService servicio;
@@ -39,6 +43,13 @@ class CompartirPage extends StatefulWidget {
   final AlmacenPagosLocales almacen;
   final AuthService authService;
   final DateTime Function() _ahora;
+
+  /// Turno compartido con la tarea de fondo: el cobro va al mismo almacén que
+  /// ella procesa. Es una acción del usuario: espera hasta [esperaTurno].
+  final Turno turno;
+  final Duration esperaTurno;
+
+  static const textoEsperandoTurno = 'Terminando de revisar tus cobros…';
 
   static const tituloNoReconocido = 'No reconocimos un cobro';
 
@@ -52,6 +63,7 @@ class _CompartirPageState extends State<CompartirPage> {
   /// El texto no traía la fecha: la elige el usuario (por defecto, hoy).
   DateTime? _fechaElegida;
   bool _enviando = false;
+  bool _esperandoTurno = false;
   String? _error;
 
   /// Respuesta del backend que no lleva a otra pantalla.
@@ -113,6 +125,21 @@ class _CompartirPageState extends State<CompartirPage> {
       _error = null;
       _mensaje = null;
     });
+    final conTurno = await widget.turno.tomar(
+      esperar: widget.esperaTurno,
+      alEsperar: (e) {
+        if (mounted) setState(() => _esperandoTurno = e);
+      },
+    );
+    if (!conTurno) {
+      if (mounted) {
+        setState(() {
+          _enviando = false;
+          _error = 'No pudimos registrar el cobro ahora. Inténtalo de nuevo en un momento.';
+        });
+      }
+      return;
+    }
     try {
       final r = await widget.servicio.enviarCompartido(pagoParaEnviar(pago));
       // Ya salió: no se vuelve a enviar desde el almacén local.
@@ -135,6 +162,7 @@ class _CompartirPageState extends State<CompartirPage> {
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.mensaje);
     } finally {
+      await widget.turno.soltar();
       if (mounted) setState(() => _enviando = false);
     }
   }
@@ -258,7 +286,11 @@ class _CompartirPageState extends State<CompartirPage> {
         const SizedBox(height: 22),
         FilledButton(
           onPressed: _enviando || sinSesion || _mensaje != null ? null : _usar,
-          child: Text(_enviando ? 'Guardando…' : 'Usar este cobro'),
+          child: Text(_esperandoTurno
+              ? CompartirPage.textoEsperandoTurno
+              : _enviando
+                  ? 'Guardando…'
+                  : 'Usar este cobro'),
         ),
         const SizedBox(height: 10),
         AppBotonSecundario(texto: _mensaje == null ? 'Ahora no' : 'Volver al inicio', onPressed: _salir),

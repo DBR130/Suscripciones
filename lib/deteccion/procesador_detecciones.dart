@@ -134,12 +134,12 @@ class ProcesadorDetecciones {
   /// de fondo) manda el [turno]: sin él lanza [TurnoOcupado] sin tocar nada.
   /// El procesamiento automático no espera ([esperar] = 0); una acción del
   /// usuario espera hasta [Turno.esperaUsuario].
-  Future<ResultadoEscaneo> procesar({Duration esperar = Duration.zero}) =>
-      _enCurso ??= _conTurno(esperar, _procesar).whenComplete(() => _enCurso = null);
+  Future<ResultadoEscaneo> procesar({Duration esperar = Duration.zero, ValueChanged<bool>? alEsperar}) =>
+      _enCurso ??= _conTurno(esperar, alEsperar, _procesar).whenComplete(() => _enCurso = null);
 
   /// Ejecuta [trabajo] con el turno tomado y siempre lo suelta al terminar.
-  Future<T> _conTurno<T>(Duration esperar, Future<T> Function() trabajo) async {
-    if (!await turno.tomar(esperar: esperar)) throw const TurnoOcupado();
+  Future<T> _conTurno<T>(Duration esperar, ValueChanged<bool>? alEsperar, Future<T> Function() trabajo) async {
+    if (!await turno.tomar(esperar: esperar, alEsperar: alEsperar)) throw const TurnoOcupado();
     try {
       return await trabajo();
     } finally {
@@ -195,8 +195,9 @@ class ProcesadorDetecciones {
   Future<ResultadoHistorial> buscarEnHistorial({
     void Function(EtapaHistorial etapa)? alAvanzar,
     Duration esperar = Duration.zero,
+    ValueChanged<bool>? alEsperar,
   }) =>
-      _conTurno(esperar, () => _buscarEnHistorial(alAvanzar));
+      _conTurno(esperar, alEsperar, () => _buscarEnHistorial(alAvanzar));
 
   Future<ResultadoHistorial> _buscarEnHistorial(void Function(EtapaHistorial etapa)? alAvanzar) async {
     alAvanzar?.call(EtapaHistorial.leyendo);

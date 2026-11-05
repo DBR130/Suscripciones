@@ -28,14 +28,25 @@ class Turno {
   static const _canal = MethodChannel('subtrack/deteccion');
 
   /// true si consiguió el turno, intentando hasta [esperar] (por defecto, una
-  /// sola vez).
-  Future<bool> tomar({Duration esperar = Duration.zero}) async {
+  /// sola vez). [alEsperar] avisa con true cuando empieza a esperar (la
+  /// pantalla muestra "Terminando de revisar tus cobros…") y con false al
+  /// terminar la espera.
+  Future<bool> tomar({Duration esperar = Duration.zero, ValueChanged<bool>? alEsperar}) async {
     if (!_disponible) return true;
     final limite = DateTime.now().add(esperar);
-    while (true) {
-      if (await _canal.invokeMethod<bool>('tomarTurno', {'quien': quien}) == true) return true;
-      if (!DateTime.now().add(intervalo).isBefore(limite)) return false;
-      await Future<void>.delayed(intervalo);
+    var esperando = false;
+    try {
+      while (true) {
+        if (await _canal.invokeMethod<bool>('tomarTurno', {'quien': quien}) == true) return true;
+        if (!DateTime.now().add(intervalo).isBefore(limite)) return false;
+        if (!esperando) {
+          esperando = true;
+          alEsperar?.call(true);
+        }
+        await Future<void>.delayed(intervalo);
+      }
+    } finally {
+      if (esperando) alEsperar?.call(false);
     }
   }
 

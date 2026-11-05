@@ -322,6 +322,9 @@ void main() {
   late int permisosAbiertos;
   late List<Map<String, Object?>> cola;
 
+  /// Veces que el candado nativo responde "ocupado" (la tarea de fondo lo tiene).
+  late int turnoOcupado;
+
   Map<String, Object> mensaje(String id, String texto, DateTime fecha) =>
       {'id': id, 'texto': texto, 'fecha': fecha.millisecondsSinceEpoch};
 
@@ -332,6 +335,7 @@ void main() {
     respuestaPermiso = 'concedido';
     permisosAbiertos = 0;
     cola = [];
+    turnoOcupado = 0;
     sms = [
       mensaje('sms:1', bancolombia('NETFLIX', '44.900,00', '05/10/2026'), DateTime(2026, 10, 5, 8)),
       mensaje('sms:2', nequiClaude, llegadaSms),
@@ -358,12 +362,15 @@ void main() {
       }
       return null;
     });
-    mensajero.setMockMethodCallHandler(canalDeteccion, (call) async => switch (call.method) {
-          'estado' => {'permiso': true, 'conectado': true, 'es_debug': true, 'modo_descubrimiento': false},
-          'recuperarActivas' => 0,
-          'leerCola' => cola,
-          _ => null,
-        });
+    mensajero.setMockMethodCallHandler(canalDeteccion, (call) async {
+      if (call.method == 'tomarTurno') return turnoOcupado-- <= 0;
+      return switch (call.method) {
+        'estado' => {'permiso': true, 'conectado': true, 'es_debug': true, 'modo_descubrimiento': false},
+        'recuperarActivas' => 0,
+        'leerCola' => cola,
+        _ => null,
+      };
+    });
   });
 
   tearDown(() {
@@ -371,11 +378,14 @@ void main() {
     mensajero.setMockMethodCallHandler(canalDeteccion, null);
   });
 
-  ProcesadorDetecciones procesador(FakeDeteccionService servicio, {AlmacenPagosLocales? almacen}) =>
+  /// Turno con el candado nativo simulado (turnoOcupado), preguntando cada 10 ms.
+  Turno turnoReal() => Turno('app', disponible: true, intervalo: const Duration(milliseconds: 10));
+
+  ProcesadorDetecciones procesador(FakeDeteccionService servicio, {AlmacenPagosLocales? almacen, Turno? turno}) =>
       ProcesadorDetecciones(
         lector: LectorNotificaciones(disponible: true),
-        // Sin el candado nativo: estos tests no son del turno.
-        turno: Turno('app', disponible: false),
+        // Sin el candado nativo, salvo en los tests del turno.
+        turno: turno ?? Turno('app', disponible: false),
         servicio: servicio,
         cargarCatalogo: () async => catalogo,
         almacen: almacen ?? AlmacenPagosLocales(ahora: () => hoy),
@@ -604,10 +614,53 @@ void main() {
     });
   });
 
+  group('turno con la tarea de fondo (S5)', () {
+    Map<String, Widget Function(GoRouterState)> rutasEscaneo(Duration esperaTurno) => {
+          '/escaneo': (s) => EscaneoPage(
+                procesador: procesador(FakeDeteccionService(), turno: turnoReal()),
+                historial: true,
+                duracionMinima: Duration.zero,
+                esperaTurno: esperaTurno,
+              ),
+          '/deteccion': (s) => destino('RESULTADOS'),
+        };
+
+    testWidgets('"Buscar en mis SMS" espera a que termine la tarea de fondo', (tester) async {
+      turnoOcupado = 3;
+      tester.view.physicalSize = const Size(1080, 3200);
+      tester.view.devicePixelRatio = 2.5;
+      addTearDown(tester.view.reset);
+      final router = GoRouter(initialLocation: '/escaneo', routes: [
+        for (final MapEntry(key: ruta, value: pantalla) in rutasEscaneo(const Duration(seconds: 5)).entries)
+          GoRoute(path: ruta, builder: (_, state) => pantalla(state)),
+      ]);
+      await tester.pumpWidget(MaterialApp.router(theme: AppTheme.dark, routerConfig: router));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.text(EscaneoPage.tituloEsperandoTurno), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.text('RESULTADOS'), findsOneWidget);
+    });
+
+    testWidgets('si la tarea de fondo no termina a tiempo, lo dice claro y permite reintentar', (tester) async {
+      turnoOcupado = 1000;
+      await abrir(tester, '/escaneo', rutasEscaneo(Duration.zero));
+      expect(find.text('No pudimos revisar tus SMS ahora. Inténtalo de nuevo en un momento.'), findsOneWidget);
+      expect(find.text('Reintentar'), findsOneWidget);
+      expect(find.text('RESULTADOS'), findsNothing);
+    });
+  });
+
   group('compartir un SMS con SubTrack', () {
     final ana = Usuario(id: 1, nombre: 'Ana', correo: 'ana@prueba.com');
 
-    Future<FakeDeteccionService> abrirCompartido(WidgetTester tester, String texto, {bool conSesion = true}) async {
+    Future<FakeDeteccionService> abrirCompartido(
+      WidgetTester tester,
+      String texto, {
+      bool conSesion = true,
+      Turno? turno,
+      Duration esperaTurno = Duration.zero,
+    }) async {
       final servicio = FakeDeteccionService();
       await abrir(tester, '/compartir', {
         '/compartir': (s) => CompartirPage(
@@ -617,6 +670,8 @@ void main() {
               almacen: AlmacenPagosLocales(ahora: () => hoy),
               authService: FakeAuthService(usuario: conSesion ? ana : null),
               ahora: () => hoy,
+              turno: turno ?? Turno('app', disponible: false),
+              esperaTurno: esperaTurno,
             ),
         '/deteccion': (s) => destino('RESULTADOS'),
         '/suscripcion/:id': (s) => destino('SUSCRIPCION ${s.pathParameters['id']}'),
@@ -647,12 +702,36 @@ void main() {
               cargarCatalogo: () async => catalogo,
               almacen: AlmacenPagosLocales(ahora: () => hoy),
               authService: FakeAuthService(usuario: ana),
+              turno: Turno('app', disponible: false),
             ),
         '/suscripcion/:id': (s) => destino('SUSCRIPCION ${s.pathParameters['id']}'),
       });
       await tester.tap(find.text('Usar este cobro'));
       await tester.pumpAndSettle();
       expect(find.text('SUSCRIPCION 5'), findsOneWidget);
+    });
+
+    testWidgets('con la tarea de fondo procesando, espera el turno y luego registra el cobro', (tester) async {
+      turnoOcupado = 2;
+      final servicio = await abrirCompartido(tester, bancolombia('NETFLIX', '44.900,00', '05/10/2026'),
+          turno: turnoReal(), esperaTurno: const Duration(seconds: 5));
+      await tester.tap(find.text('Usar este cobro'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.text(CompartirPage.textoEsperandoTurno), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(find.text('RESULTADOS'), findsOneWidget);
+      expect(servicio.compartidos, hasLength(1));
+    });
+
+    testWidgets('si no consigue el turno, lo dice claro y no envía nada', (tester) async {
+      turnoOcupado = 1000;
+      final servicio =
+          await abrirCompartido(tester, bancolombia('NETFLIX', '44.900,00', '05/10/2026'), turno: turnoReal());
+      await tester.tap(find.text('Usar este cobro'));
+      await tester.pumpAndSettle();
+      expect(find.text('No pudimos registrar el cobro ahora. Inténtalo de nuevo en un momento.'), findsOneWidget);
+      expect(servicio.compartidos, isEmpty);
     });
 
     testWidgets('sin fecha en el texto (Nequi) pide confirmar la fecha', (tester) async {

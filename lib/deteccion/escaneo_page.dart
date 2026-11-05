@@ -8,6 +8,7 @@ import '../Common/Routers.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_feedback.dart';
 import 'procesador_detecciones.dart';
+import 'turno.dart';
 
 /// Pantalla 04: revisa la cola de notificaciones de pago y las activas de la
 /// barra, las interpreta y envía al backend lo que forma una suscripción. Con
@@ -21,6 +22,7 @@ class EscaneoPage extends StatefulWidget {
     this.inicio = false,
     this.historial = false,
     this.duracionMinima = const Duration(milliseconds: 1900),
+    this.esperaTurno = Turno.esperaUsuario,
   });
 
   final ProcesadorDetecciones procesador;
@@ -29,6 +31,12 @@ class EscaneoPage extends StatefulWidget {
 
   /// El diseño muestra la animación al menos 1,9 s, aunque termine antes.
   final Duration duracionMinima;
+
+  /// Si la tarea de fondo está procesando la cola, cuánto se espera a que
+  /// termine (es una acción del usuario: sí espera).
+  final Duration esperaTurno;
+
+  static const tituloEsperandoTurno = 'Terminando de revisar tus cobros…';
 
   /// Pista cuando se leyeron SMS pero ninguno de un banco o empresa.
   static const tituloSmsOcultos = 'No vimos SMS de bancos';
@@ -42,6 +50,9 @@ class _EscaneoPageState extends State<EscaneoPage> with SingleTickerProviderStat
       AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
   String? _error;
   EtapaHistorial? _etapa;
+
+  /// La tarea de fondo tiene el turno: se espera a que termine.
+  bool _esperandoTurno = false;
 
   /// Búsqueda en el historial sin ningún SMS de empresa (ver ResultadoHistorial).
   bool _smsOcultos = false;
@@ -73,21 +84,33 @@ class _EscaneoPageState extends State<EscaneoPage> with SingleTickerProviderStat
         return;
       }
       _verResultados();
+    } on TurnoOcupado {
+      if (!mounted) return;
+      _pulso.stop();
+      setState(() => _error = widget.historial
+          ? 'No pudimos revisar tus SMS ahora. Inténtalo de nuevo en un momento.'
+          : 'No pudimos revisar tus cobros ahora. Inténtalo de nuevo en un momento.');
     } catch (e) {
       // La cola y el almacén local quedan intactos: se puede reintentar.
       if (!mounted) return;
       _pulso.stop();
-      setState(() => _error = '$e');
+      setState(() => _error = 'No pudimos revisar tus cobros. Revisa tu conexión e inténtalo de nuevo.');
     }
   }
 
+  void _alEsperar(bool esperando) {
+    if (mounted) setState(() => _esperandoTurno = esperando);
+  }
+
   Future<void> _revisar() async {
-    await widget.procesador.procesar();
+    await widget.procesador.procesar(esperar: widget.esperaTurno, alEsperar: _alEsperar);
     if (!widget.historial) return;
     final r = await widget.procesador.buscarEnHistorial(
       alAvanzar: (etapa) {
         if (mounted) setState(() => _etapa = etapa);
       },
+      esperar: widget.esperaTurno,
+      alEsperar: _alEsperar,
     );
     _smsOcultos = r.sospechaSmsOcultos && r.cobros == 0;
   }
@@ -96,9 +119,15 @@ class _EscaneoPageState extends State<EscaneoPage> with SingleTickerProviderStat
 
   void _seguirSinDetectar() => context.go(widget.inicio ? Routers.preferencias : Routers.dashboard);
 
-  String get _titulo => widget.historial ? 'Revisando tus mensajes del banco…' : 'Revisando tus notificaciones de pago…';
+  String get _titulo => _esperandoTurno
+      ? EscaneoPage.tituloEsperandoTurno
+      : widget.historial
+          ? 'Revisando tus mensajes del banco…'
+          : 'Revisando tus notificaciones de pago…';
 
-  String get _detalle => switch (_etapa) {
+  String get _detalle => _esperandoTurno
+      ? 'SubTrack está revisando en segundo plano un cobro que acaba de llegar. En un momento seguimos.'
+      : switch (_etapa) {
         EtapaHistorial.leyendo => 'Leyendo los SMS de los últimos 6 meses. Los que no son cobros se descartan aquí mismo.',
         EtapaHistorial.analizando => 'Buscando cobros que se repitan con el mismo monto y comercio.',
         EtapaHistorial.enviando => 'Guardando las suscripciones que encontramos.',
@@ -177,7 +206,7 @@ class _EscaneoPageState extends State<EscaneoPage> with SingleTickerProviderStat
                   ),
                 )
               else ...[
-                const BannerError('No pudimos revisar tus cobros. Revisa tu conexión e inténtalo de nuevo.'),
+                BannerError(_error!),
                 const SizedBox(height: 14),
                 FilledButton(onPressed: _escanear, child: const Text('Reintentar')),
                 const SizedBox(height: 10),
