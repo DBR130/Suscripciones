@@ -31,6 +31,19 @@ export const TOLERANCIA_MONTOS = 0.1;
  */
 export const TOLERANCIA_CAMBIO_PRECIO = 0.05;
 
+/**
+ * T8: un cobro convertido de USD (monto en COP con centavos distintos de ,00,
+ * como 64.925,65) varía cada mes con la tasa del dólar: solo es cambio de
+ * precio por encima de este margen. Claude varió 4,95 % entre septiembre y
+ * octubre de 2026 (SMS reales).
+ */
+export const TOLERANCIA_CAMBIO_PRECIO_CONVERTIDO = 0.15;
+
+/** true si el monto trae centavos: un cobro en USD convertido a COP. */
+export function esMontoConvertido(monto) {
+  return Math.round(Number(monto) * 100) % 100 !== 0;
+}
+
 /** Días entre dos cobros para cada frecuencia (con margen por meses cortos y retrasos). */
 const INTERVALOS = [
   { frecuencia: 'semanal', min: 6, max: 8 },
@@ -96,7 +109,10 @@ export function montosSimilares(a, b) {
 }
 
 export function hayCambioDePrecio(anterior, nuevo) {
-  return Math.abs(nuevo - anterior) > TOLERANCIA_CAMBIO_PRECIO * anterior;
+  const tolerancia = esMontoConvertido(anterior) || esMontoConvertido(nuevo)
+    ? TOLERANCIA_CAMBIO_PRECIO_CONVERTIDO
+    : TOLERANCIA_CAMBIO_PRECIO;
+  return Math.abs(nuevo - anterior) > tolerancia * anterior;
 }
 
 /**
@@ -170,6 +186,11 @@ export async function procesarPagos(usuarioId, pagos, { compartido = false } = {
         suscripcion_id: r.suscripcionId ?? null,
         candidato_id: r.candidato?.id ?? r.candidatoId ?? null,
         cambio_precio: r.cambioPrecio ?? false,
+        // Para el aviso "Registramos un pago de X en Y" (T8).
+        nombre_servicio: r.nombreServicio ?? null,
+        monto: r.resultado === 'suscripcion_existente' ? Number(pago.monto) : null,
+        moneda: r.resultado === 'suscripcion_existente' ? pago.moneda : null,
+        monto_anterior: r.montoAnterior ?? null,
       });
     }
     // Al final del lote: las compras que no terminaron en una suscripción o
@@ -201,8 +222,14 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
   const suscripcion = suscripciones.find((s) => mismoServicio(s.nombre_servicio, pago.comercio_normalizado, guias))
     ?? await suscripcionDelProcesador(client, usuarioId, pago, suscripciones);
   if (suscripcion) {
-    const cambioPrecio = await registrarEnSuscripcion(client, suscripcion, pagoId, monto, pago.moneda, pago.fecha, dia);
-    return { resultado: 'suscripcion_existente', suscripcionId: suscripcion.id, cambioPrecio };
+    const montoAnterior = await registrarEnSuscripcion(client, suscripcion, pagoId, monto, pago.moneda, pago.fecha, dia);
+    return {
+      resultado: 'suscripcion_existente',
+      suscripcionId: suscripcion.id,
+      nombreServicio: suscripcion.nombre_servicio,
+      cambioPrecio: montoAnterior !== null,
+      montoAnterior,
+    };
   }
 
   // b) Servicio conocido: candidato desde el primer pago. Si es ambiguo
@@ -333,13 +360,13 @@ export function esDelCandidato(p, c, guias) {
 
 /**
  * Caso a): enlaza el pago, lo agrega al historial y, si el monto cambió más
- * que la tolerancia, registra el cambio de precio (RF08). Devuelve si hubo
- * cambio de precio.
+ * que la tolerancia, registra el cambio de precio (RF08). Devuelve el monto
+ * anterior si hubo cambio de precio, o null.
  */
 async function registrarEnSuscripcion(client, s, pagoId, monto, moneda, fecha, dia) {
   await client.query('UPDATE pagos_detectados SET suscripcion_id = $1 WHERE id = $2', [s.id, pagoId]);
   // historial_pagos no guarda moneda: un pago en otra moneda solo se enlaza.
-  if (s.moneda !== moneda) return false;
+  if (s.moneda !== moneda) return null;
 
   // El proceso automático de cobros ya pudo registrar este mismo cobro.
   const cercano = await client.query(
@@ -360,7 +387,8 @@ async function registrarEnSuscripcion(client, s, pagoId, monto, moneda, fecha, d
     'SELECT 1 FROM pagos_detectados WHERE suscripcion_id = $1 AND fecha > $2 LIMIT 1',
     [s.id, fecha],
   );
-  if (posterior.rowCount > 0 || !hayCambioDePrecio(s.monto, monto)) return false;
+  if (posterior.rowCount > 0 || !hayCambioDePrecio(s.monto, monto)) return null;
+  const anterior = s.monto;
 
   await client.query(
     'INSERT INTO cambios_precio (suscripcion_id, monto_anterior, monto_nuevo) VALUES ($1, $2, $3)',
@@ -368,7 +396,7 @@ async function registrarEnSuscripcion(client, s, pagoId, monto, moneda, fecha, d
   );
   await client.query('UPDATE suscripciones SET monto = $2 WHERE id = $1', [s.id, monto]);
   s.monto = monto; // para el siguiente pago del mismo lote
-  return true;
+  return anterior;
 }
 
 /**

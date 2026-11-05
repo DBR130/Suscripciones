@@ -386,6 +386,37 @@ describe('endpoints de detecciones', () => {
       assert.equal(rows[0].monto, 68139.27);
     });
 
+    it('el resultado trae lo necesario para el aviso "Registramos un pago…" (T8)', async () => {
+      const auth = await crearUsuario();
+      await crearSuscripcion(auth, { nombre_servicio: 'Netflix', monto: 44900 });
+      const netflix = { comercio: 'NETFLIX.COM', comercio_normalizado: 'Netflix' };
+      let r = await enviar(auth, [pago({ ...netflix, monto: 44900, fecha: '2026-10-15T08:00:00' })]);
+      assert.deepEqual(
+        [r.resultados[0].nombre_servicio, r.resultados[0].monto, r.resultados[0].moneda, r.resultados[0].monto_anterior],
+        ['Netflix', 44900, 'COP', null],
+      );
+      r = await enviar(auth, [pago({ ...netflix, monto: 49900, fecha: '2026-11-15T08:00:00' })]);
+      assert.equal(r.resultados[0].cambio_precio, true);
+      assert.equal(r.resultados[0].monto_anterior, 44900);
+    });
+
+    it('cobros convertidos de USD: solo es cambio de precio por encima del 15 % (T8, SMS reales de Claude)', async () => {
+      const auth = await crearUsuario();
+      const s = await crearSuscripcion(auth, { nombre_servicio: 'Claude', monto: 64925.65 });
+      const claude = { comercio: 'ANTHROPIC* CLAUDE SUB', comercio_normalizado: 'Claude', banco: 'Nequi' };
+      // Septiembre → octubre de 2026: 4,95 % solo por la tasa del dólar.
+      let r = await enviar(auth, [pago({ ...claude, monto: 68139.27, fecha: '2026-10-19T18:10:00' })]);
+      assert.equal(r.resultados[0].suscripcion_id, s.id);
+      assert.equal(r.resultados[0].cambio_precio, false);
+      // 12 %: con un monto en pesos enteros sería cambio de precio; convertido, no.
+      r = await enviar(auth, [pago({ ...claude, monto: 72716.73, fecha: '2026-11-19T18:10:00' })]);
+      assert.equal(r.resultados[0].cambio_precio, false);
+      // 20 %: sí.
+      r = await enviar(auth, [pago({ ...claude, monto: 77910.78, fecha: '2026-12-19T18:10:00' })]);
+      assert.equal(r.resultados[0].cambio_precio, true);
+      assert.equal(r.resultados[0].monto_anterior, 64925.65);
+    });
+
     it('no repite un cobro que el proceso automático ya registró (±3 días)', async () => {
       const auth = await crearUsuario();
       const s = await crearSuscripcion(auth, { nombre_servicio: 'Spotify', monto: 16900 });
