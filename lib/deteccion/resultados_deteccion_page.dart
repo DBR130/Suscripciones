@@ -57,9 +57,6 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   String? _error;
   bool _guardando = false;
 
-  /// Por candidato: true = "Es mía" (por defecto), false = "No es mía".
-  final Map<int, bool> _esMia = {};
-
   /// Correcciones del usuario (monto, frecuencia y nombre) antes de confirmar.
   final Map<int, Correccion> _correccion = {};
 
@@ -92,23 +89,56 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
     }
   }
 
-  bool _mia(CandidatoSuscripcion c) => _esMia[c.id] ?? true;
   double _monto(CandidatoSuscripcion c) => _correccion[c.id]?.monto ?? c.monto;
   Frecuencia _frecuencia(CandidatoSuscripcion c) => _correccion[c.id]?.frecuencia ?? c.frecuencia;
   String? _nombre(CandidatoSuscripcion c) => _correccion[c.id]?.nombre;
 
-  /// Un candidato de procesador marcado "Es mía" todavía sin nombre.
+  /// Un candidato de procesador todavía sin nombre ("¿Qué servicio es?").
   bool _faltaNombre(CandidatoSuscripcion c) => c.esDeProcesador && _nombre(c) == null;
 
-  void _cambiarEsMia(CandidatoSuscripcion c, bool mia) {
-    if (mia && _faltaNombre(c)) {
-      _corregir(c);
-      return;
-    }
-    setState(() => _esMia[c.id] = mia);
+  /// "Es mía": los que siguen en la lista se confirman al final. En uno de
+  /// procesador sin nombre, abre la hoja para escribirlo.
+  void _esMia(CandidatoSuscripcion c) {
+    if (_faltaNombre(c)) _corregir(c);
   }
 
-  int get _confirmadas => (_candidatos ?? const []).where(_mia).length;
+  /// "No es mía" descarta al instante (T6). La barra de 5 s permite deshacerlo.
+  Future<void> _descartar(CandidatoSuscripcion c) async {
+    final lista = _candidatos;
+    if (lista == null) return;
+    final posicion = lista.indexOf(c);
+    try {
+      await widget.servicio.descartar(c.id);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.mensaje);
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _candidatos = [...lista]..remove(c));
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text('Descartamos ${c.titulo}'),
+        duration: const Duration(seconds: 5),
+        // Encima de la barra inferior con el botón de confirmar.
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(label: 'Deshacer', onPressed: () => _deshacer(c, posicion)),
+      ));
+  }
+
+  Future<void> _deshacer(CandidatoSuscripcion c, int posicion) async {
+    try {
+      await widget.servicio.restaurar(c.id);
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.mensaje);
+      return;
+    }
+    if (!mounted) return;
+    final lista = [...?_candidatos];
+    setState(() => _candidatos = lista..insert(posicion.clamp(0, lista.length), c));
+  }
+
+  int get _confirmadas => _candidatos?.length ?? 0;
 
   String get _textoBoton => switch (_confirmadas) {
         0 => 'Continuar',
@@ -133,10 +163,7 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
       ),
     );
     if (r == null || !mounted) return false;
-    setState(() {
-      _correccion[c.id] = r;
-      _esMia[c.id] = true;
-    });
+    setState(() => _correccion[c.id] = r);
     return true;
   }
 
@@ -145,7 +172,7 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
     final candidatos = _candidatos ?? const <CandidatoSuscripcion>[];
     // Antes de confirmar, el usuario dice qué servicio es cada cobro de un
     // procesador ("Pago procesado por EBANX").
-    for (final c in candidatos.where((c) => _mia(c) && _faltaNombre(c))) {
+    for (final c in candidatos.where(_faltaNombre)) {
       if (!await _corregir(c)) return;
     }
     if (!mounted) return;
@@ -155,19 +182,16 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
     });
     var confirmadas = 0;
     try {
+      // Los descartados ya salieron de la lista ("No es mía" es inmediato).
       for (final c in candidatos) {
-        if (_mia(c)) {
-          final corregido = _correccion[c.id];
-          await widget.servicio.confirmar(
-            c.id,
-            monto: corregido?.monto,
-            frecuencia: corregido?.frecuencia,
-            nombre: corregido?.nombre,
-          );
-          confirmadas++;
-        } else {
-          await widget.servicio.descartar(c.id);
-        }
+        final corregido = _correccion[c.id];
+        await widget.servicio.confirmar(
+          c.id,
+          monto: corregido?.monto,
+          frecuencia: corregido?.frecuencia,
+          nombre: corregido?.nombre,
+        );
+        confirmadas++;
       }
     } on ApiException catch (e) {
       // Las que ya se procesaron quedan hechas; se recarga la lista.
@@ -223,8 +247,13 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
             ),
           ),
           Expanded(child: _cuerpo(candidatos)),
-          if (candidatos != null)
-            Container(
+        ],
+      ),
+      // Como barra inferior del Scaffold: la barra de "Deshacer" flota encima
+      // de ella en vez de taparla.
+      bottomNavigationBar: candidatos == null
+          ? null
+          : Container(
               color: AppColors.bar,
               padding: EdgeInsets.fromLTRB(16, 12, 16, 12 + MediaQuery.paddingOf(context).bottom),
               child: FilledButton(
@@ -232,8 +261,6 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
                 child: Text(_guardando ? 'Guardando…' : _textoBoton),
               ),
             ),
-        ],
-      ),
     );
   }
 
@@ -275,9 +302,9 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
             monto: _monto(c),
             frecuencia: _frecuencia(c),
             nombre: _nombre(c),
-            esMia: _mia(c),
             corregido: _correccion.containsKey(c.id),
-            onEsMia: _guardando ? null : (v) => _cambiarEsMia(c, v),
+            onEsMia: _guardando ? null : () => _esMia(c),
+            onNoEsMia: _guardando ? null : () => _descartar(c),
             onCorregir: _guardando ? null : () => _corregir(c),
           ),
           const SizedBox(height: 10),
@@ -296,9 +323,9 @@ class _FilaCandidato extends StatelessWidget {
     required this.monto,
     required this.frecuencia,
     required this.nombre,
-    required this.esMia,
     required this.corregido,
     required this.onEsMia,
+    required this.onNoEsMia,
     required this.onCorregir,
   });
 
@@ -308,9 +335,11 @@ class _FilaCandidato extends StatelessWidget {
 
   /// Nombre que escribió el usuario, o null.
   final String? nombre;
-  final bool esMia;
   final bool corregido;
-  final ValueChanged<bool>? onEsMia;
+  final VoidCallback? onEsMia;
+
+  /// Descarta al instante (con "Deshacer").
+  final VoidCallback? onNoEsMia;
   final VoidCallback? onCorregir;
 
   @override
@@ -330,11 +359,10 @@ class _FilaCandidato extends StatelessWidget {
                   children: [
                     Text(
                       nombre ?? c.titulo,
-                      style: TextStyle(
-                        color: esMia ? AppColors.text : AppColors.muted,
+                      style: const TextStyle(
+                        color: AppColors.text,
                         fontSize: 14.5,
                         fontWeight: FontWeight.w800,
-                        decoration: esMia ? null : TextDecoration.lineThrough,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -365,11 +393,9 @@ class _FilaCandidato extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _Opcion(texto: 'Es mía', activa: esMia, onTap: onEsMia == null ? null : () => onEsMia!(true))),
+              Expanded(child: _Opcion(texto: 'Es mía', activa: true, onTap: onEsMia)),
               const SizedBox(width: 8),
-              Expanded(
-                child: _Opcion(texto: 'No es mía', activa: !esMia, onTap: onEsMia == null ? null : () => onEsMia!(false)),
-              ),
+              Expanded(child: _Opcion(texto: 'No es mía', activa: false, onTap: onNoEsMia)),
             ],
           ),
         ],

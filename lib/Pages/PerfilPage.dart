@@ -447,6 +447,13 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                         const Divider(height: 1, color: AppColors.divider),
                       ],
                       _FilaEnlace(
+                        texto: 'Detecciones descartadas',
+                        detalle: '›',
+                        colorDetalle: AppColors.muted,
+                        onTap: () => context.push(Routers.deteccionesDescartadas),
+                      ),
+                      const Divider(height: 1, color: AppColors.divider),
+                      _FilaEnlace(
                         texto: 'Agregar suscripción manual',
                         detalle: '›',
                         colorDetalle: AppColors.muted,

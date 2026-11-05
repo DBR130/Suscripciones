@@ -3,13 +3,17 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_suscripciones/Common/AppTheme.dart';
+import 'package:flutter_suscripciones/Common/Routers.dart';
+import 'package:flutter_suscripciones/Pages/PerfilPage.dart';
 import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
+import 'package:flutter_suscripciones/deteccion/descartadas_page.dart';
 import 'package:flutter_suscripciones/deteccion/resultados_deteccion_page.dart';
 import 'package:flutter_suscripciones/models/suscripcion.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'deteccion_flujo_test.dart' show FakeDeteccionService, candidato;
+import 'fake_auth_service.dart';
 
 /// Pantalla 05 con procesadores de pago y nombre editable (tickets T4 a T7).
 void main() {
@@ -92,6 +96,71 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('¿Es '), findsNothing);
     });
+  });
+
+  group('deshacer descartes (T6)', () {
+    testWidgets('"No es mía" descarta al instante y "Deshacer" lo restaura', (tester) async {
+      final servicio = FakeDeteccionService(lista: [
+        candidato(1, 'Crunchyroll', 19900),
+        candidato(2, 'Claude', 68139.27),
+      ]);
+      await abrir(tester, servicio);
+      await tester.tap(find.text('No es mía').at(1));
+      await tester.pump();
+      expect(servicio.descartados, [2]);
+      expect(find.text('Descartamos Claude'), findsOneWidget);
+      // 5 segundos para alcanzar a deshacer.
+      expect(tester.widget<SnackBar>(find.byType(SnackBar)).duration, const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Claude'), findsNothing);
+      expect(find.text('Confirmar 1 suscripción'), findsOneWidget);
+
+      await tester.tap(find.text('Deshacer'));
+      await tester.pumpAndSettle();
+      expect(servicio.restaurados, [2]);
+      expect(find.text('Claude'), findsOneWidget);
+      expect(find.text('Confirmar 2 suscripciones'), findsOneWidget);
+    });
+
+    testWidgets('"Detecciones descartadas" lista y vuelve a proponer', (tester) async {
+      final servicio = FakeDeteccionService()
+        ..listaDescartadas = [
+          candidato(2, 'Claude', 68139.27),
+          candidato(9, 'EBANX', 34900, procesador: 'EBANX'),
+        ];
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(theme: AppTheme.dark, home: DescartadasPage(servicio: servicio)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Claude'), findsOneWidget);
+      expect(find.text('Pago procesado por EBANX'), findsOneWidget);
+      expect(find.text(r'$34.900 · Mensual'), findsOneWidget);
+
+      await tester.tap(find.text('Volver a proponer').first);
+      await tester.pumpAndSettle();
+      expect(servicio.restaurados, [2]);
+      expect(find.text('Claude'), findsNothing);
+      expect(find.text('Volveremos a proponer Claude'), findsOneWidget);
+    });
+  });
+
+  testWidgets('Perfil abre "Detecciones descartadas"', (tester) async {
+    tester.view.physicalSize = const Size(1080, 3200);
+    tester.view.devicePixelRatio = 2.5;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp.router(
+      theme: AppTheme.dark,
+      routerConfig: GoRouter(initialLocation: '/perfil', routes: [
+        GoRoute(path: '/perfil', builder: (_, _) => PerfilPage(authService: FakeAuthService())),
+        GoRoute(path: Routers.deteccionesDescartadas, builder: (_, _) => const Scaffold(body: Text('DESCARTADAS'))),
+      ]),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Detecciones descartadas'));
+    await tester.pumpAndSettle();
+    expect(find.text('DESCARTADAS'), findsOneWidget);
   });
 
   group('nombre editable (T4)', () {

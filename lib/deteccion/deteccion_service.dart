@@ -70,4 +70,15 @@ class DeteccionService {
 
   /// El comercio no se vuelve a proponer.
   Future<void> descartar(int id) => _api.post('$_ruta/candidatos/$id/descartar', const {});
+
+  /// Comercios descartados ("Detecciones descartadas" en Perfil).
+  Future<List<CandidatoSuscripcion>> descartadas() async {
+    final json = await _api.get('$_ruta/descartadas');
+    return (json['candidatos'] as List)
+        .map((c) => CandidatoSuscripcion.fromJson(c as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Deshace un descarte: el candidato vuelve a pendiente.
+  Future<void> restaurar(int id) => _api.post('$_ruta/candidatos/$id/restaurar', const {});
 }

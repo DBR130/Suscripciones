@@ -7,6 +7,7 @@ import '../Pages/AnalisisPage.dart';
 import '../deteccion/depuracion_deteccion_page.dart';
 import '../deteccion/deteccion_service.dart';
 import '../deteccion/compartir_page.dart';
+import '../deteccion/descartadas_page.dart';
 import '../deteccion/escaneo_page.dart';
 import '../deteccion/historial_sms.dart';
 import '../deteccion/historial_sms_page.dart';
@@ -77,6 +78,9 @@ class Routers {
 
   /// Un SMS compartido con SubTrack desde la app de mensajes (texto en "extra").
   static const String compartir = '/compartir';
+
+  /// "Detecciones descartadas" (desde Perfil), sin barra de pestañas.
+  static const String deteccionesDescartadas = '/detecciones-descartadas';
 
   static String _conParametros(String ruta, Map<String, bool> banderas) {
     final activas = [for (final MapEntry(:key, :value) in banderas.entries) if (value) '$key=1'];
@@ -238,6 +242,10 @@ class Routers {
           },
         ),
         // Avisos: se abre desde la campana, encima de la pestaña (sin barra).
+        GoRoute(
+          path: deteccionesDescartadas,
+          builder: (context, state) => DescartadasPage(servicio: servicioDeteccion),
+        ),
         GoRoute(
           path: avisos,
           builder: (context, state) =>

@@ -76,6 +76,16 @@ class FakeDeteccionService implements DeteccionService {
 
   @override
   Future<void> descartar(int id) async => descartados.add(id);
+
+  /// Para "Detecciones descartadas" (T6) y lo que se restauró.
+  List<CandidatoSuscripcion> listaDescartadas = [];
+  final List<int> restaurados = [];
+
+  @override
+  Future<List<CandidatoSuscripcion>> descartadas() async => listaDescartadas;
+
+  @override
+  Future<void> restaurar(int id) async => restaurados.add(id);
 }
 
 /// Vigilante con espera corta (el real espera 9 s a que el lector conecte).
@@ -449,9 +459,10 @@ void main() {
       expect(find.text('\$68.139 · Mensual · 1 cobro detectado'), findsOneWidget);
       expect(find.text('Confirmar 2 suscripciones'), findsOneWidget);
 
-      // Claude no es mía.
+      // Claude no es mía: se descarta al instante.
       await tester.tap(find.text('No es mía').at(1));
       await tester.pumpAndSettle();
+      expect(servicio.descartados, [2]);
       expect(find.text('Confirmar 1 suscripción'), findsOneWidget);
 
       // Corrige Crunchyroll: otro monto y anual.
