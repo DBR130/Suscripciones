@@ -63,11 +63,68 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   /// Catálogo para las sugerencias de la hoja (nombres y precios).
   CatalogoServicios _catalogo = CatalogoServicios.vacio;
 
+  /// Suscripciones en curso del usuario, para ofrecer "Unir" si el nombre
+  /// que escribe ya es una de ellas.
+  List<Suscripcion> _suscripciones = const [];
+
+  /// "Unir": por candidato, el otro candidato o la suscripción con que se une.
+  final Map<int, ({CandidatoSuscripcion? candidato, Suscripcion? suscripcion})> _union = {};
+
   @override
   void initState() {
     super.initState();
     _cargar();
     _cargarCatalogo();
+    _cargarSuscripciones();
+  }
+
+  Future<void> _cargarSuscripciones() async {
+    try {
+      final lista = await widget.suscripcionService
+          ?.listar(estados: const [EstadoSuscripcion.activa, EstadoSuscripcion.marcadaParaCancelar]);
+      if (lista != null && mounted) setState(() => _suscripciones = lista);
+    } on ApiException {
+      // Sin la lista no se ofrece unir con una suscripción existente.
+    }
+  }
+
+  /// Mismo servicio: el mismo nombre, o el mismo servicio del catálogo
+  /// ("Crunchyroll" y "Crunchyroll Premium").
+  bool _mismoServicio(String a, String b) {
+    if (normalizarNombre(a) == normalizarNombre(b)) return true;
+    final sa = _catalogo.buscar(a);
+    return sa != null && sa == _catalogo.buscar(b);
+  }
+
+  /// Si el nombre que le puso a [c] ya es otro candidato de la lista o una
+  /// suscripción suya, pregunta si unirlos (Crunchyroll por EBANX y por
+  /// Google Play eran la misma suscripción).
+  Future<void> _ofrecerUnir(CandidatoSuscripcion c, String nombre) async {
+    final otro = (_candidatos ?? const <CandidatoSuscripcion>[])
+        .where((o) => o.id != c.id && _mismoServicio(_nombre(o) ?? o.nombre, nombre) && !(o.esDeProcesador && _nombre(o) == null))
+        .firstOrNull;
+    final suscripcion =
+        otro == null ? _suscripciones.where((s) => _mismoServicio(s.nombreServicio, nombre)).firstOrNull : null;
+    if (otro == null && suscripcion == null) return;
+    final unir = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(otro != null
+            ? 'Ya tienes $nombre en esta lista. ¿Los unimos?'
+            : 'Ya tienes $nombre en tus suscripciones. ¿Los unimos?'),
+        content: const Text('Quedará una sola suscripción con los cobros de las dos.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Son distintas')),
+          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Unir')),
+        ],
+      ),
+    );
+    if (unir != true || !mounted) return;
+    setState(() {
+      _union[c.id] = (candidato: otro, suscripcion: suscripcion);
+      // El otro candidato se confirma junto con este (no por separado).
+      if (otro != null) _candidatos = [...?_candidatos]..remove(otro);
+    });
   }
 
   Future<void> _cargarCatalogo() async {
@@ -164,6 +221,7 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
     );
     if (r == null || !mounted) return false;
     setState(() => _correccion[c.id] = r);
+    if (r.nombre != null) await _ofrecerUnir(c, r.nombre!);
     return true;
   }
 
@@ -176,6 +234,8 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
       if (!await _corregir(c)) return;
     }
     if (!mounted) return;
+    // Al nombrarlos pudo "unir" uno con otro: el otro ya no está en la lista.
+    final aConfirmar = _candidatos ?? const <CandidatoSuscripcion>[];
     setState(() {
       _guardando = true;
       _error = null;
@@ -183,13 +243,15 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
     var confirmadas = 0;
     try {
       // Los descartados ya salieron de la lista ("No es mía" es inmediato).
-      for (final c in candidatos) {
+      for (final c in aConfirmar) {
         final corregido = _correccion[c.id];
         await widget.servicio.confirmar(
           c.id,
           monto: corregido?.monto,
           frecuencia: corregido?.frecuencia,
           nombre: corregido?.nombre,
+          unirConCandidato: _union[c.id]?.candidato?.id,
+          unirConSuscripcion: _union[c.id]?.suscripcion?.id,
         );
         confirmadas++;
       }
@@ -302,6 +364,11 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
             monto: _monto(c),
             frecuencia: _frecuencia(c),
             nombre: _nombre(c),
+            union: switch (_union[c.id]) {
+              (candidato: final CandidatoSuscripcion o, suscripcion: _) => 'Se unirá con tu otro cobro de ${_nombre(o) ?? o.nombre}',
+              (candidato: _, suscripcion: final Suscripcion s) => 'Se agregará a tu suscripción ${s.nombreServicio}',
+              _ => null,
+            },
             corregido: _correccion.containsKey(c.id),
             onEsMia: _guardando ? null : () => _esMia(c),
             onNoEsMia: _guardando ? null : () => _descartar(c),
@@ -323,6 +390,7 @@ class _FilaCandidato extends StatelessWidget {
     required this.monto,
     required this.frecuencia,
     required this.nombre,
+    this.union,
     required this.corregido,
     required this.onEsMia,
     required this.onNoEsMia,
@@ -335,6 +403,9 @@ class _FilaCandidato extends StatelessWidget {
 
   /// Nombre que escribió el usuario, o null.
   final String? nombre;
+
+  /// "Se unirá con…" si el usuario eligió unirlo con otro.
+  final String? union;
   final bool corregido;
   final VoidCallback? onEsMia;
 
@@ -379,6 +450,11 @@ class _FilaCandidato extends StatelessWidget {
                       const Text(
                         '¿Qué servicio es?',
                         style: TextStyle(color: AppColors.amber, fontSize: 12, fontWeight: FontWeight.w800),
+                      ),
+                    if (union != null)
+                      Text(
+                        union!,
+                        style: const TextStyle(color: AppColors.accentSoft, fontSize: 11.5, fontWeight: FontWeight.w700),
                       ),
                     if (corregido)
                       const Text(

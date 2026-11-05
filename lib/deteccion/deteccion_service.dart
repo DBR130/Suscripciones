@@ -86,9 +86,22 @@ class DeteccionService {
   /// Crea la suscripción (origen "notificacion"). [monto], [frecuencia] y
   /// [nombre] son las correcciones del usuario; lo que no se envía sale del
   /// candidato.
-  Future<Suscripcion> confirmar(int id, {double? monto, Frecuencia? frecuencia, String? nombre}) async {
+  ///
+  /// "Unir" el mismo servicio detectado dos veces: [unirConCandidato] deja ese
+  /// otro candidato en la misma suscripción; [unirConSuscripcion] agrega los
+  /// pagos a esa suscripción sin crear otra.
+  Future<Suscripcion> confirmar(
+    int id, {
+    double? monto,
+    Frecuencia? frecuencia,
+    String? nombre,
+    int? unirConCandidato,
+    int? unirConSuscripcion,
+  }) async {
     final json = await _api.post('$_ruta/candidatos/$id/confirmar', {
       'nombre_servicio': ?nombre,
+      'unir_con_candidato': ?unirConCandidato,
+      'unir_con_suscripcion': ?unirConSuscripcion,
       if (monto != null) 'monto': monto.toStringAsFixed(2),
       if (frecuencia != null) 'frecuencia': frecuencia.valor,
     });

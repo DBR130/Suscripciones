@@ -64,9 +64,20 @@ class FakeDeteccionService implements DeteccionService {
     return lista;
   }
 
+  /// Uniones pedidas al confirmar: (candidato, unir con candidato, unir con suscripción).
+  final List<(int, int?, int?)> uniones = [];
+
   @override
-  Future<Suscripcion> confirmar(int id, {double? monto, Frecuencia? frecuencia, String? nombre}) async {
+  Future<Suscripcion> confirmar(
+    int id, {
+    double? monto,
+    Frecuencia? frecuencia,
+    String? nombre,
+    int? unirConCandidato,
+    int? unirConSuscripcion,
+  }) async {
     confirmados.add((id, monto, frecuencia, nombre));
+    if (unirConCandidato != null || unirConSuscripcion != null) uniones.add((id, unirConCandidato, unirConSuscripcion));
     return Suscripcion(
       id: id,
       nombreServicio: 'X',

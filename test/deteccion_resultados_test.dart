@@ -16,6 +16,7 @@ import 'package:go_router/go_router.dart';
 
 import 'deteccion_flujo_test.dart' show FakeDeteccionService, candidato;
 import 'fake_auth_service.dart';
+import 'fake_suscripcion_service.dart';
 
 /// Pantalla 05 con procesadores de pago y nombre editable (tickets T4 a T7).
 void main() {
@@ -24,7 +25,7 @@ void main() {
     'procesadores': jsonDecode(File('backend/db/procesadores.json').readAsStringSync()),
   });
 
-  Future<void> abrir(WidgetTester tester, FakeDeteccionService servicio) async {
+  Future<void> abrir(WidgetTester tester, FakeDeteccionService servicio, {FakeSuscripcionService? suscripciones}) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
@@ -33,7 +34,11 @@ void main() {
       routerConfig: GoRouter(initialLocation: '/deteccion', routes: [
         GoRoute(
           path: '/deteccion',
-          builder: (_, _) => ResultadosDeteccionPage(servicio: servicio, cargarCatalogo: () async => catalogo),
+          builder: (_, _) => ResultadosDeteccionPage(
+            servicio: servicio,
+            cargarCatalogo: () async => catalogo,
+            suscripcionService: suscripciones,
+          ),
         ),
         GoRoute(path: '/resumen', builder: (_, _) => const Scaffold(body: Text('DASHBOARD'))),
       ]),
@@ -73,6 +78,63 @@ void main() {
       await tester.tap(find.text('Es mía'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('campo-nombre')), findsOneWidget);
+    });
+  });
+
+  group('unir el mismo servicio (Crunchyroll duplicado, caso real)', () {
+    Future<void> nombrarEbanx(WidgetTester tester) async {
+      await tester.tap(find.textContaining('Confirmar'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('campo-nombre')), 'Crunchyroll');
+      await tester.tap(find.text('Guardar corrección'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('con otro candidato de la lista: "¿Los unimos?" → Unir', (tester) async {
+      final servicio = FakeDeteccionService(lista: [
+        candidato(7, 'EBANX', 19900, pagos: 5, procesador: 'EBANX'),
+        candidato(1, 'Crunchyroll', 19900),
+      ]);
+      await abrir(tester, servicio);
+      await nombrarEbanx(tester);
+      expect(find.text('Ya tienes Crunchyroll en esta lista. ¿Los unimos?'), findsOneWidget);
+      await tester.tap(find.text('Unir'));
+      await tester.pumpAndSettle();
+      // Una sola confirmación, que se lleva al otro candidato.
+      expect(servicio.uniones, [(7, 1, null)]);
+      expect(servicio.confirmados.map((c) => c.$1), [7]);
+    });
+
+    testWidgets('"Son distintas" confirma las dos por separado', (tester) async {
+      final servicio = FakeDeteccionService(lista: [
+        candidato(7, 'EBANX', 19900, pagos: 5, procesador: 'EBANX'),
+        candidato(1, 'Crunchyroll', 19900),
+      ]);
+      await abrir(tester, servicio);
+      await nombrarEbanx(tester);
+      await tester.tap(find.text('Son distintas'));
+      await tester.pumpAndSettle();
+      expect(servicio.uniones, isEmpty);
+      expect(servicio.confirmados.map((c) => c.$1), [7, 1]);
+    });
+
+    testWidgets('con una suscripción que ya tiene: los pagos se agregan a ella', (tester) async {
+      final servicio = FakeDeteccionService(lista: [candidato(7, 'EBANX', 19900, pagos: 5, procesador: 'EBANX')]);
+      final suscripciones = FakeSuscripcionService(iniciales: [
+        Suscripcion(
+          id: 5,
+          nombreServicio: 'Crunchyroll',
+          monto: 19900,
+          frecuencia: Frecuencia.mensual,
+          fechaProximoCobro: DateTime(2026, 11, 16),
+        ),
+      ]);
+      await abrir(tester, servicio, suscripciones: suscripciones);
+      await nombrarEbanx(tester);
+      expect(find.text('Ya tienes Crunchyroll en tus suscripciones. ¿Los unimos?'), findsOneWidget);
+      await tester.tap(find.text('Unir'));
+      await tester.pumpAndSettle();
+      expect(servicio.uniones, [(7, null, 5)]);
     });
   });
 
