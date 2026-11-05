@@ -172,8 +172,11 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
   const { id: pagoId, monto } = insertado.rows[0];
   const dia = pago.fecha.slice(0, 10);
 
-  // a) Ya es una suscripción del usuario.
-  const suscripcion = suscripciones.find((s) => mismoServicio(s.nombre_servicio, pago.comercio_normalizado, guias));
+  // a) Ya es una suscripción del usuario: por el nombre o, si el cobro es de
+  // un procesador, por el candidato de ese procesador y monto similar que el
+  // usuario confirmó con el nombre real (T4).
+  const suscripcion = suscripciones.find((s) => mismoServicio(s.nombre_servicio, pago.comercio_normalizado, guias))
+    ?? await suscripcionDelProcesador(client, usuarioId, pago, suscripciones);
   if (suscripcion) {
     const cambioPrecio = await registrarEnSuscripcion(client, suscripcion, pagoId, monto, pago.moneda, pago.fecha, dia);
     return { resultado: 'suscripcion_existente', suscripcionId: suscripcion.id, cambioPrecio };
@@ -213,6 +216,23 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
     // Con un solo pago de un servicio conocido se asume mensual (lo más común).
     frecuencia: frecuencia ?? 'mensual',
   });
+}
+
+/**
+ * Suscripción en curso confirmada desde un candidato del mismo procesador con
+ * monto similar (±10 %), o undefined. Ver la limitación en docs/deteccion.md:
+ * una subida de más del 10 % aparece como un candidato nuevo del procesador.
+ */
+async function suscripcionDelProcesador(client, usuarioId, pago, suscripciones) {
+  const procesador = procesadorDe(pago.comercio_normalizado);
+  if (!procesador) return undefined;
+  const confirmados = (await client.query(
+    `SELECT suscripcion_id, monto FROM candidatos_suscripcion
+     WHERE usuario_id = $1 AND procesador = $2 AND estado = 'confirmada' AND suscripcion_id IS NOT NULL`,
+    [usuarioId, procesador],
+  )).rows;
+  const c = confirmados.find((x) => montosSimilares(x.monto, pago.monto));
+  return c ? suscripciones.find((s) => s.id === c.suscripcion_id) : undefined;
 }
 
 /**
@@ -374,7 +394,7 @@ async function proponer(client, usuarioId, c) {
  * todavía no están enlazados: se enlazan a la suscripción y se agregan a su
  * historial (si son de la misma moneda).
  */
-export async function enlazarPagos(client, usuarioId, nombre, suscripcion) {
+export async function enlazarPagos(client, usuarioId, candidato, suscripcion) {
   const guias = (await client.query(
     'SELECT nombre_servicio, alias, es_generica FROM guias_cancelacion',
   )).rows;
@@ -382,7 +402,7 @@ export async function enlazarPagos(client, usuarioId, nombre, suscripcion) {
     `SELECT id, comercio_normalizado, monto, moneda, fecha::date AS dia FROM pagos_detectados
      WHERE usuario_id = $1 AND suscripcion_id IS NULL`,
     [usuarioId],
-  )).rows.filter((p) => mismoServicio(nombre, p.comercio_normalizado, guias));
+  )).rows.filter((p) => esDelCandidato(p, candidato, guias));
 
   for (const p of pagos) {
     await client.query('UPDATE pagos_detectados SET suscripcion_id = $1 WHERE id = $2', [suscripcion.id, p.id]);

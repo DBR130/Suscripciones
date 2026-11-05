@@ -115,7 +115,7 @@ export async function confirmarCandidato(req, res) {
        WHERE id = $1 RETURNING ${COLUMNAS_CANDIDATO}`,
       [id, suscripcion.id],
     )).rows[0];
-    const pagosEnlazados = await enlazarPagos(client, req.usuarioId, c.comercio_normalizado, suscripcion);
+    const pagosEnlazados = await enlazarPagos(client, req.usuarioId, c, suscripcion);
     return { suscripcion, candidato, pagos_enlazados: pagosEnlazados };
   });
   res.status(201).json(resultado);

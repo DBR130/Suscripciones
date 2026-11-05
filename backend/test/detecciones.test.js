@@ -323,6 +323,28 @@ describe('endpoints de detecciones', () => {
         [['EBANX', 'EBANX', 19900, 2, false], ['EBANX', 'EBANX', 34900, 2, false]],
       );
     });
+
+    it('confirmado con su nombre real, los cobros siguientes del procesador se registran ahí (T4)', async () => {
+      const auth = await crearUsuario();
+      await enviar(auth, [
+        pago({ ...ebanx, monto: 19900, fecha: '2026-09-16T12:43:00' }),
+        pago({ ...ebanx, monto: 19900, fecha: '2026-10-16T12:44:00' }),
+        pago({ ...ebanx, monto: 34900, fecha: '2026-09-20T09:10:00' }),
+        pago({ ...ebanx, monto: 34900, fecha: '2026-10-20T09:11:00' }),
+      ]);
+      const c = (await candidatos(auth)).find((x) => x.monto === 19900);
+      const { body } = await request(app).post(`/api/detecciones/candidatos/${c.id}/confirmar`).set(auth)
+        .send({ nombre_servicio: 'Crunchyroll' }).expect(201);
+      assert.equal(body.suscripcion.nombre_servicio, 'Crunchyroll');
+      assert.equal(body.pagos_enlazados, 2); // solo los de $19.900
+
+      let r = await enviar(auth, [pago({ ...ebanx, monto: 19900, fecha: '2026-11-16T12:40:00' })]);
+      assert.equal(r.resultados[0].resultado, 'suscripcion_existente');
+      assert.equal(r.resultados[0].suscripcion_id, body.suscripcion.id);
+
+      r = await enviar(auth, [pago({ ...ebanx, monto: 34900, fecha: '2026-11-20T09:10:00' })]);
+      assert.notEqual(r.resultados[0].resultado, 'suscripcion_existente');
+    });
   });
 
   describe('caso a: suscripción existente', () => {
@@ -427,10 +449,13 @@ describe('endpoints de detecciones', () => {
       await request(app).post(`/api/detecciones/candidatos/${c.id}/confirmar`).set(auth)
         .send({ monto: -5 }).expect(400);
       assert.equal((await candidatos(auth))[0].estado, 'pendiente');
+      // Ninguna suscripción creada para este usuario.
       const { rows } = await pool.query(
-        "SELECT count(*)::int AS n FROM suscripciones WHERE nombre_servicio = 'Crunchyroll' AND origen = 'notificacion'",
+        `SELECT count(*)::int AS n FROM suscripciones s JOIN usuarios u ON u.id = s.usuario_id
+         WHERE u.correo = $1`,
+        [`detecta${contador}@prueba.com`],
       );
-      assert.equal(rows[0].n, 1); // solo la del test anterior
+      assert.equal(rows[0].n, 0);
     });
 
     it('cambiar la frecuencia recalcula el próximo cobro', async () => {
