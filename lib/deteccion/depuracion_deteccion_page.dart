@@ -272,6 +272,33 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
             'App de SMS predeterminada',
             e.appSmsPaquete == null ? 'Ninguna' : '${e.appSmsNombre ?? e.appSmsPaquete} (${e.appSmsPaquete})',
           ),
+          // Tarea de fondo (WorkManager). En dos líneas: la etiqueta es larga
+          // y el motivo puede serlo también.
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.divider))),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Última ejecución en segundo plano',
+                  style: TextStyle(color: AppColors.muted, fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  e.ultimaEjecucionFondo == null
+                      ? 'Nunca'
+                      : [
+                          _hora(e.ultimaEjecucionFondo!),
+                          e.resultadoFondo ?? '?',
+                          '${e.procesadosFondo} revisadas',
+                          ?e.motivoFondo,
+                        ].join(' · '),
+                  style: const TextStyle(color: AppColors.text, fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+          ),
           if (e.ultimaReconexion != null)
             FilaDato('Reconexión forzada', '${_hora(e.ultimaReconexion!)} (${e.resultadoReconexion ?? '?'})'),
           SwitchListTile(

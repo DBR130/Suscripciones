@@ -54,6 +54,10 @@ void main() {
             'ultimo_resultado': 'guardada',
             'app_sms_paquete': 'com.truecaller',
             'app_sms_nombre': 'Truecaller',
+            'ultima_ejecucion_fondo': DateTime(2026, 10, 31, 9, 16).millisecondsSinceEpoch,
+            'resultado_fondo': 'reintento',
+            'procesados_fondo': 0,
+            'motivo_fondo': 'No se pudo conectar con el servidor',
           };
         case 'recuperarActivas':
           return recuperables;
@@ -234,6 +238,9 @@ void main() {
     expect(find.text('31/10 08:05:00'), findsOneWidget);
     expect(find.text('Nunca'), findsOneWidget); // última desconexión
     expect(find.text('31/10 09:15:30 (guardada)'), findsOneWidget);
+    // La tarea de fondo (WorkManager): hora, resultado, cuántas y motivo.
+    expect(find.text('Última ejecución en segundo plano'), findsOneWidget);
+    expect(find.text('31/10 09:16:00 · reintento · 0 revisadas · No se pudo conectar con el servidor'), findsOneWidget);
     expect(find.text('com.android.shell · Shell (simulación con adb)'), findsOneWidget);
     expect(find.textContaining('Todavía no hay apps reales'), findsOneWidget);
     expect(find.text('Cola guardada (2)'), findsOneWidget);

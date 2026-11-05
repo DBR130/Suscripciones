@@ -98,6 +98,10 @@ class EstadoLector {
     this.ultimoResultado,
     this.ultimaReconexion,
     this.resultadoReconexion,
+    this.ultimaEjecucionFondo,
+    this.resultadoFondo,
+    this.procesadosFondo = 0,
+    this.motivoFondo,
     this.appSmsPaquete,
     this.appSmsNombre,
   });
@@ -124,6 +128,13 @@ class EstadoLector {
   final DateTime? ultimaReconexion;
   final String? resultadoReconexion;
 
+  /// Última ejecución de la tarea de fondo (ProcesarColaWorker): resultado
+  /// ("ok", "sin sesión", "reintento…"), notificaciones revisadas y motivo.
+  final DateTime? ultimaEjecucionFondo;
+  final String? resultadoFondo;
+  final int procesadosFondo;
+  final String? motivoFondo;
+
   /// App de SMS predeterminada del usuario (Truecaller, Mensajes de Samsung...).
   /// El lector la permite aunque no esté en la lista fija.
   final String? appSmsPaquete;
@@ -140,6 +151,10 @@ class EstadoLector {
         ultimoResultado: ultimoResultado,
         ultimaReconexion: ultimaReconexion,
         resultadoReconexion: resultadoReconexion,
+        ultimaEjecucionFondo: ultimaEjecucionFondo,
+        resultadoFondo: resultadoFondo,
+        procesadosFondo: procesadosFondo,
+        motivoFondo: motivoFondo,
         appSmsPaquete: appSmsPaquete,
         appSmsNombre: appSmsNombre,
       );
@@ -158,6 +173,10 @@ class EstadoLector {
         ultimoResultado: mapa['ultimo_resultado'] as String?,
         ultimaReconexion: _fecha(mapa['ultima_reconexion']),
         resultadoReconexion: mapa['resultado_reconexion'] as String?,
+        ultimaEjecucionFondo: _fecha(mapa['ultima_ejecucion_fondo']),
+        resultadoFondo: mapa['resultado_fondo'] as String?,
+        procesadosFondo: (mapa['procesados_fondo'] as num?)?.toInt() ?? 0,
+        motivoFondo: mapa['motivo_fondo'] as String?,
         appSmsPaquete: mapa['app_sms_paquete'] as String?,
         appSmsNombre: mapa['app_sms_nombre'] as String?,
       );
