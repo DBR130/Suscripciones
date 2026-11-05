@@ -11,6 +11,16 @@ import 'huella_pago.dart';
 import 'lector_notificaciones.dart';
 import 'notificacion_capturada.dart';
 import 'parser_pagos.dart';
+import 'turno.dart';
+
+/// Otro motor (la tarea de fondo o la app) está procesando la cola: no se
+/// procesó nada. Ver [Turno].
+class TurnoOcupado implements Exception {
+  const TurnoOcupado();
+
+  @override
+  String toString() => 'TurnoOcupado';
+}
 
 /// Resultado de procesar la cola de notificaciones.
 class ResultadoEscaneo {
@@ -78,10 +88,12 @@ class ProcesadorDetecciones {
     required this.cargarCatalogo,
     AlmacenPagosLocales? almacen,
     HistorialSms? historial,
+    Turno? turno,
     this.esperaConexion = const Duration(milliseconds: 500),
     DateTime Function()? ahora,
   })  : almacen = almacen ?? AlmacenPagosLocales(),
         historial = historial ?? HistorialSms(),
+        turno = turno ?? Turno('app'),
         _ahora = ahora ?? DateTime.now;
 
   final LectorNotificaciones lector;
@@ -89,6 +101,9 @@ class ProcesadorDetecciones {
   final Future<CatalogoServicios> Function() cargarCatalogo;
   final AlmacenPagosLocales almacen;
   final HistorialSms historial;
+
+  /// Turno compartido con el otro motor de Flutter (app / tarea de fondo).
+  final Turno turno;
   final DateTime Function() _ahora;
 
   /// Recién dado el permiso, Android tarda un momento en conectar el lector.
@@ -114,9 +129,23 @@ class ProcesadorDetecciones {
 
   Future<ResultadoEscaneo>? _enCurso;
 
-  /// Si ya hay un procesamiento en curso (la pantalla y main.dart a la vez),
-  /// devuelve ese mismo: nunca se envía la cola dos veces en paralelo.
-  Future<ResultadoEscaneo> procesar() => _enCurso ??= _procesar().whenComplete(() => _enCurso = null);
+  /// Si ya hay un procesamiento en curso en este motor (la pantalla y
+  /// main.dart a la vez), devuelve ese mismo. Entre motores (la app y la tarea
+  /// de fondo) manda el [turno]: sin él lanza [TurnoOcupado] sin tocar nada.
+  /// El procesamiento automático no espera ([esperar] = 0); una acción del
+  /// usuario espera hasta [Turno.esperaUsuario].
+  Future<ResultadoEscaneo> procesar({Duration esperar = Duration.zero}) =>
+      _enCurso ??= _conTurno(esperar, _procesar).whenComplete(() => _enCurso = null);
+
+  /// Ejecuta [trabajo] con el turno tomado y siempre lo suelta al terminar.
+  Future<T> _conTurno<T>(Duration esperar, Future<T> Function() trabajo) async {
+    if (!await turno.tomar(esperar: esperar)) throw const TurnoOcupado();
+    try {
+      return await trabajo();
+    } finally {
+      await turno.soltar();
+    }
+  }
 
   Future<ResultadoEscaneo> _procesar() async {
     await lector.reconectarSiHaceFalta();
@@ -163,7 +192,13 @@ class ProcesadorDetecciones {
   /// [HistorialSms.meses] meses (solo los que parecen cobros llegan aquí),
   /// los interpreta en el celular y envía solo lo que forma una suscripción.
   /// Repetirla no duplica nada (ver AnalizadorPagos.mismoCobro y la huella).
-  Future<ResultadoHistorial> buscarEnHistorial({void Function(EtapaHistorial etapa)? alAvanzar}) async {
+  Future<ResultadoHistorial> buscarEnHistorial({
+    void Function(EtapaHistorial etapa)? alAvanzar,
+    Duration esperar = Duration.zero,
+  }) =>
+      _conTurno(esperar, () => _buscarEnHistorial(alAvanzar));
+
+  Future<ResultadoHistorial> _buscarEnHistorial(void Function(EtapaHistorial etapa)? alAvanzar) async {
     alAvanzar?.call(EtapaHistorial.leyendo);
     final ahora = _ahora();
     final desde = DateTime(ahora.year, ahora.month - HistorialSms.meses, ahora.day);

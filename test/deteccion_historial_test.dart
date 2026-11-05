@@ -17,6 +17,7 @@ import 'package:flutter_suscripciones/deteccion/lector_notificaciones.dart';
 import 'package:flutter_suscripciones/deteccion/parser_pagos.dart';
 import 'package:flutter_suscripciones/deteccion/permisos_page.dart';
 import 'package:flutter_suscripciones/deteccion/procesador_detecciones.dart';
+import 'package:flutter_suscripciones/deteccion/turno.dart';
 import 'package:flutter_suscripciones/deteccion/vigilante_deteccion.dart';
 import 'package:flutter_suscripciones/models/usuario.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -373,6 +374,8 @@ void main() {
   ProcesadorDetecciones procesador(FakeDeteccionService servicio, {AlmacenPagosLocales? almacen}) =>
       ProcesadorDetecciones(
         lector: LectorNotificaciones(disponible: true),
+        // Sin el candado nativo: estos tests no son del turno.
+        turno: Turno('app', disponible: false),
         servicio: servicio,
         cargarCatalogo: () async => catalogo,
         almacen: almacen ?? AlmacenPagosLocales(ahora: () => hoy),

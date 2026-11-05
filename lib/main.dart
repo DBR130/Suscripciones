@@ -163,6 +163,9 @@ class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
       // Flujo B y "Registramos un pago de X en Y" (los mismos avisos que la
       // tarea de fondo).
       await recordatorios.avisarEscaneo(resultado);
+    } on TurnoOcupado {
+      // La tarea de fondo está procesando la cola: ella avisará.
+      debugPrint('SubTrackDeteccion: la tarea de fondo tiene el turno; la app no procesa');
     } catch (e) {
       // Sin conexión con el backend: la cola queda para la próxima vez.
       debugPrint('Detección en segundo plano: $e');

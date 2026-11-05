@@ -8,6 +8,7 @@ import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
 import 'package:flutter_suscripciones/deteccion/deteccion_service.dart';
 import 'package:flutter_suscripciones/deteccion/lector_notificaciones.dart';
 import 'package:flutter_suscripciones/deteccion/procesador_detecciones.dart';
+import 'package:flutter_suscripciones/deteccion/turno.dart';
 import 'package:flutter_suscripciones/services/api_client.dart';
 import 'package:flutter_suscripciones/services/recordatorios_service.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -111,6 +112,8 @@ void main() {
       ..registradosRespuesta = [const PagoRegistrado(servicio: 'Netflix', monto: 44900, moneda: 'COP')];
     final r = await ProcesadorDetecciones(
       lector: LectorNotificaciones(disponible: true),
+      // Sin el candado nativo: estos tests no son del turno.
+      turno: Turno('app', disponible: false),
       servicio: servicio,
       cargarCatalogo: () async => catalogo,
       almacen: AlmacenPagosLocales(),

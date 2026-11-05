@@ -15,6 +15,7 @@ import 'package:flutter_suscripciones/deteccion/lector_notificaciones.dart';
 import 'package:flutter_suscripciones/deteccion/parser_pagos.dart';
 import 'package:flutter_suscripciones/deteccion/permisos_page.dart';
 import 'package:flutter_suscripciones/deteccion/procesador_detecciones.dart';
+import 'package:flutter_suscripciones/deteccion/turno.dart';
 import 'package:flutter_suscripciones/deteccion/resultados_deteccion_page.dart';
 import 'package:flutter_suscripciones/deteccion/vigilante_deteccion.dart';
 import 'package:flutter_suscripciones/Pages/PerfilPage.dart';
@@ -227,6 +228,8 @@ void main() {
 
     ProcesadorDetecciones procesador(FakeDeteccionService servicio, {bool falla = false}) => ProcesadorDetecciones(
           lector: LectorNotificaciones(disponible: true),
+          // Sin el candado nativo: estos tests no son del turno.
+          turno: Turno('app', disponible: false),
           servicio: servicio,
           cargarCatalogo: () async => falla ? throw const ApiException('sin conexión') : catalogo,
           almacen: AlmacenPagosLocales(),
@@ -390,6 +393,8 @@ void main() {
 
     ProcesadorDetecciones procesador(FakeDeteccionService s) => ProcesadorDetecciones(
           lector: LectorNotificaciones(disponible: true),
+          // Sin el candado nativo: estos tests no son del turno.
+          turno: Turno('app', disponible: false),
           servicio: s,
           cargarCatalogo: () async => catalogo,
           almacen: AlmacenPagosLocales(),
