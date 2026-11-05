@@ -163,6 +163,46 @@ void main() {
       expect(r.motivo, 'retiro de dinero');
     });
 
+    test('diagnóstico: decisión y motivo por comercio, igual que la selección', () {
+      final pagos = [
+        cobro(bancolombia('NETFLIX', '44.900,00', '05/10/2026')),
+        cobro(r'Bancolombia: Compraste $13.300,00 en GOOGLE YouTube con tu T.Deb *0000, el 21/06/2026 a las 12:41.'),
+        cobro(r'Bancolombia: Compraste $30.300,00 en RAPPI COLOMBIA*DL con tu T.Deb *0000, el 21/06/2026 a las 13:24.'),
+        cobro('NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin', DateTime(2026, 9, 25, 19, 44)),
+        cobro('NEQUI: Pagaste 16.140,00 en DLO*DiDi Food CO Payin', DateTime(2026, 9, 25, 19, 46)),
+        cobro('NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin', DateTime(2026, 10, 25, 19, 40)),
+        cobro('NEQUI: Pagaste 19.900,00 en SERVICIOS WEB EBANX CO', DateTime(2026, 9, 16, 12, 43)),
+        cobro(bancolombia('TIENDAS D1', '18.900,00', '30/10/2026')),
+        cobro(bancolombia('GIMNASIO LA 80', '99.900,00', '05/09/2026')),
+        cobro(bancolombia('GIMNASIO LA 80', '98.000,00', '18/09/2026')),
+        // El mismo cobro de Nequi por la notificación y por el historial.
+        cobro(nequiClaude, llegadaNotificacion),
+        cobro(nequiClaude, llegadaSms),
+      ];
+      final d = {for (final c in AnalizadorPagos.diagnosticar(pagos)) c.nombre: c};
+
+      expect(d['Netflix']!.decision, DecisionEscaneo.servicioConocido);
+      expect(d['YouTube Premium']!.decision, DecisionEscaneo.precioReferencia);
+      expect(d['Rappi Pro']!.decision, DecisionEscaneo.ambiguoSinSenalNiPatron);
+      expect(d['DiDi Club']!.decision, DecisionEscaneo.precioReferencia);
+      expect(d['DiDi Club']!.cobros, 3);
+      expect(d['DiDi Club']!.salen, 2); // los domicilios se quedan
+      expect(d['EBANX']!.decision, DecisionEscaneo.procesadorSinPatron);
+      expect(d['Tiendas D1']!.decision, DecisionEscaneo.compraSuelta);
+      expect(d['Gimnasio La 80']!.decision, DecisionEscaneo.patronRoto);
+      expect(d['Claude']!.repetidos, 1);
+      expect(d['Claude']!.bancos, {'Nequi'});
+      expect(d['Gimnasio La 80']!.montos, [99900, 98000]);
+      // Sin texto de SMS: solo campos extraídos.
+      expect(d.values.expand((c) => [c.nombre, c.motivo]).join(' '), isNot(contains('Compraste')));
+
+      // Coherente con la selección: salen exactamente los mismos pagos.
+      expect(
+        d.values.fold<int>(0, (n, c) => n + c.salen),
+        AnalizadorPagos.seleccionarParaEnviar(pagos).length,
+      );
+    });
+
     test('una compra puntual no sale', () {
       final didi = cobro(bancolombia('TIENDAS D1', '18.900,00', '30/10/2026'));
       expect(AnalizadorPagos.seleccionarParaEnviar([didi]), isEmpty);

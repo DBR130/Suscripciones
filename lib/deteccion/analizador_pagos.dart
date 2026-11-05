@@ -1,5 +1,66 @@
 import 'parser_pagos.dart';
 
+/// Qué decidió el análisis con un comercio (pantalla de depuración, "Último
+/// escaneo").
+enum DecisionEscaneo {
+  /// Servicio del catálogo que no es ambiguo: sale desde el primer cobro.
+  servicioConocido,
+
+  /// Ambiguo con señal de suscripción ("RAPPI PRO", "YouTubePremium").
+  conSenal,
+
+  /// Ambiguo por el valor exacto de su precio de referencia.
+  precioReferencia,
+
+  /// Serie periódica (todos los de monto similar, o una de monto exacto
+  /// dentro de la mezcla).
+  serie,
+
+  /// Ambiguo sin señal, sin precio de referencia y sin serie.
+  ambiguoSinSenalNiPatron,
+
+  /// Procesador de pagos sin serie.
+  procesadorSinPatron,
+
+  /// Varios cobros de monto parecido, pero sin periodicidad.
+  patronRoto,
+
+  /// Compras sueltas de un comercio cualquiera.
+  compraSuelta,
+}
+
+/// Un comercio agrupado por el análisis, con su decisión. Solo campos
+/// extraídos: nunca el texto de los SMS.
+class DiagnosticoComercio {
+  DiagnosticoComercio({
+    required this.nombre,
+    required this.bancos,
+    required this.montos,
+    required this.fechas,
+    required this.decision,
+    required this.motivo,
+    required this.pagosQueSalen,
+    required this.repetidos,
+  });
+
+  /// Comercio normalizado, o el procesador ("EBANX").
+  final String nombre;
+  final Set<String> bancos;
+  final List<double> montos;
+  final List<DateTime> fechas;
+  final DecisionEscaneo decision;
+  final String motivo;
+
+  /// Los que salen hacia el backend.
+  final List<PagoExtraido> pagosQueSalen;
+
+  /// Cobros repetidos (el mismo por notificación e historial) que no cuentan.
+  final int repetidos;
+
+  int get cobros => montos.length;
+  int get salen => pagosQueSalen.length;
+}
+
 /// Análisis en el celular (minimización de datos): de todos los cobros que
 /// se interpretaron, decide cuáles pueden salir hacia el backend.
 ///
@@ -101,38 +162,95 @@ class AnalizadorPagos {
   static bool montosSimilares(double a, double b) => (a - b).abs() <= toleranciaMontos * (a > b ? a : b);
 
   /// Los pagos que pueden salir del celular, del más antiguo al más reciente.
-  static List<PagoExtraido> seleccionarParaEnviar(Iterable<PagoExtraido> pagos) {
+  static List<PagoExtraido> seleccionarParaEnviar(Iterable<PagoExtraido> pagos) =>
+      [for (final c in diagnosticar(pagos)) ...c.pagosQueSalen]..sort((a, b) => a.fecha.compareTo(b.fecha));
+
+  /// Agrupa los cobros por comercio (o procesador) y decide, para cada grupo,
+  /// qué sale hacia el backend y por qué. [seleccionarParaEnviar] usa esta
+  /// misma decisión, así el diagnóstico de la pantalla de depuración nunca
+  /// contradice lo que realmente sale.
+  static List<DiagnosticoComercio> diagnosticar(Iterable<PagoExtraido> pagos) {
+    String clave(PagoExtraido p) => '${(p.procesador ?? p.comercio).toLowerCase()}|${p.moneda}';
+    final todos = pagos.toList();
     final porComercio = <String, List<PagoExtraido>>{};
-    for (final p in sinRepetidos(pagos)) {
-      porComercio.putIfAbsent('${p.comercio.toLowerCase()}|${p.moneda}', () => []).add(p);
+    for (final p in sinRepetidos(todos)) {
+      porComercio.putIfAbsent(clave(p), () => []).add(p);
     }
 
-    final seleccion = <PagoExtraido>[];
-    for (final grupo in porComercio.values) {
-      grupo.sort((a, b) => a.fecha.compareTo(b.fecha));
-      final conocido = grupo.any((p) => p.esServicioConocido);
-      final ambiguo = grupo.any((p) => p.servicioAmbiguo);
-      if (conocido && !ambiguo) {
-        seleccion.addAll(grupo);
-        continue;
-      }
-      // Ambiguo: los cobros con señal ("RAPPI PRO", "YouTubePremium") o por el
-      // valor exacto de su precio de referencia (YouTube a $13.300) salen
-      // solos; el resto, solo si forma una serie periódica.
-      if (ambiguo) seleccion.addAll(grupo.where((p) => p.indicaSuscripcion || p.coincidePrecioReferencia));
-      // Comercio desconocido: series de montos similares (±10 %) que sean
-      // periódicas en su totalidad (un gimnasio de $95.000 y luego $99.900)...
-      for (final serie in _seriesPorMonto(grupo)) {
-        if (estimarFrecuencia([for (final p in serie) p.fecha]) != null) {
-          seleccion.addAll(serie.where((p) => !seleccion.contains(p)));
-        }
-      }
-      // ...o, si los pedidos de montos parecidos rompen ese patrón, una serie de
-      // monto exacto dentro de la mezcla (DiDi Club entre domicilios de DiDi Food).
-      seleccion.addAll(serieEnMezcla(grupo).where((p) => !seleccion.contains(p)));
+    return [
+      for (final MapEntry(key: llave, value: grupo) in porComercio.entries)
+        _decidir(grupo..sort((a, b) => a.fecha.compareTo(b.fecha)),
+            repetidos: todos.where((p) => clave(p) == llave).length - grupo.length),
+    ];
+  }
+
+  static DiagnosticoComercio _decidir(List<PagoExtraido> grupo, {required int repetidos}) {
+    final primero = grupo.first;
+    DiagnosticoComercio con(DecisionEscaneo decision, String motivo, List<PagoExtraido> salen) => DiagnosticoComercio(
+          nombre: primero.procesador ?? primero.comercio,
+          bancos: {for (final p in grupo) p.banco},
+          montos: [for (final p in grupo) p.monto],
+          fechas: [for (final p in grupo) p.fecha],
+          decision: decision,
+          motivo: motivo,
+          pagosQueSalen: salen,
+          repetidos: repetidos,
+        );
+
+    final conocido = grupo.any((p) => p.esServicioConocido);
+    final ambiguo = grupo.any((p) => p.servicioAmbiguo);
+    if (conocido && !ambiguo) {
+      return con(DecisionEscaneo.servicioConocido, 'Servicio conocido: se propone desde el primer cobro', grupo);
     }
-    seleccion.sort((a, b) => a.fecha.compareTo(b.fecha));
-    return seleccion;
+
+    // Ambiguo: los cobros con señal ("RAPPI PRO", "YouTubePremium") o por el
+    // valor exacto de su precio de referencia (YouTube a $13.300) salen
+    // solos; el resto, solo si forma una serie periódica.
+    final conSenal = ambiguo ? grupo.where((p) => p.indicaSuscripcion).toList() : <PagoExtraido>[];
+    final porPrecio = ambiguo ? grupo.where((p) => p.coincidePrecioReferencia).toList() : <PagoExtraido>[];
+
+    // Series: todos los de monto similar (±10 %) periódicos (un gimnasio de
+    // $95.000 y luego $99.900), o una de monto exacto dentro de la mezcla
+    // (DiDi Club entre domicilios de DiDi Food).
+    final enSerie = <PagoExtraido>[];
+    String? frecuencia;
+    for (final serie in _seriesPorMonto(grupo)) {
+      final f = estimarFrecuencia([for (final p in serie) p.fecha]);
+      if (f != null) {
+        enSerie.addAll(serie);
+        frecuencia ??= f;
+      }
+    }
+    final mezcla = serieEnMezcla(grupo);
+    if (mezcla.isNotEmpty) {
+      frecuencia ??= frecuenciaDeIntervalo(_dias(mezcla[0].fecha, mezcla[1].fecha), conHuecos: true);
+      enSerie.addAll(mezcla.where((p) => !enSerie.contains(p)));
+    }
+
+    final salen = [
+      for (final p in grupo)
+        if (conSenal.contains(p) || porPrecio.contains(p) || enSerie.contains(p)) p,
+    ];
+    if (conSenal.isNotEmpty) return con(DecisionEscaneo.conSenal, 'Ambiguo con señal de suscripción', salen);
+    if (porPrecio.isNotEmpty) {
+      return con(DecisionEscaneo.precioReferencia, 'Cobro por el valor exacto de ${primero.comercio}', salen);
+    }
+    if (enSerie.isNotEmpty) {
+      return con(DecisionEscaneo.serie, 'Serie $frecuencia de ${enSerie.length} cobros', salen);
+    }
+    if (primero.procesador != null) {
+      return con(DecisionEscaneo.procesadorSinPatron,
+          'Procesador sin patrón: necesita 2 cobros periódicos del mismo monto', const []);
+    }
+    if (ambiguo) {
+      return con(DecisionEscaneo.ambiguoSinSenalNiPatron,
+          'Ambiguo sin señal, sin precio de referencia y sin serie', const []);
+    }
+    final parecidos = grupo.any((a) => grupo.any((b) => !identical(a, b) && montosSimilares(a.monto, b.monto)));
+    if (parecidos) {
+      return con(DecisionEscaneo.patronRoto, '${grupo.length} cobros de monto parecido, sin periodicidad', const []);
+    }
+    return con(DecisionEscaneo.compraSuelta, grupo.length == 1 ? 'Compra suelta' : 'Compras sueltas', const []);
   }
 
   /// La serie periódica más larga (2 o más cobros) de un mismo monto
