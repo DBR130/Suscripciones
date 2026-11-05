@@ -1,5 +1,6 @@
 import { query } from '../db.js';
 import { buscarGuia } from '../services/guias.js';
+import { PROCESADORES } from '../services/procesadores.js';
 import { HttpError } from '../utils/httpError.js';
 
 const COLUMNAS_GUIA = `nombre_servicio, pasos, enlace_directo, alias, duracion_minutos,
@@ -12,7 +13,9 @@ export async function listarGuias(req, res) {
     `SELECT id, nombre_servicio, alias, es_ambigua FROM guias_cancelacion
      WHERE NOT es_generica ORDER BY nombre_servicio`,
   );
-  res.json({ guias: rows });
+  // Los procesadores de pago van con el catálogo: la app los usa para
+  // reconocer cobros como "SERVICIOS WEB EBANX CO".
+  res.json({ guias: rows, procesadores: PROCESADORES });
 }
 
 // GET /api/suscripciones/:id/guia

@@ -6,6 +6,7 @@
 import { transaccion } from '../db.js';
 import { avanzarCiclo, diasEntre } from '../utils/fechas.js';
 import { buscarGuia, normalizar } from './guias.js';
+import { procesadorDe } from './procesadores.js';
 
 /**
  * Palabras que indican una suscripción en el comercio, como palabra completa
@@ -98,7 +99,7 @@ export function siguienteCobro(ultimoPago, frecuencia, hoy) {
 }
 
 export const COLUMNAS_CANDIDATO = `id, comercio_normalizado, monto, moneda, frecuencia_estimada, estado,
-  suscripcion_id, es_servicio_conocido, banco, fecha_ultimo_pago, creado_en`;
+  suscripcion_id, es_servicio_conocido, banco, fecha_ultimo_pago, creado_en, procesador`;
 
 /**
  * Procesa un lote de pagos detectados del usuario, en una transacción.
@@ -184,21 +185,31 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
   const { guia, esGenerica } = buscarGuia(pago.comercio_normalizado, guias);
   const conocido = !esGenerica && guia !== null;
   const desdeElPrimero = conocido && (!guia.es_ambigua || tieneSenalDeSuscripcion(pago.comercio));
-  const nombre = conocido ? guia.nombre_servicio : pago.comercio_normalizado;
+  // Procesador de pagos (EBANX, PayU...): el SMS no trae el servicio. Sus
+  // cobros se agrupan por procesador y se separan por monto (T3).
+  const procesador = conocido ? null : procesadorDe(pago.comercio_normalizado);
+  const nombre = conocido ? guia.nombre_servicio : (procesador ?? pago.comercio_normalizado);
 
-  // c) Comercio desconocido: hacen falta 2 o más pagos de monto similar y periódicos.
-  const anteriores = (await client.query(
-    `SELECT fecha::date AS dia, monto FROM pagos_detectados
-     WHERE usuario_id = $1 AND lower(comercio_normalizado) = lower($2) AND moneda = $3
-     ORDER BY fecha, id`,
-    [usuarioId, pago.comercio_normalizado, pago.moneda],
-  )).rows;
+  // c) Comercio desconocido (o procesador): hacen falta 2 o más pagos de
+  // monto similar y periódicos.
+  const anteriores = procesador
+    ? (await client.query(
+      `SELECT fecha::date AS dia, monto, comercio_normalizado FROM pagos_detectados
+       WHERE usuario_id = $1 AND moneda = $2 ORDER BY fecha, id`,
+      [usuarioId, pago.moneda],
+    )).rows.filter((p) => procesadorDe(p.comercio_normalizado) === procesador)
+    : (await client.query(
+      `SELECT fecha::date AS dia, monto FROM pagos_detectados
+       WHERE usuario_id = $1 AND lower(comercio_normalizado) = lower($2) AND moneda = $3
+       ORDER BY fecha, id`,
+      [usuarioId, pago.comercio_normalizado, pago.moneda],
+    )).rows;
   const fechas = anteriores.filter((p) => montosSimilares(p.monto, monto)).map((p) => p.dia);
   const frecuencia = estimarFrecuencia(fechas);
   if (!desdeElPrimero && !frecuencia && !compartido) return { resultado: 'compra_normal' };
 
   return proponer(client, usuarioId, {
-    nombre, monto, moneda: pago.moneda, banco: pago.banco, dia, conocido,
+    nombre, monto, moneda: pago.moneda, banco: pago.banco, dia, conocido, procesador,
     // Con un solo pago de un servicio conocido se asume mensual (lo más común).
     frecuencia: frecuencia ?? 'mensual',
   });
@@ -238,22 +249,33 @@ export async function purgarComprasNormales(client, usuarioId = null, guias = nu
     'SELECT nombre_servicio, alias, es_generica FROM guias_cancelacion',
   )).rows;
   const sueltos = (await client.query(
-    `SELECT id, usuario_id, comercio_normalizado FROM pagos_detectados
+    `SELECT id, usuario_id, comercio_normalizado, monto FROM pagos_detectados
      WHERE suscripcion_id IS NULL AND ($1::int IS NULL OR usuario_id = $1)`,
     [usuarioId],
   )).rows;
   if (sueltos.length === 0) return 0;
   const vivos = (await client.query(
-    `SELECT usuario_id, comercio_normalizado FROM candidatos_suscripcion
+    `SELECT usuario_id, comercio_normalizado, monto, procesador FROM candidatos_suscripcion
      WHERE estado IN ('pendiente', 'confirmada') AND ($1::int IS NULL OR usuario_id = $1)`,
     [usuarioId],
   )).rows;
   const borrar = sueltos
-    .filter((p) => !vivos.some((c) => c.usuario_id === p.usuario_id
-      && mismoServicio(c.comercio_normalizado, p.comercio_normalizado, catalogo)))
+    .filter((p) => !vivos.some((c) => c.usuario_id === p.usuario_id && esDelCandidato(p, c, catalogo)))
     .map((p) => p.id);
   if (borrar.length > 0) await client.query('DELETE FROM pagos_detectados WHERE id = ANY($1)', [borrar]);
   return borrar.length;
+}
+
+/**
+ * true si el pago detectado `p` corresponde al candidato `c`: mismo
+ * servicio o, si el candidato es de un procesador, mismo procesador y monto
+ * similar (±10 %).
+ */
+export function esDelCandidato(p, c, guias) {
+  if (c.procesador) {
+    return procesadorDe(p.comercio_normalizado) === c.procesador && montosSimilares(p.monto, c.monto);
+  }
+  return mismoServicio(c.comercio_normalizado, p.comercio_normalizado, guias);
 }
 
 /**
@@ -302,20 +324,27 @@ async function registrarEnSuscripcion(client, s, pagoId, monto, moneda, fecha, d
  * se borró.
  */
 async function proponer(client, usuarioId, c) {
-  const existente = (await client.query(
-    `SELECT id, estado, suscripcion_id FROM candidatos_suscripcion
-     WHERE usuario_id = $1 AND lower(comercio_normalizado) = lower($2)`,
-    [usuarioId, c.nombre],
-  )).rows[0];
+  // Un procesador puede tener varios candidatos: el de monto similar.
+  const existente = c.procesador
+    ? (await client.query(
+      `SELECT id, estado, suscripcion_id, monto FROM candidatos_suscripcion
+       WHERE usuario_id = $1 AND procesador = $2 ORDER BY id`,
+      [usuarioId, c.procesador],
+    )).rows.find((e) => montosSimilares(e.monto, c.monto))
+    : (await client.query(
+      `SELECT id, estado, suscripcion_id FROM candidatos_suscripcion
+       WHERE usuario_id = $1 AND lower(comercio_normalizado) = lower($2) AND procesador IS NULL`,
+      [usuarioId, c.nombre],
+    )).rows[0];
 
   if (!existente) {
     const { rows } = await client.query(
       `INSERT INTO candidatos_suscripcion
          (usuario_id, comercio_normalizado, monto, moneda, frecuencia_estimada, es_servicio_conocido,
-          banco, fecha_ultimo_pago)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          banco, fecha_ultimo_pago, procesador)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING ${COLUMNAS_CANDIDATO}`,
-      [usuarioId, c.nombre, c.monto, c.moneda, c.frecuencia, c.conocido, c.banco, c.dia],
+      [usuarioId, c.nombre, c.monto, c.moneda, c.frecuencia, c.conocido, c.banco, c.dia, c.procesador ?? null],
     );
     return { resultado: 'candidato_nuevo', candidato: rows[0] };
   }

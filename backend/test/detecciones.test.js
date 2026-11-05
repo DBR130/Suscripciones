@@ -287,6 +287,44 @@ describe('endpoints de detecciones', () => {
     });
   });
 
+  describe('procesadores de pago (T3)', () => {
+    // Formato del SMS real de Nequi: "Pagaste 19.900,00 en SERVICIOS WEB EBANX CO".
+    const ebanx = {
+      comercio: 'SERVICIOS WEB EBANX CO', comercio_normalizado: 'Servicios Web Ebanx Co', banco: 'Nequi',
+      fecha_del_mensaje: false,
+    };
+
+    it('GET /api/guias entrega la lista de procesadores', async () => {
+      const auth = await crearUsuario();
+      const { body } = await request(app).get('/api/guias').set(auth).expect(200);
+      const nombres = body.procesadores.map((p) => p.nombre);
+      assert.ok(nombres.includes('EBANX') && nombres.includes('dLocal'));
+      assert.ok(body.procesadores.find((p) => p.nombre === 'dLocal').alias.includes('dlo'));
+    });
+
+    it('un cobro suelto de un procesador es compra normal', async () => {
+      const auth = await crearUsuario();
+      const r = await enviar(auth, [pago({ ...ebanx, monto: 19900, fecha: '2026-09-16T12:43:00' })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal');
+    });
+
+    it('dos series mensuales del mismo procesador con montos distintos son dos candidatos', async () => {
+      const auth = await crearUsuario();
+      const r = await enviar(auth, [
+        pago({ ...ebanx, monto: 19900, fecha: '2026-09-16T12:43:00' }),
+        pago({ ...ebanx, monto: 19900, fecha: '2026-10-16T12:44:00' }),
+        pago({ ...ebanx, monto: 34900, fecha: '2026-09-20T09:10:00' }),
+        pago({ ...ebanx, monto: 34900, fecha: '2026-10-20T09:11:00' }),
+      ]);
+      assert.equal(r.candidatos_nuevos.length, 2);
+      const lista = (await candidatos(auth)).sort((a, b) => a.monto - b.monto);
+      assert.deepEqual(
+        lista.map((c) => [c.comercio_normalizado, c.procesador, c.monto, c.num_pagos, c.es_servicio_conocido]),
+        [['EBANX', 'EBANX', 19900, 2, false], ['EBANX', 'EBANX', 34900, 2, false]],
+      );
+    });
+  });
+
   describe('caso a: suscripción existente', () => {
     it('registra el pago en el historial y el cambio de precio (RF08)', async () => {
       const auth = await crearUsuario();

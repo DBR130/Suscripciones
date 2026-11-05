@@ -1,7 +1,7 @@
 import { query, transaccion } from '../db.js';
 import { FRECUENCIAS, limpiarSuscripcion } from '../middlewares/validaciones.js';
 import {
-  COLUMNAS_CANDIDATO, enlazarPagos, procesarPagos, purgarComprasNormales, siguienteCobro,
+  COLUMNAS_CANDIDATO, enlazarPagos, esDelCandidato, procesarPagos, purgarComprasNormales, siguienteCobro,
 } from '../services/detecciones.js';
 import { hoyColombia } from '../utils/fechas.js';
 import { HttpError } from '../utils/httpError.js';
@@ -57,6 +57,17 @@ export async function listarCandidatos(req, res) {
      ORDER BY c.creado_en DESC, c.id DESC`,
     [req.usuarioId, estados],
   );
+  // Los candidatos de un procesador cuentan sus pagos por procesador y monto
+  // (el comercio de cada pago es "Servicios Web Ebanx Co", no "EBANX").
+  if (rows.some((c) => c.procesador)) {
+    const pagos = (await query(
+      'SELECT comercio_normalizado, monto FROM pagos_detectados WHERE usuario_id = $1',
+      [req.usuarioId],
+    )).rows;
+    for (const c of rows.filter((x) => x.procesador)) {
+      c.num_pagos = pagos.filter((p) => esDelCandidato(p, c, [])).length;
+    }
+  }
   res.json({ candidatos: rows });
 }
 
