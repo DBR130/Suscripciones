@@ -12,6 +12,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | 4 | Pantallas 03, 04, 05 y flujo B | **Hecho** |
 | 5 | Historial de SMS (opcional, READ_SMS), "Compartir" y análisis en el celular | **Hecho** |
 | 6 | Procesadores de pago, servicios ambiguos, deshacer descartes y aviso de pago registrado | **Hecho** |
+| 7 | Hallazgos de pruebas reales: unir duplicados, series dentro de una mezcla, precio de referencia de ambiguos y diagnóstico del escaneo | **Hecho** |
 
 ## Arquitectura
 
@@ -750,6 +751,144 @@ npm run db:migrate:nube; npm run db:guias:nube
 ### Cómo probarlo en el Xiaomi
 
 Ver "Cómo probar (hito 6)".
+
+## Hallazgos de pruebas reales en dos celulares (hito 7)
+
+### 1. Crunchyroll duplicado → "Unir"
+
+**Hallazgo.** La búsqueda en el historial de Santiago encontró "Pago procesado
+por EBANX" ($19.900, 5 cobros) y, aparte, "Crunchyroll" ($19.900, 1 cobro por
+Google Play). Al llamar "Crunchyroll" al de EBANX y confirmar los dos quedaron
+dos suscripciones iguales y el total mensual se infló.
+
+**Solución.**
+
+- En la pantalla 05, al ponerle a un candidato el nombre de **otro candidato
+  de la lista** o de **una suscripción que ya tiene** (mismo nombre o el mismo
+  servicio del catálogo), la app pregunta "Ya tienes Crunchyroll en esta
+  lista. ¿Los unimos?" (o "…en tus suscripciones…") con **Unir** y **Son
+  distintas**.
+- **Unir** confirma una sola vez:
+  - `unir_con_candidato`: crea UNA suscripción con los pagos de los dos (el
+    historial no repite un cobro del mismo día) y deja el otro candidato
+    confirmado en ella;
+  - `unir_con_suscripcion`: no crea otra; los pagos se agregan a la existente.
+  - 404 si el candidato o la suscripción son de otro usuario.
+- Los cobros siguientes de los dos caminos (EBANX ±10 % y `GOOGLE
+  *Crunchyroll`) se registran en esa misma suscripción.
+
+### 2. Una serie dentro de una mezcla de cobros (DiDi Club)
+
+**Hallazgo.** Santiago paga DiDi Club (18.900 COP al mes desde el 25/09/2026)
+y no se detectó: el SMS es **idéntico** al de un domicilio de DiDi Food
+("NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin" y, dos minutos después,
+"… 16.140,00 …"). Solo se distinguen por el monto y la periodicidad.
+
+**Solución: dos reglas** (iguales en `analizador_pagos.dart` y
+`services/detecciones.js`):
+
+1. Si **todos** los cobros de monto similar (±10 %) del comercio son
+   periódicos, es serie (la regla anterior: un gimnasio de $95.000 y luego
+   $99.900 sigue funcionando).
+2. Si no, se busca **la serie más larga del mismo monto** dentro de la mezcla:
+   2 o más cobros a ±1 % (±10 % si es un cobro convertido de USD, con
+   centavos) con periodicidad semanal, mensual o anual, aunque haya otros
+   cobros del mismo comercio en medio.
+
+**Huecos:** en la regla 2, dos cobros del mismo monto a 2 o 3 meses (56–66 o
+87–97 días) cuentan como serie mensual, porque a veces falta el SMS de un mes
+(YouTube, 21/06 y 21/08: 61 días). Solo meses: dos pedidos iguales a 14 días
+no deben parecer una suscripción semanal (el test lo detectó con un domicilio
+de $18.500 a 15 días de la suscripción).
+
+**Catálogo:** DiDi Club como servicio **ambiguo**, con alias "DiDi" y
+"DLO*DiDi" y precio de referencia 18.900. Con el alias, los SMS de DiDi Food
+se reconocen internamente como DiDi Club; solo se proponen por serie o por el
+valor exacto.
+
+**Ambiguos ya confirmados:** un cobro de un servicio ambiguo solo se registra
+en la suscripción (caso a) si es del **mismo monto** (±1 %, ±10 % si es
+convertido). Un domicilio de $16.140 con DiDi Club confirmado es compra
+normal: no va al historial, no avisa "Registramos un pago" ni "bajó de
+precio". Tampoco cuenta en `num_pagos` del candidato.
+
+**Compartir** propone un cobro aunque sea de un comercio desconocido con un
+solo pago (acción explícita del usuario; ya estaba, con su test).
+
+**Catálogo nuevo** (nombres y alias seguros, sin precios ni enlaces): Uber One
+("Uber One", no "Uber"), Meli+, Platzi, Duolingo (ambiguo: vende gemas
+sueltas), Deezer, ViX y Claro video. Amazon Prime ya estaba (alias de Prime
+Video).
+
+### 3. Servicios ambiguos que dejaron de proponerse → precio de referencia
+
+**Hallazgo.** En una cuenta nueva, la búsqueda solo propuso Claude y Spotify:
+YouTube Premium y Google One dejaron de salir por la regla de ambiguos (hito
+6). Los SMS reales no traen señal ("Bancolombia: Compraste $13.300,00 en
+GOOGLE YouTube…", sin "Premium") y tenían un mes sin SMS entre los dos cobros.
+Santiago también paga YouTube Premium a exactamente 13.300 COP.
+
+**Solución.**
+
+- **Precio de referencia de ambiguos:** si un cobro de un servicio ambiguo es
+  el valor exacto de su precio de referencia (±1 %), se propone aunque sea un
+  solo cobro, como pregunta: "**¿Es tu suscripción a YouTube Premium?**", con
+  el motivo "**Cobro por el valor exacto de YouTube Premium**" (en la tarjeta
+  y en el aviso del flujo B). Precios confirmados con SMS reales: YouTube
+  Premium 13.300, DiDi Club 18.900 y Crunchyroll 19.900 COP. Los demás, sin
+  precio.
+- **Huecos** en la serie (punto 2).
+- **Guardas con casos reales negativos:** "RAPPI COLOMBIA*DL" por $30.300 (un
+  pedido) no se propone como Rappi Pro; "Retiraste $70.000,00 en VIVA_ENVIG7"
+  no es un cobro; una compra suelta en Google Play ("GOOGLE *Clash Royale") no
+  se propone.
+- **Google One:** sin SMS real todavía; se probó con una serie mensual
+  simulada en el formato de Bancolombia (anotado en los tests).
+
+### Diagnóstico del último escaneo (solo debug)
+
+`AnalizadorPagos.diagnosticar(pagos)` agrupa los cobros por comercio (o por
+procesador) y da, para cada grupo, la **decisión y su motivo**:
+`servicioConocido`, `conSenal`, `precioReferencia`, `serie`,
+`ambiguoSinSenalNiPatron`, `procesadorSinPatron`, `patronRoto` (varios
+cobros parecidos sin periodicidad) y `compraSuelta`, más los **repetidos**
+(el mismo cobro por notificación e historial). `seleccionarParaEnviar` usa
+esa misma decisión, así el diagnóstico nunca contradice lo que sale del
+celular.
+
+- **Pantalla de depuración → "Último escaneo"**: por comercio, nombre
+  normalizado, banco, cantidad de cobros, montos, fechas y "SALE / NO SALE ·
+  motivo". Se calcula sobre los pagos guardados en el celular (los que deciden
+  qué sale) después de cada revisión de la cola y de cada búsqueda en el
+  historial.
+- **Logs de debug** (`adb logcat -s flutter:V`): una línea por comercio,
+  "SubTrackDeteccion escaneo: …".
+- Sin texto de los SMS: solo campos extraídos. En release no existe.
+
+### Migraciones y catálogo
+
+No hay migraciones nuevas. **Hay que volver a cargar el catálogo** (precios de
+YouTube Premium y DiDi Club, servicios nuevos):
+
+```powershell
+cd backend
+npm run db:guias
+npm run db:guias:nube
+```
+
+### Tests
+
+- Flutter: `deteccion_historial_test` (serie en la mezcla de DiDi, huecos de
+  YouTube, precio de referencia, guardas reales, diagnóstico),
+  `deteccion_resultados_test` ("¿Los unimos?", pregunta por precio),
+  `deteccion_lector_test` ("Último escaneo").
+- Backend: `detecciones.test.js` (mezcla de DiDi, 61 días, precio de
+  referencia, DiDi Club confirmado más un domicilio, Unir con candidato y con
+  suscripción, 404 ajeno, guardas reales).
+
+### Cómo probarlo en el Xiaomi
+
+Ver "Cómo probar (hito 7)".
 
 ## Parser (hito 2)
 
@@ -1490,6 +1629,57 @@ Con una suscripción "Netflix" de $44.900 creada, simula un cobro de Netflix y
 vuelve a la app: llega "Registramos un pago de $44.900 en Netflix". Con
 $49.900: "Netflix subió de $44.900 a $49.900".
 
+## Cómo probar (hito 7): duplicados, mezclas, precio de referencia y diagnóstico
+
+### Preparación
+
+```powershell
+cd backend
+npm run db:guias
+cd ..
+flutter build apk --debug
+adb install -r build\app\outputs\flutter-apk\app-completa-debug.apk
+```
+
+En otra terminal, los logs del diagnóstico:
+
+```powershell
+adb logcat -c
+adb logcat -s flutter:V | Select-String "escaneo"
+```
+
+### 1. Diagnóstico del escaneo (primero, para entender el resto)
+
+Haz la búsqueda en el historial (Perfil → Buscar suscripciones en mis SMS) y
+después abre **Perfil → Depuración: detección → Último escaneo**. Cada
+comercio dice cuántos cobros tiene, sus montos y fechas, y si **SALE** o **NO
+SALE** con el motivo. Si algo que esperabas no se propuso, ahí está la razón
+("Ambiguo sin señal, sin precio de referencia y sin serie", "Procesador sin
+patrón", "3 cobros de monto parecido, sin periodicidad"…).
+
+### 2. YouTube Premium y Google One
+
+En tu celular (cobros de $13.300 de "GOOGLE YouTube"): la pantalla 05 debe
+mostrar "**¿Es tu suscripción a YouTube Premium?**" con "Cobro por el valor
+exacto de YouTube Premium". En el diagnóstico, YouTube Premium: SALE · Cobro
+por el valor exacto. Los pedidos de Rappi deben salir como NO SALE.
+
+### 3. DiDi Club (celular de Santiago)
+
+Búsqueda en el historial: debe aparecer DiDi Club ($18.900). En el
+diagnóstico, DiDi Club con todos los cobros de DiDi (domicilios incluidos) y
+solo los de $18.900 como los que salen. Al confirmarla, un domicilio nuevo de
+otro monto no debe avisar nada.
+
+### 4. Crunchyroll duplicado (celular de Santiago)
+
+En la pantalla 05, toca "Es mía" en "Pago procesado por EBANX", escribe
+"Crunchyroll" (o toca el chip "¿Es Crunchyroll?") y guarda: debe preguntar "Ya
+tienes Crunchyroll en esta lista. ¿Los unimos?". **Unir** → al confirmar,
+queda UNA suscripción Crunchyroll (revisa el total del Resumen). Si ya la
+habías creado antes, la pregunta dice "…en tus suscripciones…" y los pagos se
+agregan a ella.
+
 ## Limitaciones conocidas
 
 - **La cola se procesa cuando la app se abre o vuelve a primer plano.** El
@@ -1528,7 +1718,14 @@ $49.900: "Netflix subió de $44.900 a $49.900".
   candidato nuevo del procesador, no como cambio de precio. Solo Crunchyroll
   tiene precio de referencia para la sugerencia "¿Es X?".
 - **Servicios ambiguos sin señal** (Rappi, Apple, PlayStation…) tardan al
-  menos dos cobros en proponerse.
+  menos dos cobros en proponerse, salvo que cobren el valor exacto de su
+  precio de referencia (solo YouTube Premium, DiDi Club y Crunchyroll tienen).
+- **DiDi:** un domicilio de exactamente $18.900 se propondría como "¿Es tu
+  suscripción a DiDi Club?" (se responde "No es mía"). Los SMS de DiDi Food
+  aparecen como "DiDi Club" en el diagnóstico.
+- **Huecos:** solo mensuales y en la serie de monto exacto; dos cobros
+  semanales con una semana sin SMS no forman serie.
+- **Google One** se probó con datos simulados (no hay SMS real todavía).
 - Los cobros publicados mientras el lector estaba detenido solo se recuperan
   si siguen en la barra de notificaciones.
 - Solo se reconocen los formatos de Bancolombia y Nequi probados con mensajes
