@@ -6,6 +6,7 @@ import 'package:timezone/data/latest_all.dart' as tz_datos;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../deteccion/candidato_suscripcion.dart';
+import '../deteccion/deteccion_service.dart';
 import '../models/suscripcion.dart';
 import '../utils/formato.dart';
 import 'suscripcion_service.dart';
@@ -35,6 +36,9 @@ class RecordatorioPlan {
 const int _horaAviso = 9; // 9:00 a. m.
 const int idResumenMensual = 1;
 const int idPrueba = 2;
+
+/// Avisos de pago registrado (T8): ids fijos, el siguiente reemplaza al anterior.
+const int idAvisoPagoRegistrado = 5;
 
 /// Calcula los recordatorios (RF06, RF07, RF12):
 /// - Próximo cobro: 9:00 del día (cobro - días de aviso).
@@ -119,6 +123,31 @@ List<RecordatorioPlan> planificarRecordatorios(
 ///   pendientes y los vuelve a programar.
 /// Cuerpo del aviso del flujo B: "Detectamos un cobro de $68.139 en Nequi."
 /// o "Detectamos 3 cobros de $89.900 con la misma periodicidad."
+/// Título del aviso del flujo B. Un cobro de un procesador no trae el
+/// servicio: "Pago procesado por EBANX" en vez de "¿…a EBANX?".
+String tituloAvisoCandidato(CandidatoSuscripcion c) =>
+    c.esDeProcesador ? c.titulo : '¿Tienes una suscripción a ${c.nombre}?';
+
+/// Avisos de pagos registrados en suscripciones existentes (T8): uno por pago
+/// ("Registramos un pago de $44.900 en Netflix" o "Netflix subió de A a B")
+/// o, si son 3 o más en la misma revisión, uno solo de resumen.
+List<({String titulo, String cuerpo})> avisosDePagosRegistrados(List<PagoRegistrado> pagos) {
+  if (pagos.length >= 3) {
+    return [(titulo: 'Pagos registrados', cuerpo: 'Registramos ${pagos.length} pagos en tus suscripciones')];
+  }
+  return [
+    for (final p in pagos)
+      if (p.montoAnterior case final antes?)
+        (
+          titulo: 'Cambio de precio',
+          cuerpo: '${p.servicio} ${p.monto > antes ? 'subió' : 'bajó'} de '
+              '${Formato.moneda(antes, p.moneda)} a ${Formato.moneda(p.monto, p.moneda)}',
+        )
+      else
+        (titulo: 'Pago registrado', cuerpo: 'Registramos un pago de ${Formato.moneda(p.monto, p.moneda)} en ${p.servicio}'),
+  ];
+}
+
 String textoAvisoCandidato(CandidatoSuscripcion c) {
   // Un descartado que se vuelve a proponer dice por qué (T7).
   if (c.motivo != null) return '${c.motivo}. Toca para confirmarla o descartarla.';
@@ -234,11 +263,27 @@ class RecordatoriosService {
     await _plugin.show(
       // Los recordatorios usan suscripción*10 + 1 o 2; aquí candidato*10 + 3.
       id: c.id * 10 + 3,
-      title: '¿Tienes una suscripción a ${c.nombre}?',
+      title: tituloAvisoCandidato(c),
       body: textoAvisoCandidato(c),
       notificationDetails: _detallesDeteccion,
       payload: '$prefijoCandidato${c.id}',
     );
+  }
+
+  /// T8: "Registramos un pago de X en Y" en el canal de detección. Solo lo
+  /// llama el flujo en vivo (main.dart), no la búsqueda en el historial.
+  Future<void> avisarPagosRegistrados(List<PagoRegistrado> pagos) async {
+    if (!disponible || pagos.isEmpty) return;
+    await inicializar();
+    for (final (i, aviso) in avisosDePagosRegistrados(pagos).indexed) {
+      await _plugin.show(
+        // Los recordatorios usan id*10 + 1, 2 y 3; estos, un rango aparte.
+        id: idAvisoPagoRegistrado + i,
+        title: aviso.titulo,
+        body: aviso.cuerpo,
+        notificationDetails: _detallesDeteccion,
+      );
+    }
   }
 
   // ─── Preferencias guardadas en el celular ───────────────────────────────

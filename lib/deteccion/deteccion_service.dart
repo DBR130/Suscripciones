@@ -7,6 +7,21 @@ import 'candidato_suscripcion.dart';
 /// "comercio_descartado" o "repetido".
 typedef ResultadoCompartido = ({String resultado, int? suscripcionId, int? candidatoId});
 
+/// Un pago detectado que el backend registró en una suscripción que ya
+/// existía (resultado "suscripcion_existente"). Si cambió el precio,
+/// [montoAnterior] es el de antes. Para el aviso "Registramos un pago…" (T8).
+class PagoRegistrado {
+  const PagoRegistrado({required this.servicio, required this.monto, required this.moneda, this.montoAnterior});
+
+  final String servicio;
+  final double monto;
+  final String moneda;
+  final double? montoAnterior;
+}
+
+/// Lo que respondió el backend a un envío de pagos.
+typedef ResultadoEnvio = ({List<CandidatoSuscripcion> nuevos, List<PagoRegistrado> registrados});
+
 /// Llamadas al backend de detecciones (/api/detecciones). Todas lanzan
 /// [ApiException] si fallan.
 class DeteccionService {
@@ -20,16 +35,28 @@ class DeteccionService {
   static const int maxPorEnvio = 100;
 
   /// Envía los pagos extraídos (ver huella_pago.dart). Devuelve los candidatos
-  /// creados en este envío, para avisar al usuario (flujo B).
-  Future<List<CandidatoSuscripcion>> enviarPagos(List<Map<String, Object>> pagos) async {
+  /// creados en este envío (flujo B) y los pagos que se registraron en una
+  /// suscripción existente (aviso "Registramos un pago…"). Los repetidos, las
+  /// compras normales y los de comercios descartados no se avisan.
+  Future<ResultadoEnvio> enviarPagos(List<Map<String, Object>> pagos) async {
     final nuevos = <CandidatoSuscripcion>[];
+    final registrados = <PagoRegistrado>[];
     for (var i = 0; i < pagos.length; i += maxPorEnvio) {
       final lote = pagos.sublist(i, i + maxPorEnvio > pagos.length ? pagos.length : i + maxPorEnvio);
       final json = await _api.post('$_ruta/pagos', {'pagos': lote});
       nuevos.addAll((json['candidatos_nuevos'] as List)
           .map((c) => CandidatoSuscripcion.fromJson(c as Map<String, dynamic>)));
+      for (final r in (json['resultados'] as List? ?? const []).cast<Map<String, dynamic>>()) {
+        if (r['resultado'] != 'suscripcion_existente' || r['nombre_servicio'] == null) continue;
+        registrados.add(PagoRegistrado(
+          servicio: r['nombre_servicio'] as String,
+          monto: (r['monto'] as num).toDouble(),
+          moneda: r['moneda'] as String,
+          montoAnterior: (r['monto_anterior'] as num?)?.toDouble(),
+        ));
+      }
     }
-    return nuevos;
+    return (nuevos: nuevos, registrados: registrados);
   }
 
   /// Un cobro que el usuario compartió con SubTrack a propósito: aunque sea de

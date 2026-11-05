@@ -48,11 +48,14 @@ class FakeDeteccionService implements DeteccionService {
     return respuestaCompartido;
   }
 
+  /// Pagos que el backend "registró" en suscripciones existentes (T8).
+  List<PagoRegistrado> registradosRespuesta = [];
+
   @override
-  Future<List<CandidatoSuscripcion>> enviarPagos(List<Map<String, Object>> pagos) async {
+  Future<ResultadoEnvio> enviarPagos(List<Map<String, Object>> pagos) async {
     if (error != null) throw ApiException(error!);
     enviados.addAll(pagos);
-    return nuevos;
+    return (nuevos: nuevos, registrados: registradosRespuesta);
   }
 
   @override

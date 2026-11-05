@@ -15,6 +15,7 @@ class ResultadoEscaneo {
     required this.cobros,
     required this.candidatosNuevos,
     this.enviados = 0,
+    this.registrados = const [],
   });
 
   static const vacio = ResultadoEscaneo(revisadas: 0, cobros: 0, candidatosNuevos: []);
@@ -31,6 +32,9 @@ class ResultadoEscaneo {
 
   /// Candidatos que el backend creó con este envío.
   final List<CandidatoSuscripcion> candidatosNuevos;
+
+  /// Pagos registrados en suscripciones existentes (aviso T8).
+  final List<PagoRegistrado> registrados;
 }
 
 /// Resultado de la búsqueda en el historial de SMS.
@@ -107,7 +111,13 @@ class ProcesadorDetecciones {
     if (cola.isEmpty) {
       // Puede haber pendientes de un envío anterior que falló.
       final r = await _enviarPendientes();
-      return ResultadoEscaneo(revisadas: 0, cobros: 0, enviados: r.enviados, candidatosNuevos: r.nuevos);
+      return ResultadoEscaneo(
+        revisadas: 0,
+        cobros: 0,
+        enviados: r.enviados,
+        candidatosNuevos: r.nuevos,
+        registrados: r.registrados,
+      );
     }
 
     // Sin catálogo (backend no disponible) no se procesa nada: la cola queda
@@ -123,6 +133,7 @@ class ProcesadorDetecciones {
       cobros: pagos.length,
       enviados: r.enviados,
       candidatosNuevos: r.nuevos,
+      registrados: r.registrados,
     );
   }
 
@@ -156,11 +167,12 @@ class ProcesadorDetecciones {
       ];
 
   /// Envía (en lotes de 100) lo que puede salir y aún no ha salido.
-  Future<({int enviados, List<CandidatoSuscripcion> nuevos})> _enviarPendientes() async {
+  Future<({int enviados, List<CandidatoSuscripcion> nuevos, List<PagoRegistrado> registrados})>
+      _enviarPendientes() async {
     final pendientes = await almacen.pendientesDeEnviar();
-    if (pendientes.isEmpty) return (enviados: 0, nuevos: <CandidatoSuscripcion>[]);
-    final nuevos = await servicio.enviarPagos([for (final p in pendientes) pagoParaEnviar(p)]);
+    if (pendientes.isEmpty) return (enviados: 0, nuevos: <CandidatoSuscripcion>[], registrados: <PagoRegistrado>[]);
+    final r = await servicio.enviarPagos([for (final p in pendientes) pagoParaEnviar(p)]);
     await almacen.marcarEnviados(pendientes);
-    return (enviados: pendientes.length, nuevos: nuevos);
+    return (enviados: pendientes.length, nuevos: r.nuevos, registrados: r.registrados);
   }
 }

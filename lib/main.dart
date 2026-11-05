@@ -163,6 +163,8 @@ class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
       for (final c in resultado.candidatosNuevos) {
         await recordatorios.avisarCandidato(c);
       }
+      // T8: "Registramos un pago de X en Y" (solo aquí, en el flujo en vivo).
+      await recordatorios.avisarPagosRegistrados(resultado.registrados);
     } catch (e) {
       // Sin conexión con el backend: la cola queda para la próxima vez.
       debugPrint('Detección en segundo plano: $e');
