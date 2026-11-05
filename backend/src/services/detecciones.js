@@ -52,6 +52,24 @@ const INTERVALOS = [
 ];
 
 /**
+ * Huecos: en una serie del mismo monto, 2 o 3 meses entre dos cobros (61 días)
+ * cuentan como mensual, porque a veces falta el SMS de un mes. Solo meses: dos
+ * pedidos iguales a 14 días no deben parecer una suscripción semanal. La misma
+ * tabla está en lib/deteccion/analizador_pagos.dart.
+ */
+const HUECOS = [
+  { frecuencia: 'mensual', min: 56, max: 66 },
+  { frecuencia: 'mensual', min: 87, max: 97 },
+];
+
+/**
+ * "Mismo monto" para buscar una serie dentro de una mezcla de cobros del
+ * mismo comercio: ±1 % en pesos enteros, ±10 % si es un cobro convertido de
+ * USD (con centavos).
+ */
+export const TOLERANCIA_MONTO_EXACTO = 0.01;
+
+/**
  * T7: un comercio descartado se vuelve a proponer (una sola vez) cuando
  * acumula al menos estos cobros periódicos de monto similar.
  */
@@ -84,8 +102,9 @@ const DIAS_MISMO_COBRO = 3;
  */
 export const MINUTOS_TOLERANCIA_SIN_FECHA = 5;
 
-export function frecuenciaDeIntervalo(dias) {
-  return INTERVALOS.find((i) => dias >= i.min && dias <= i.max)?.frecuencia ?? null;
+export function frecuenciaDeIntervalo(dias, { conHuecos = false } = {}) {
+  const tabla = conHuecos ? [...INTERVALOS, ...HUECOS] : INTERVALOS;
+  return tabla.find((i) => dias >= i.min && dias <= i.max)?.frecuencia ?? null;
 }
 
 /**
@@ -106,6 +125,33 @@ export function estimarFrecuencia(fechas) {
 
 export function montosSimilares(a, b) {
   return Math.abs(a - b) <= TOLERANCIA_MONTOS * Math.max(a, b);
+}
+
+export function mismoMonto(a, b) {
+  const tolerancia = esMontoConvertido(a) || esMontoConvertido(b) ? TOLERANCIA_MONTOS : TOLERANCIA_MONTO_EXACTO;
+  return Math.abs(a - b) <= tolerancia * Math.max(a, b);
+}
+
+/**
+ * La serie periódica más larga (2 o más fechas "AAAA-MM-DD" ordenadas), aunque
+ * haya otras fechas en medio: { frecuencia, cobros } o null. Igual que
+ * AnalizadorPagos.serieEnMezcla en el celular.
+ */
+export function serieMasLarga(fechas) {
+  let mejor = null;
+  for (const frecuencia of ['semanal', 'mensual', 'anual']) {
+    const largo = fechas.map(() => 1);
+    for (let j = 0; j < fechas.length; j += 1) {
+      for (let i = 0; i < j; i += 1) {
+        if (frecuenciaDeIntervalo(diasEntre(fechas[i], fechas[j]), { conHuecos: true }) === frecuencia) {
+          largo[j] = Math.max(largo[j], largo[i] + 1);
+        }
+      }
+    }
+    const max = Math.max(1, ...largo);
+    if (max >= 2 && (!mejor || max > mejor.cobros)) mejor = { frecuencia, cobros: max };
+  }
+  return mejor;
 }
 
 export function hayCambioDePrecio(anterior, nuevo) {
@@ -257,8 +303,15 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
        ORDER BY fecha, id`,
       [usuarioId, pago.comercio_normalizado, pago.moneda],
     )).rows;
+  // Dos reglas: todos los cobros de monto similar (±10 %) son periódicos (un
+  // gimnasio de $95.000 y luego $99.900); o, si los pedidos de montos
+  // parecidos rompen ese patrón, hay una serie del mismo monto (±1 %) dentro
+  // de la mezcla (DiDi Club entre domicilios de DiDi Food).
   const fechas = anteriores.filter((p) => montosSimilares(p.monto, monto)).map((p) => p.dia);
-  const frecuencia = estimarFrecuencia(fechas);
+  const enMezcla = estimarFrecuencia(fechas)
+    ? null
+    : serieMasLarga(anteriores.filter((p) => mismoMonto(p.monto, monto)).map((p) => p.dia));
+  const frecuencia = estimarFrecuencia(fechas) ?? enMezcla?.frecuencia ?? null;
   if (!desdeElPrimero && !frecuencia && !compartido) return { resultado: 'compra_normal' };
 
   return proponer(client, usuarioId, {
@@ -266,7 +319,7 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
     // Con un solo pago de un servicio conocido se asume mensual (lo más común).
     frecuencia: frecuencia ?? 'mensual',
     // Cobros periódicos de monto similar (para reabrir un descartado, T7).
-    cobrosPeriodicos: frecuencia ? fechas.length : 0,
+    cobrosPeriodicos: enMezcla ? enMezcla.cobros : (frecuencia ? fechas.length : 0),
   });
 }
 
@@ -319,7 +372,7 @@ async function esCobroRepetido(client, usuarioId, pago, aproximada) {
  */
 export async function purgarComprasNormales(client, usuarioId = null, guias = null) {
   const catalogo = guias ?? (await client.query(
-    'SELECT nombre_servicio, alias, es_generica FROM guias_cancelacion',
+    'SELECT nombre_servicio, alias, es_generica, es_ambigua FROM guias_cancelacion',
   )).rows;
   const sueltos = (await client.query(
     `SELECT id, usuario_id, comercio_normalizado, monto,
@@ -355,7 +408,12 @@ export function esDelCandidato(p, c, guias) {
   if (c.procesador) {
     return procesadorDe(p.comercio_normalizado) === c.procesador && montosSimilares(p.monto, c.monto);
   }
-  return mismoServicio(c.comercio_normalizado, p.comercio_normalizado, guias);
+  if (!mismoServicio(c.comercio_normalizado, p.comercio_normalizado, guias)) return false;
+  // Un comercio que vende de todo (desconocido o ambiguo): solo los cobros de
+  // monto similar son del candidato; los domicilios de DiDi Food no.
+  const { guia, esGenerica } = buscarGuia(c.comercio_normalizado, guias);
+  const vendeDeTodo = esGenerica || !guia || guia.es_ambigua;
+  return !vendeDeTodo || montosSimilares(p.monto, c.monto);
 }
 
 /**

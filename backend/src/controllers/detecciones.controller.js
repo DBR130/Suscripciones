@@ -57,15 +57,16 @@ export async function listarCandidatos(req, res) {
      ORDER BY c.creado_en DESC, c.id DESC`,
     [req.usuarioId, estados],
   );
-  // Los candidatos de un procesador cuentan sus pagos por procesador y monto
-  // (el comercio de cada pago es "Servicios Web Ebanx Co", no "EBANX").
-  if (rows.some((c) => c.procesador)) {
-    const pagos = (await query(
-      'SELECT comercio_normalizado, monto FROM pagos_detectados WHERE usuario_id = $1',
-      [req.usuarioId],
-    )).rows;
-    for (const c of rows.filter((x) => x.procesador)) {
-      c.num_pagos = pagos.filter((p) => esDelCandidato(p, c, [])).length;
+  // num_pagos con la misma regla de la retención (esDelCandidato): por
+  // procesador y monto, y sin los pedidos de otros montos de un comercio que
+  // vende de todo (los domicilios de DiDi Food no son cobros de la suscripción).
+  if (rows.length > 0) {
+    const [pagos, guias] = await Promise.all([
+      query('SELECT comercio_normalizado, monto FROM pagos_detectados WHERE usuario_id = $1', [req.usuarioId]),
+      query('SELECT nombre_servicio, alias, es_generica, es_ambigua FROM guias_cancelacion'),
+    ]);
+    for (const c of rows) {
+      c.num_pagos = pagos.rows.filter((p) => esDelCandidato(p, c, guias.rows)).length;
     }
   }
   res.json({ candidatos: rows });

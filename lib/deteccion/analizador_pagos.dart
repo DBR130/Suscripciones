@@ -26,17 +26,20 @@ class AnalizadorPagos {
   /// comercio y monto es el mismo cobro.
   static const toleranciaSinFecha = Duration(minutes: 5);
 
-  /// Días entre dos cobros para cada frecuencia (los mismos del backend). Se
-  /// aceptan huecos de 2 o 3 periodos (61 días = dos meses), porque a veces
-  /// falta el SMS de un mes.
+  /// Días entre dos cobros para cada frecuencia (los mismos del backend).
   static const _intervalos = [
     (frecuencia: 'semanal', min: 6, max: 8),
-    (frecuencia: 'semanal', min: 13, max: 15),
-    (frecuencia: 'semanal', min: 20, max: 22),
     (frecuencia: 'mensual', min: 26, max: 35),
+    (frecuencia: 'anual', min: 355, max: 375),
+  ];
+
+  /// Huecos: en una serie del mismo monto, 2 o 3 meses entre dos cobros
+  /// (61 días) cuentan como mensual, porque a veces falta el SMS de un mes.
+  /// Solo meses: dos pedidos iguales a 14 días no deben parecer una
+  /// suscripción semanal. La misma tabla está en services/detecciones.js.
+  static const _huecos = [
     (frecuencia: 'mensual', min: 56, max: 66),
     (frecuencia: 'mensual', min: 87, max: 97),
-    (frecuencia: 'anual', min: 355, max: 375),
   ];
 
   /// "Mismo monto" para buscar una serie dentro de una mezcla: ±1 % en pesos
@@ -75,8 +78,8 @@ class AnalizadorPagos {
     return unicos;
   }
 
-  static String? frecuenciaDeIntervalo(int dias) {
-    for (final i in _intervalos) {
+  static String? frecuenciaDeIntervalo(int dias, {bool conHuecos = false}) {
+    for (final i in [..._intervalos, if (conHuecos) ..._huecos]) {
       if (dias >= i.min && dias <= i.max) return i.frecuencia;
     }
     return null;
@@ -145,7 +148,7 @@ class AnalizadorPagos {
         final anterior = List<int?>.filled(mismos.length, null);
         for (var j = 0; j < mismos.length; j++) {
           for (var i = 0; i < j; i++) {
-            final f = frecuenciaDeIntervalo(_dias(mismos[i].fecha, mismos[j].fecha));
+            final f = frecuenciaDeIntervalo(_dias(mismos[i].fecha, mismos[j].fecha), conHuecos: true);
             if (f == frecuencia && largo[i] + 1 > largo[j]) {
               largo[j] = largo[i] + 1;
               anterior[j] = i;

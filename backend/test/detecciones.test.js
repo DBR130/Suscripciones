@@ -266,6 +266,35 @@ describe('endpoints de detecciones', () => {
       assert.equal(c.es_servicio_conocido, false);
     });
 
+    it('serie de monto exacto dentro de una mezcla de pedidos (DiDi Club, SMS reales)', async () => {
+      const auth = await crearUsuario();
+      const didi = {
+        comercio: 'DLO*DiDi Food CO Payin', comercio_normalizado: 'DiDi Food', banco: 'Nequi', fecha_del_mensaje: false,
+      };
+      const r = await enviar(auth, [
+        pago({ ...didi, monto: 18900, fecha: '2026-09-25T19:44:00' }),
+        pago({ ...didi, monto: 16140, fecha: '2026-09-25T19:46:00' }),
+        pago({ ...didi, monto: 18500, fecha: '2026-10-10T13:05:00' }),
+        pago({ ...didi, monto: 21000, fecha: '2026-10-14T20:30:00' }),
+        pago({ ...didi, monto: 18900, fecha: '2026-10-25T19:40:00' }),
+      ]);
+      assert.equal(r.candidatos_nuevos.length, 1);
+      assert.deepEqual(
+        [r.candidatos_nuevos[0].comercio_normalizado, r.candidatos_nuevos[0].monto, r.candidatos_nuevos[0].frecuencia_estimada],
+        ['DiDi Food', 18900, 'mensual'],
+      );
+    });
+
+    it('dos cobros iguales separados por dos meses (61 días) son serie mensual', async () => {
+      const auth = await crearUsuario();
+      const gym = { comercio: 'GIMNASIO LA 80', comercio_normalizado: 'Gimnasio La 80', monto: 99900 };
+      const r = await enviar(auth, [
+        pago({ ...gym, fecha: '2026-06-21T12:41:00' }),
+        pago({ ...gym, fecha: '2026-08-21T00:42:00' }),
+      ]);
+      assert.equal(r.candidatos_nuevos[0]?.frecuencia_estimada, 'mensual');
+    });
+
     it('detecta la frecuencia semanal', async () => {
       const auth = await crearUsuario();
       const lavado = { comercio: 'LAVASECO EL SOL', comercio_normalizado: 'Lavaseco El Sol', monto: 15000 };
