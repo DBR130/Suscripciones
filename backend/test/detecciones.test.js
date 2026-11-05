@@ -526,6 +526,58 @@ describe('endpoints de detecciones', () => {
     });
   });
 
+  describe('reapertura de descartados (T7)', () => {
+    const gym = { comercio: 'GIMNASIO LA 80', comercio_normalizado: 'Gimnasio La 80', monto: 99900 };
+
+    it('un descartado que acumula 3 cobros mensuales se propone de nuevo una sola vez', async () => {
+      const auth = await crearUsuario();
+      const { candidatos_nuevos: [c] } = await enviar(auth, [
+        pago({ ...gym, fecha: '2026-08-05T06:00:00' }),
+        pago({ ...gym, fecha: '2026-09-05T06:00:00' }),
+      ]);
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/descartar`).set(auth).expect(200);
+
+      // Tercer cobro mensual: se reabre, con el motivo.
+      let r = await enviar(auth, [pago({ ...gym, fecha: '2026-10-05T06:00:00' })]);
+      assert.equal(r.resultados[0].resultado, 'candidato_nuevo');
+      const [reabierto] = r.candidatos_nuevos;
+      assert.equal(reabierto.id, c.id);
+      assert.equal(reabierto.estado, 'pendiente');
+      assert.equal(reabierto.reabierto, true);
+      assert.equal(reabierto.motivo, 'Vimos 3 cobros mensuales de $99.900');
+
+      // Descartado otra vez: el cuarto cobro ya no lo reabre.
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/descartar`).set(auth).expect(200);
+      r = await enviar(auth, [pago({ ...gym, fecha: '2026-11-05T06:00:00' })]);
+      assert.equal(r.resultados[0].resultado, 'comercio_descartado');
+      assert.deepEqual(r.candidatos_nuevos, []);
+    });
+
+    it('la retención guarda los pagos de un descartado 400 días y borra los más viejos', async () => {
+      const auth = await crearUsuario();
+      const { rows: [u] } = await pool.query('SELECT id FROM usuarios WHERE correo = $1', [`detecta${contador}@prueba.com`]);
+      const { candidatos_nuevos: [c] } = await enviar(auth, [
+        pago({ ...gym, fecha: '2026-08-05T06:00:00' }),
+        pago({ ...gym, fecha: '2026-09-05T06:00:00' }),
+      ]);
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/descartar`).set(auth).expect(200);
+      // Uno de hace más de 400 días.
+      await pool.query(
+        `INSERT INTO pagos_detectados (usuario_id, comercio, comercio_normalizado, monto, moneda, fecha, banco, huella)
+         VALUES ($1, 'GIMNASIO LA 80', 'Gimnasio La 80', 99900, 'COP', NOW() - INTERVAL '401 days', 'Bancolombia', $2)`,
+        [u.id, 'e'.repeat(64)],
+      );
+      const { transaccion } = await import('../src/db.js');
+      const { purgarComprasNormales } = await import('../src/services/detecciones.js');
+      await transaccion((client) => purgarComprasNormales(client));
+      const { rows } = await pool.query(
+        'SELECT count(*)::int AS n FROM pagos_detectados WHERE usuario_id = $1',
+        [u.id],
+      );
+      assert.equal(rows[0].n, 2);
+    });
+  });
+
   describe('aislamiento entre usuarios', () => {
     it('nadie ve, confirma ni descarta candidatos de otro usuario', async () => {
       const ana = await crearUsuario();
@@ -642,12 +694,12 @@ describe('endpoints de detecciones', () => {
       assert.deepEqual(await pagosGuardados(u), ['Bodytech', 'Bodytech', 'HBO Max']);
     });
 
-    it('al descartar un candidato se borran sus pagos', async () => {
+    it('al descartar, sus pagos se conservan (hasta 400 días) para poder reabrirlo (T7)', async () => {
       const u = await usuarioNumerado();
       const { candidatos_nuevos: [c] } = await enviar(u.auth, [pago()]);
       assert.deepEqual(await pagosGuardados(u), ['Crunchyroll']);
       await request(app).post(`/api/detecciones/candidatos/${c.id}/descartar`).set(u.auth).expect(200);
-      assert.deepEqual(await pagosGuardados(u), []);
+      assert.deepEqual(await pagosGuardados(u), ['Crunchyroll']);
     });
 
     it('la tarea diaria borra las compras normales de todos los usuarios', async () => {

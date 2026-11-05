@@ -155,8 +155,9 @@ export async function restaurarCandidato(req, res) {
 }
 
 // POST /api/detecciones/candidatos/:id/descartar
-// El comercio no se vuelve a proponer, y sus pagos detectados se borran (ya
-// no hacen falta: no es una suscripción).
+// El comercio no se vuelve a proponer, salvo que acumule 3 cobros periódicos
+// (se reabre una sola vez, T7). Sus pagos se conservan hasta 400 días para
+// poder contarlos; purgarComprasNormales borra los más viejos.
 export async function descartarCandidato(req, res) {
   const id = idDeLaRuta(req);
   const candidato = await transaccion(async (client) => {

@@ -38,6 +38,29 @@ const INTERVALOS = [
   { frecuencia: 'anual', min: 355, max: 375 },
 ];
 
+/**
+ * T7: un comercio descartado se vuelve a proponer (una sola vez) cuando
+ * acumula al menos estos cobros periódicos de monto similar.
+ */
+export const COBROS_PARA_REABRIR = 3;
+
+/**
+ * T7: los pagos de un comercio descartado se conservan hasta estos días, para
+ * poder contar sus cobros (ver la sección de privacidad de docs/deteccion.md).
+ */
+export const DIAS_RETENCION_DESCARTADOS = 400;
+
+const PLURAL_FRECUENCIA = { semanal: 'semanales', mensual: 'mensuales', anual: 'anuales' };
+
+/** "$99.900" (COP) o "US$20,00" (USD), como Formato.moneda en la app. */
+function formatoMoneda(monto, moneda) {
+  const usd = moneda === 'USD';
+  const texto = new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: usd ? 2 : 0, maximumFractionDigits: usd ? 2 : 0,
+  }).format(monto);
+  return `${usd ? 'US$' : '$'}${texto}`;
+}
+
 /** Si ya hay un cobro registrado a ±3 días, el pago detectado es ese mismo. */
 const DIAS_MISMO_COBRO = 3;
 
@@ -99,7 +122,7 @@ export function siguienteCobro(ultimoPago, frecuencia, hoy) {
 }
 
 export const COLUMNAS_CANDIDATO = `id, comercio_normalizado, monto, moneda, frecuencia_estimada, estado,
-  suscripcion_id, es_servicio_conocido, banco, fecha_ultimo_pago, creado_en, procesador`;
+  suscripcion_id, es_servicio_conocido, banco, fecha_ultimo_pago, creado_en, procesador, reabierto, motivo`;
 
 /**
  * Procesa un lote de pagos detectados del usuario, en una transacción.
@@ -215,6 +238,8 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
     nombre, monto, moneda: pago.moneda, banco: pago.banco, dia, conocido, procesador,
     // Con un solo pago de un servicio conocido se asume mensual (lo más común).
     frecuencia: frecuencia ?? 'mensual',
+    // Cobros periódicos de monto similar (para reabrir un descartado, T7).
+    cobrosPeriodicos: frecuencia ? fechas.length : 0,
   });
 }
 
@@ -258,7 +283,8 @@ async function esCobroRepetido(client, usuarioId, pago, aproximada) {
 /**
  * Minimización de datos: borra los pagos detectados del usuario que no están
  * enlazados a una suscripción ni corresponden a un candidato pendiente o
- * confirmado (compras normales y comercios que el usuario descartó). Se
+ * confirmado (compras normales), y los de comercios descartados con más de
+ * 400 días. Se
  * llama al final de cada lote, al descartar un candidato y en la tarea
  * diaria (tareas.js).
  *
@@ -269,18 +295,25 @@ export async function purgarComprasNormales(client, usuarioId = null, guias = nu
     'SELECT nombre_servicio, alias, es_generica FROM guias_cancelacion',
   )).rows;
   const sueltos = (await client.query(
-    `SELECT id, usuario_id, comercio_normalizado, monto FROM pagos_detectados
+    `SELECT id, usuario_id, comercio_normalizado, monto,
+       fecha >= NOW() - make_interval(days => ${DIAS_RETENCION_DESCARTADOS}) AS reciente
+     FROM pagos_detectados
      WHERE suscripcion_id IS NULL AND ($1::int IS NULL OR usuario_id = $1)`,
     [usuarioId],
   )).rows;
   if (sueltos.length === 0) return 0;
   const vivos = (await client.query(
-    `SELECT usuario_id, comercio_normalizado, monto, procesador FROM candidatos_suscripcion
-     WHERE estado IN ('pendiente', 'confirmada') AND ($1::int IS NULL OR usuario_id = $1)`,
+    `SELECT usuario_id, comercio_normalizado, monto, procesador, estado FROM candidatos_suscripcion
+     WHERE ($1::int IS NULL OR usuario_id = $1)`,
     [usuarioId],
   )).rows;
   const borrar = sueltos
-    .filter((p) => !vivos.some((c) => c.usuario_id === p.usuario_id && esDelCandidato(p, c, catalogo)))
+    // Se conservan los de un candidato pendiente o confirmado, y los de uno
+    // descartado mientras tengan menos de 400 días (T7: para reabrirlo si
+    // acumula cobros).
+    .filter((p) => !vivos.some((c) => c.usuario_id === p.usuario_id
+      && (c.estado !== 'descartada' || p.reciente)
+      && esDelCandidato(p, c, catalogo)))
     .map((p) => p.id);
   if (borrar.length > 0) await client.query('DELETE FROM pagos_detectados WHERE id = ANY($1)', [borrar]);
   return borrar.length;
@@ -347,12 +380,12 @@ async function proponer(client, usuarioId, c) {
   // Un procesador puede tener varios candidatos: el de monto similar.
   const existente = c.procesador
     ? (await client.query(
-      `SELECT id, estado, suscripcion_id, monto FROM candidatos_suscripcion
+      `SELECT id, estado, suscripcion_id, monto, reabierto FROM candidatos_suscripcion
        WHERE usuario_id = $1 AND procesador = $2 ORDER BY id`,
       [usuarioId, c.procesador],
     )).rows.find((e) => montosSimilares(e.monto, c.monto))
     : (await client.query(
-      `SELECT id, estado, suscripcion_id FROM candidatos_suscripcion
+      `SELECT id, estado, suscripcion_id, reabierto FROM candidatos_suscripcion
        WHERE usuario_id = $1 AND lower(comercio_normalizado) = lower($2) AND procesador IS NULL`,
       [usuarioId, c.nombre],
     )).rows[0];
@@ -368,7 +401,23 @@ async function proponer(client, usuarioId, c) {
     );
     return { resultado: 'candidato_nuevo', candidato: rows[0] };
   }
-  if (existente.estado === 'descartada') return { resultado: 'comercio_descartado', candidatoId: existente.id };
+  if (existente.estado === 'descartada') {
+    // T7: se reabre una sola vez si acumuló un patrón claro.
+    if (existente.reabierto || c.cobrosPeriodicos < COBROS_PARA_REABRIR) {
+      return { resultado: 'comercio_descartado', candidatoId: existente.id };
+    }
+    const motivo = `Vimos ${c.cobrosPeriodicos} cobros ${PLURAL_FRECUENCIA[c.frecuencia]} de ${formatoMoneda(c.monto, c.moneda)}`;
+    const { rows } = await client.query(
+      `UPDATE candidatos_suscripcion SET
+         monto = $2, fecha_ultimo_pago = GREATEST(fecha_ultimo_pago, $3::date),
+         moneda = $4, frecuencia_estimada = $5, banco = $6,
+         estado = 'pendiente', reabierto = TRUE, motivo = $7
+       WHERE id = $1
+       RETURNING ${COLUMNAS_CANDIDATO}`,
+      [existente.id, c.monto, c.dia, c.moneda, c.frecuencia, c.banco, motivo],
+    );
+    return { resultado: 'candidato_nuevo', candidato: rows[0] };
+  }
   if (existente.estado === 'confirmada' && existente.suscripcion_id !== null) {
     return { resultado: 'ya_confirmado', candidatoId: existente.id };
   }
