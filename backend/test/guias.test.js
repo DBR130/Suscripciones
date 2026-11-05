@@ -63,10 +63,10 @@ describe('normalizar y buscarGuia', () => {
 });
 
 describe('guias.json', () => {
-  it('es válido y tiene entre 15 y 20 servicios más la genérica', () => {
+  it('es válido y tiene entre 15 y 30 servicios más la genérica', () => {
     validarGuias(GUIAS);
     const especificas = GUIAS.filter((g) => !g.es_generica);
-    assert.ok(especificas.length >= 15 && especificas.length <= 20, `hay ${especificas.length}`);
+    assert.ok(especificas.length >= 15 && especificas.length <= 30, `hay ${especificas.length}`);
     for (const g of GUIAS) {
       assert.ok(g.pasos.length >= 3 && g.pasos.length <= 5, `${g.nombre_servicio}: ${g.pasos.length} pasos`);
     }

@@ -127,6 +127,15 @@ export function montosSimilares(a, b) {
   return Math.abs(a - b) <= TOLERANCIA_MONTOS * Math.max(a, b);
 }
 
+/** Margen para "el valor exacto" del precio de referencia (±1 %). */
+export const TOLERANCIA_PRECIO_EXACTO = 0.01;
+
+/** true si el cobro (COP) es el precio de referencia de la guía (±1 %). */
+export function coincideConPrecio(guia, monto, moneda) {
+  const precio = guia?.precio_referencia_cop == null ? null : Number(guia.precio_referencia_cop);
+  return moneda === 'COP' && precio !== null && Math.abs(monto - precio) <= TOLERANCIA_PRECIO_EXACTO * precio;
+}
+
 export function mismoMonto(a, b) {
   const tolerancia = esMontoConvertido(a) || esMontoConvertido(b) ? TOLERANCIA_MONTOS : TOLERANCIA_MONTO_EXACTO;
   return Math.abs(a - b) <= tolerancia * Math.max(a, b);
@@ -212,7 +221,7 @@ export async function procesarPagos(usuarioId, pagos, { compartido = false } = {
     // (así no se crean dos candidatos ni se leen montos viejos).
     await client.query('SELECT 1 FROM usuarios WHERE id = $1 FOR UPDATE', [usuarioId]);
     const guias = (await client.query(
-      'SELECT nombre_servicio, alias, es_generica, es_ambigua FROM guias_cancelacion',
+      'SELECT nombre_servicio, alias, es_generica, es_ambigua, precio_referencia_cop FROM guias_cancelacion',
     )).rows;
     const suscripciones = (await client.query(
       `SELECT id, nombre_servicio, monto, moneda FROM suscripciones
@@ -262,10 +271,17 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
   const { id: pagoId, monto } = insertado.rows[0];
   const dia = pago.fecha.slice(0, 10);
 
+  const { guia, esGenerica } = buscarGuia(pago.comercio_normalizado, guias);
+  const conocido = !esGenerica && guia !== null;
+  const ambiguo = conocido && guia.es_ambigua;
+
   // a) Ya es una suscripción del usuario: por el nombre o, si el cobro es de
   // un procesador, por el candidato de ese procesador y monto similar que el
-  // usuario confirmó con el nombre real (T4).
-  const suscripcion = suscripciones.find((s) => mismoServicio(s.nombre_servicio, pago.comercio_normalizado, guias))
+  // usuario confirmó con el nombre real (T4). Si el servicio es ambiguo (DiDi,
+  // Rappi...), solo un cobro del mismo monto de la suscripción: un domicilio
+  // de $16.140 no es DiDi Club ni "bajó de precio".
+  const suscripcion = suscripciones.find((s) => mismoServicio(s.nombre_servicio, pago.comercio_normalizado, guias)
+    && (!ambiguo || mismoMonto(Number(s.monto), monto)))
     ?? await suscripcionDelProcesador(client, usuarioId, pago, suscripciones);
   if (suscripcion) {
     const montoAnterior = await registrarEnSuscripcion(client, suscripcion, pagoId, monto, pago.moneda, pago.fecha, dia);
@@ -279,11 +295,11 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
   }
 
   // b) Servicio conocido: candidato desde el primer pago. Si es ambiguo
-  // (Rappi, Apple, PlayStation...), solo con señal de suscripción; si no,
+  // (Rappi, Apple, PlayStation...), solo con señal de suscripción o por el
+  // valor exacto de su precio de referencia (YouTube a $13.300); si no,
   // necesita patrón como un comercio desconocido (caso c).
-  const { guia, esGenerica } = buscarGuia(pago.comercio_normalizado, guias);
-  const conocido = !esGenerica && guia !== null;
-  const desdeElPrimero = conocido && (!guia.es_ambigua || tieneSenalDeSuscripcion(pago.comercio));
+  const porPrecio = ambiguo && coincideConPrecio(guia, monto, pago.moneda);
+  const desdeElPrimero = conocido && (!ambiguo || tieneSenalDeSuscripcion(pago.comercio) || porPrecio);
   // Procesador de pagos (EBANX, PayU...): el SMS no trae el servicio. Sus
   // cobros se agrupan por procesador y se separan por monto (T3).
   const procesador = conocido ? null : procesadorDe(pago.comercio_normalizado);
@@ -320,6 +336,7 @@ async function procesarPago(client, usuarioId, pago, guias, suscripciones, compa
     frecuencia: frecuencia ?? 'mensual',
     // Cobros periódicos de monto similar (para reabrir un descartado, T7).
     cobrosPeriodicos: enMezcla ? enMezcla.cobros : (frecuencia ? fechas.length : 0),
+    motivo: porPrecio && !frecuencia ? `Cobro por el valor exacto de ${guia.nombre_servicio}` : null,
   });
 }
 
@@ -409,11 +426,13 @@ export function esDelCandidato(p, c, guias) {
     return procesadorDe(p.comercio_normalizado) === c.procesador && montosSimilares(p.monto, c.monto);
   }
   if (!mismoServicio(c.comercio_normalizado, p.comercio_normalizado, guias)) return false;
-  // Un comercio que vende de todo (desconocido o ambiguo): solo los cobros de
-  // monto similar son del candidato; los domicilios de DiDi Food no.
+  // Un comercio que vende de todo: en un servicio ambiguo (DiDi Club), solo
+  // los cobros del mismo monto (los domicilios de DiDi Food no); en un
+  // comercio desconocido, los de monto similar (un gimnasio que sube de
+  // $95.000 a $99.900).
   const { guia, esGenerica } = buscarGuia(c.comercio_normalizado, guias);
-  const vendeDeTodo = esGenerica || !guia || guia.es_ambigua;
-  return !vendeDeTodo || montosSimilares(p.monto, c.monto);
+  if (!esGenerica && guia?.es_ambigua) return mismoMonto(Number(p.monto), Number(c.monto));
+  return (!esGenerica && guia !== null) || montosSimilares(p.monto, c.monto);
 }
 
 /**
@@ -480,10 +499,11 @@ async function proponer(client, usuarioId, c) {
     const { rows } = await client.query(
       `INSERT INTO candidatos_suscripcion
          (usuario_id, comercio_normalizado, monto, moneda, frecuencia_estimada, es_servicio_conocido,
-          banco, fecha_ultimo_pago, procesador)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          banco, fecha_ultimo_pago, procesador, motivo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING ${COLUMNAS_CANDIDATO}`,
-      [usuarioId, c.nombre, c.monto, c.moneda, c.frecuencia, c.conocido, c.banco, c.dia, c.procesador ?? null],
+      [usuarioId, c.nombre, c.monto, c.moneda, c.frecuencia, c.conocido, c.banco, c.dia, c.procesador ?? null,
+        c.motivo ?? null],
     );
     return { resultado: 'candidato_nuevo', candidato: rows[0] };
   }

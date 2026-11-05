@@ -204,6 +204,48 @@ describe('endpoints de detecciones', () => {
       assert.equal(r.candidatos_nuevos[0].es_servicio_conocido, true);
     });
 
+    it('ambiguo por el valor exacto de su precio de referencia: se propone con un solo cobro (SMS reales)', async () => {
+      const auth = await crearUsuario();
+      const youtube = { comercio: 'GOOGLE YouTube', comercio_normalizado: 'YouTube Premium' };
+      let r = await enviar(auth, [pago({ ...youtube, monto: 13300, fecha: '2026-06-21T12:41:00' })]);
+      assert.equal(r.resultados[0].resultado, 'candidato_nuevo');
+      assert.equal(r.candidatos_nuevos[0].motivo, 'Cobro por el valor exacto de YouTube Premium');
+
+      const otro = await crearUsuario();
+      r = await enviar(otro, [pago({ ...youtube, monto: 26900, fecha: '2026-07-02T21:00:00' })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal'); // un alquiler de película
+
+      const didi = { comercio: 'DLO*DiDi Food CO Payin', comercio_normalizado: 'DiDi Club', banco: 'Nequi' };
+      r = await enviar(otro, [pago({ ...didi, monto: 16140, fecha: '2026-09-25T19:46:00' })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal');
+      r = await enviar(otro, [pago({ ...didi, monto: 18900, fecha: '2026-09-25T19:44:00' })]);
+      assert.equal(r.candidatos_nuevos[0]?.motivo, 'Cobro por el valor exacto de DiDi Club');
+    });
+
+    it('DiDi Club confirmado: un domicilio de otro monto es compra normal, sin aviso (SMS reales)', async () => {
+      const auth = await crearUsuario();
+      const didi = {
+        comercio: 'DLO*DiDi Food CO Payin', comercio_normalizado: 'DiDi Club', banco: 'Nequi', fecha_del_mensaje: false,
+      };
+      const r1 = await enviar(auth, [
+        pago({ ...didi, monto: 18900, fecha: '2026-09-25T19:44:00' }),
+        pago({ ...didi, monto: 16140, fecha: '2026-09-25T19:46:00' }),
+        pago({ ...didi, monto: 18500, fecha: '2026-10-10T13:05:00' }),
+        pago({ ...didi, monto: 18900, fecha: '2026-10-25T19:40:00' }),
+      ]);
+      const [c] = r1.candidatos_nuevos;
+      // Los domicilios no son cobros del candidato.
+      assert.equal((await candidatos(auth))[0].num_pagos, 2);
+      await request(app).post(`/api/detecciones/candidatos/${c.id}/confirmar`).set(auth).expect(201);
+
+      let r = await enviar(auth, [pago({ ...didi, monto: 16140, fecha: '2026-11-03T20:10:00' })]);
+      assert.equal(r.resultados[0].resultado, 'compra_normal');
+      assert.equal(r.resultados[0].nombre_servicio, null);
+      r = await enviar(auth, [pago({ ...didi, monto: 18900, fecha: '2026-11-25T19:40:00' })]);
+      assert.equal(r.resultados[0].resultado, 'suscripcion_existente');
+      assert.equal(r.resultados[0].cambio_precio, false);
+    });
+
     it('un servicio ambiguo con señal se propone desde el primer pago (T2)', async () => {
       const auth = await crearUsuario();
       const r = await enviar(auth, [pago({ comercio: 'RAPPI PRO', comercio_normalizado: 'Rappi Pro', monto: 24900 })]);
@@ -240,9 +282,9 @@ describe('endpoints de detecciones', () => {
   });
 
   describe('caso c: comercio desconocido', () => {
-    it('DiDi Food con un solo pago (o pagos irregulares) es una compra normal', async () => {
+    it('una tienda con un solo pago (o pagos irregulares) es una compra normal', async () => {
       const auth = await crearUsuario();
-      const didi = { comercio: 'DIDI FOOD', comercio_normalizado: 'Didi Food', monto: 18900 };
+      const didi = { comercio: 'TIENDAS D1', comercio_normalizado: 'Tiendas D1', monto: 18900 };
       let r = await enviar(auth, [pago({ ...didi, fecha: '2026-10-30T13:10:00' })]);
       assert.equal(r.resultados[0].resultado, 'compra_normal');
       r = await enviar(auth, [pago({ ...didi, fecha: '2026-11-02T20:00:00', monto: 17500 })]);
@@ -281,7 +323,8 @@ describe('endpoints de detecciones', () => {
       assert.equal(r.candidatos_nuevos.length, 1);
       assert.deepEqual(
         [r.candidatos_nuevos[0].comercio_normalizado, r.candidatos_nuevos[0].monto, r.candidatos_nuevos[0].frecuencia_estimada],
-        ['DiDi Food', 18900, 'mensual'],
+        // Con el alias "DiDi" del catálogo, es el servicio (ambiguo) DiDi Club.
+        ['DiDi Club', 18900, 'mensual'],
       );
     });
 
@@ -701,7 +744,7 @@ describe('endpoints de detecciones', () => {
 
     it('con la fecha del propio mensaje en los dos, dos compras a minutos distintos son dos', async () => {
       const auth = await crearUsuario();
-      const didi = { comercio: 'DIDI FOOD', comercio_normalizado: 'Didi Food', monto: 18900 };
+      const didi = { comercio: 'TIENDAS D1', comercio_normalizado: 'Tiendas D1', monto: 18900 };
       const r = await enviar(auth, [
         pago({ ...didi, fecha: '2026-10-30T13:10:00' }),
         pago({ ...didi, fecha: '2026-10-30T13:12:00' }),
@@ -737,7 +780,7 @@ describe('endpoints de detecciones', () => {
 
     it('una compra puntual se responde pero no se guarda', async () => {
       const u = await usuarioNumerado();
-      const r = await enviar(u.auth, [pago({ comercio: 'DIDI FOOD', comercio_normalizado: 'Didi Food', monto: 18900 })]);
+      const r = await enviar(u.auth, [pago({ comercio: 'TIENDAS D1', comercio_normalizado: 'Tiendas D1', monto: 18900 })]);
       assert.equal(r.resultados[0].resultado, 'compra_normal');
       assert.deepEqual(await pagosGuardados(u), []);
     });
@@ -768,7 +811,7 @@ describe('endpoints de detecciones', () => {
       // Una compra normal guardada antes de esta versión.
       await pool.query(
         `INSERT INTO pagos_detectados (usuario_id, comercio, comercio_normalizado, monto, moneda, fecha, banco, huella)
-         VALUES ($1, 'DIDI FOOD', 'Didi Food', 18900, 'COP', '2026-10-30T13:10:00', 'Bancolombia', $2)`,
+         VALUES ($1, 'TIENDAS D1', 'Tiendas D1', 18900, 'COP', '2026-10-30T13:10:00', 'Bancolombia', $2)`,
         [usuario.id, 'f'.repeat(64)],
       );
       const { transaccion } = await import('../src/db.js');
