@@ -42,6 +42,12 @@ object CanalDeteccion {
                     )
                 }
                 "abrirAjustesAcceso" -> result.success(abrirAjustesAcceso(activity, componente))
+                // Turno compartido con la tarea de fondo (TurnoDeteccion).
+                "tomarTurno" -> result.success(TurnoDeteccion.tomar(call.argument<String>("quien") ?: "app"))
+                "soltarTurno" -> {
+                    TurnoDeteccion.soltar(call.argument<String>("quien") ?: "app")
+                    result.success(null)
+                }
                 "reconectar" -> {
                     // Permiso concedido pero lector desconectado (MIUI lo detuvo, o
                     // Android no lo reenlazó tras actualizar la app): reconexión
