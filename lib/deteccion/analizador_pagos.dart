@@ -26,12 +26,30 @@ class AnalizadorPagos {
   /// comercio y monto es el mismo cobro.
   static const toleranciaSinFecha = Duration(minutes: 5);
 
-  /// Días entre dos cobros para cada frecuencia (los mismos del backend).
+  /// Días entre dos cobros para cada frecuencia (los mismos del backend). Se
+  /// aceptan huecos de 2 o 3 periodos (61 días = dos meses), porque a veces
+  /// falta el SMS de un mes.
   static const _intervalos = [
     (frecuencia: 'semanal', min: 6, max: 8),
+    (frecuencia: 'semanal', min: 13, max: 15),
+    (frecuencia: 'semanal', min: 20, max: 22),
     (frecuencia: 'mensual', min: 26, max: 35),
+    (frecuencia: 'mensual', min: 56, max: 66),
+    (frecuencia: 'mensual', min: 87, max: 97),
     (frecuencia: 'anual', min: 355, max: 375),
   ];
+
+  /// "Mismo monto" para buscar una serie dentro de una mezcla: ±1 % en pesos
+  /// enteros; ±10 % si es un cobro convertido de USD (con centavos), porque la
+  /// tasa del dólar lo mueve cada mes.
+  static const toleranciaMontoExacto = 0.01;
+
+  static bool _esConvertido(double monto) => (monto * 100).round() % 100 != 0;
+
+  static bool mismoMonto(double a, double b) {
+    final tolerancia = _esConvertido(a) || _esConvertido(b) ? toleranciaMontos : toleranciaMontoExacto;
+    return (a - b).abs() <= tolerancia * (a > b ? a : b);
+  }
 
   /// true si [a] y [b] son el mismo cobro llegado por caminos distintos
   /// (notificación, historial de SMS o compartir).
@@ -98,15 +116,53 @@ class AnalizadorPagos {
       // Ambiguo: los cobros con señal ("RAPPI PRO", "YouTubePremium") salen
       // solos; el resto, solo si forma una serie periódica.
       if (ambiguo) seleccion.addAll(grupo.where((p) => p.indicaSuscripcion));
-      // Comercio desconocido: series de montos similares que sean periódicas.
+      // Comercio desconocido: series de montos similares (±10 %) que sean
+      // periódicas en su totalidad (un gimnasio de $95.000 y luego $99.900)...
       for (final serie in _seriesPorMonto(grupo)) {
         if (estimarFrecuencia([for (final p in serie) p.fecha]) != null) {
           seleccion.addAll(serie.where((p) => !seleccion.contains(p)));
         }
       }
+      // ...o, si los pedidos de montos parecidos rompen ese patrón, una serie de
+      // monto exacto dentro de la mezcla (DiDi Club entre domicilios de DiDi Food).
+      seleccion.addAll(serieEnMezcla(grupo).where((p) => !seleccion.contains(p)));
     }
     seleccion.sort((a, b) => a.fecha.compareTo(b.fecha));
     return seleccion;
+  }
+
+  /// La serie periódica más larga (2 o más cobros) de un mismo monto
+  /// ([mismoMonto]) dentro de [grupo], aunque haya otros cobros del mismo
+  /// comercio en medio. Vacía si no hay.
+  static List<PagoExtraido> serieEnMezcla(List<PagoExtraido> grupo) {
+    final ordenados = [...grupo]..sort((a, b) => a.fecha.compareTo(b.fecha));
+    var mejor = <PagoExtraido>[];
+    for (final ancla in ordenados) {
+      final mismos = ordenados.where((p) => mismoMonto(ancla.monto, p.monto)).toList();
+      for (final frecuencia in const ['semanal', 'mensual', 'anual']) {
+        // Cadena más larga en la que cada salto es de esa frecuencia.
+        final largo = List.filled(mismos.length, 1);
+        final anterior = List<int?>.filled(mismos.length, null);
+        for (var j = 0; j < mismos.length; j++) {
+          for (var i = 0; i < j; i++) {
+            final f = frecuenciaDeIntervalo(_dias(mismos[i].fecha, mismos[j].fecha));
+            if (f == frecuencia && largo[i] + 1 > largo[j]) {
+              largo[j] = largo[i] + 1;
+              anterior[j] = i;
+            }
+          }
+        }
+        for (var j = 0; j < mismos.length; j++) {
+          if (largo[j] < 2 || largo[j] <= mejor.length) continue;
+          final cadena = <PagoExtraido>[];
+          for (int? k = j; k != null; k = anterior[k]) {
+            cadena.insert(0, mismos[k]);
+          }
+          mejor = cadena;
+        }
+      }
+    }
+    return mejor;
   }
 
   /// Agrupa por monto: cada pago va a la primera serie cuyo primer monto sea

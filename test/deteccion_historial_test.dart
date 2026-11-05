@@ -94,6 +94,29 @@ void main() {
       expect(AnalizadorPagos.seleccionarParaEnviar([pagos.first]), isEmpty);
     });
 
+    test('serie de monto exacto dentro de una mezcla de pedidos (DiDi Club, SMS reales)', () {
+      PagoExtraido didi(String monto, DateTime llegada) =>
+          cobro('NEQUI: Pagaste $monto en DLO*DiDi Food CO Payin', llegada);
+      final suscripcion1 = didi('18.900,00', DateTime(2026, 9, 25, 19, 44));
+      final suscripcion2 = didi('18.900,00', DateTime(2026, 10, 25, 19, 40));
+      final pagos = [
+        suscripcion1,
+        didi('16.140,00', DateTime(2026, 9, 25, 19, 46)), // domicilio
+        didi('18.500,00', DateTime(2026, 10, 10, 13, 5)), // domicilio de monto parecido
+        didi('21.000,00', DateTime(2026, 10, 14, 20, 30)),
+        suscripcion2,
+      ];
+      // Solo salen los dos cobros de la serie; los domicilios se quedan en el celular.
+      expect(AnalizadorPagos.seleccionarParaEnviar(pagos), [suscripcion1, suscripcion2]);
+    });
+
+    test('una serie con un mes sin SMS (61 días) también cuenta (YouTube, SMS reales)', () {
+      final junio = cobro(r'Bancolombia: Compraste $13.300,00 en GOOGLE YouTube con tu T.Deb *0000, el 21/06/2026 a las 12:41.');
+      final agosto = cobro(r'Bancolombia: Compraste $13.300,00 en GOOGLE YouTube con tu T.Deb *0000, el 21/08/2026 a las 00:42.');
+      expect(junio.servicio, 'YouTube Premium');
+      expect(AnalizadorPagos.seleccionarParaEnviar([junio, agosto]), [junio, agosto]);
+    });
+
     test('una compra puntual no sale', () {
       final didi = cobro(bancolombia('DIDI FOOD', '18.900,00', '30/10/2026'));
       expect(AnalizadorPagos.seleccionarParaEnviar([didi]), isEmpty);
