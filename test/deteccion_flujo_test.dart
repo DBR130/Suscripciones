@@ -34,7 +34,7 @@ class FakeDeteccionService implements DeteccionService {
   List<CandidatoSuscripcion> nuevos;
   String? error;
   final List<Map<String, Object>> enviados = [];
-  final List<(int, double?, Frecuencia?)> confirmados = [];
+  final List<(int, double?, Frecuencia?, String?)> confirmados = [];
   final List<int> descartados = [];
 
   /// Lo que responde a un cobro compartido, y los que recibió.
@@ -62,8 +62,8 @@ class FakeDeteccionService implements DeteccionService {
   }
 
   @override
-  Future<Suscripcion> confirmar(int id, {double? monto, Frecuencia? frecuencia}) async {
-    confirmados.add((id, monto, frecuencia));
+  Future<Suscripcion> confirmar(int id, {double? monto, Frecuencia? frecuencia, String? nombre}) async {
+    confirmados.add((id, monto, frecuencia, nombre));
     return Suscripcion(
       id: id,
       nombreServicio: 'X',
@@ -85,7 +85,8 @@ VigilanteDeteccion vigilanteCorto() => VigilanteDeteccion(
       intervalo: const Duration(milliseconds: 50),
     );
 
-CandidatoSuscripcion candidato(int id, String nombre, double monto, {int pagos = 1}) => CandidatoSuscripcion(
+CandidatoSuscripcion candidato(int id, String nombre, double monto, {int pagos = 1, String? procesador}) =>
+    CandidatoSuscripcion(
       id: id,
       nombre: nombre,
       monto: monto,
@@ -93,8 +94,9 @@ CandidatoSuscripcion candidato(int id, String nombre, double monto, {int pagos =
       frecuencia: Frecuencia.mensual,
       fechaUltimoPago: DateTime(2026, 10, 23),
       banco: 'Bancolombia',
-      esServicioConocido: true,
+      esServicioConocido: procesador == null,
       numPagos: pagos,
+      procesador: procesador,
     );
 
 void main() {
@@ -453,9 +455,9 @@ void main() {
       expect(find.text('Confirmar 1 suscripción'), findsOneWidget);
 
       // Corrige Crunchyroll: otro monto y anual.
-      await tester.tap(find.byTooltip('Corregir monto y frecuencia').first);
+      await tester.tap(find.byTooltip('Corregir nombre, monto y frecuencia').first);
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), '21.900');
+      await tester.enterText(find.byKey(const Key('campo-monto')), '21.900');
       await tester.tap(find.text('Anual'));
       await tester.tap(find.text('Guardar corrección'));
       await tester.pumpAndSettle();
@@ -464,7 +466,7 @@ void main() {
 
       await tester.tap(find.text('Confirmar 1 suscripción'));
       await tester.pumpAndSettle();
-      expect(servicio.confirmados, [(1, 21900.0, Frecuencia.anual)]);
+      expect(servicio.confirmados, [(1, 21900.0, Frecuencia.anual, null)]);
       expect(servicio.descartados, [2]);
       expect(find.text('DASHBOARD'), findsOneWidget);
     });
@@ -478,7 +480,7 @@ void main() {
       expect(find.text('PRIMERA DETECCIÓN'), findsOneWidget);
       await tester.tap(find.text('Confirmar 1 suscripción'));
       await tester.pumpAndSettle();
-      expect(servicio.confirmados, [(1, null, null)]);
+      expect(servicio.confirmados, [(1, null, null, null)]);
       expect(find.text('PREFERENCIAS'), findsOneWidget);
     });
 

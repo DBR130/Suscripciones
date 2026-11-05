@@ -193,6 +193,7 @@ class Routers {
             inicio: _inicio(state),
             recordatorios: recordatorios,
             suscripcionService: suscripcionService,
+            cargarCatalogo: suscripcionService.catalogoServicios,
           ),
         ),
         GoRoute(

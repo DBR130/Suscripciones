@@ -13,6 +13,7 @@ class CandidatoSuscripcion {
     this.banco = '',
     this.esServicioConocido = false,
     this.numPagos = 1,
+    this.procesador,
   });
 
   final int id;
@@ -31,6 +32,15 @@ class CandidatoSuscripcion {
   /// Cuántos cobros de este comercio se han detectado.
   final int numPagos;
 
+  /// Procesador de pagos ("EBANX") si el SMS no traía el servicio: el
+  /// usuario debe decir qué servicio es antes de confirmar.
+  final String? procesador;
+
+  bool get esDeProcesador => procesador != null;
+
+  /// "Pago procesado por EBANX" o el nombre del comercio.
+  String get titulo => esDeProcesador ? 'Pago procesado por $procesador' : nombre;
+
   factory CandidatoSuscripcion.fromJson(Map<String, dynamic> json) => CandidatoSuscripcion(
         id: json['id'] as int,
         nombre: json['comercio_normalizado'] as String,
@@ -42,6 +52,7 @@ class CandidatoSuscripcion {
         esServicioConocido: json['es_servicio_conocido'] as bool? ?? false,
         // candidatos_nuevos (al enviar pagos) no trae el conteo.
         numPagos: json['num_pagos'] as int? ?? 1,
+        procesador: json['procesador'] as String?,
       );
 
   /// "3 cobros detectados" / "1 cobro detectado".

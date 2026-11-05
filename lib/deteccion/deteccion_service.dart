@@ -56,10 +56,12 @@ class DeteccionService {
         .toList();
   }
 
-  /// Crea la suscripción (origen "notificacion"). [monto] y [frecuencia] son
-  /// las correcciones del usuario; lo que no se envía sale del candidato.
-  Future<Suscripcion> confirmar(int id, {double? monto, Frecuencia? frecuencia}) async {
+  /// Crea la suscripción (origen "notificacion"). [monto], [frecuencia] y
+  /// [nombre] son las correcciones del usuario; lo que no se envía sale del
+  /// candidato.
+  Future<Suscripcion> confirmar(int id, {double? monto, Frecuencia? frecuencia, String? nombre}) async {
     final json = await _api.post('$_ruta/candidatos/$id/confirmar', {
+      'nombre_servicio': ?nombre,
       if (monto != null) 'monto': monto.toStringAsFixed(2),
       if (frecuencia != null) 'frecuencia': frecuencia.valor,
     });

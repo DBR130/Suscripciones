@@ -16,6 +16,7 @@ import '../widgets/app_header.dart';
 import '../widgets/estado_vacio.dart';
 import '../widgets/logo_servicio.dart';
 import 'candidato_suscripcion.dart';
+import 'catalogo_servicios.dart';
 import 'deteccion_service.dart';
 import 'parser_pagos.dart';
 
@@ -31,9 +32,14 @@ class ResultadosDeteccionPage extends StatefulWidget {
     this.inicio = false,
     this.recordatorios,
     this.suscripcionService,
+    this.cargarCatalogo,
   });
 
   final DeteccionService servicio;
+
+  /// Nombres del catálogo para sugerir mientras se escribe el nombre del
+  /// servicio (GET /api/guias). Sin él, la hoja no sugiere nada.
+  final Future<CatalogoServicios> Function()? cargarCatalogo;
 
   /// Viene del registro: al terminar sigue la pantalla 06 (si no, el dashboard).
   final bool inicio;
@@ -54,13 +60,28 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   /// Por candidato: true = "Es mía" (por defecto), false = "No es mía".
   final Map<int, bool> _esMia = {};
 
-  /// Correcciones del usuario (monto y frecuencia) antes de confirmar.
-  final Map<int, ({double monto, Frecuencia frecuencia})> _correccion = {};
+  /// Correcciones del usuario (monto, frecuencia y nombre) antes de confirmar.
+  final Map<int, Correccion> _correccion = {};
+
+  /// Nombres del catálogo para las sugerencias de la hoja.
+  List<String> _nombresCatalogo = const [];
 
   @override
   void initState() {
     super.initState();
     _cargar();
+    _cargarCatalogo();
+  }
+
+  Future<void> _cargarCatalogo() async {
+    try {
+      final catalogo = await widget.cargarCatalogo?.call();
+      if (catalogo != null && mounted) {
+        setState(() => _nombresCatalogo = [for (final s in catalogo.servicios) s.nombre]);
+      }
+    } on ApiException {
+      // Sin sugerencias: el usuario igual puede escribir el nombre.
+    }
   }
 
   Future<void> _cargar() async {
@@ -76,6 +97,18 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   bool _mia(CandidatoSuscripcion c) => _esMia[c.id] ?? true;
   double _monto(CandidatoSuscripcion c) => _correccion[c.id]?.monto ?? c.monto;
   Frecuencia _frecuencia(CandidatoSuscripcion c) => _correccion[c.id]?.frecuencia ?? c.frecuencia;
+  String? _nombre(CandidatoSuscripcion c) => _correccion[c.id]?.nombre;
+
+  /// Un candidato de procesador marcado "Es mía" todavía sin nombre.
+  bool _faltaNombre(CandidatoSuscripcion c) => c.esDeProcesador && _nombre(c) == null;
+
+  void _cambiarEsMia(CandidatoSuscripcion c, bool mia) {
+    if (mia && _faltaNombre(c)) {
+      _corregir(c);
+      return;
+    }
+    setState(() => _esMia[c.id] = mia);
+  }
 
   int get _confirmadas => (_candidatos ?? const []).where(_mia).length;
 
@@ -85,25 +118,38 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
         final n => 'Confirmar $n suscripciones',
       };
 
-  Future<void> _corregir(CandidatoSuscripcion c) async {
-    final r = await showModalBottomSheet<({double monto, Frecuencia frecuencia})>(
+  /// Abre la hoja de corrección. Devuelve true si el usuario guardó.
+  Future<bool> _corregir(CandidatoSuscripcion c) async {
+    final r = await showModalBottomSheet<Correccion>(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (_) => _HojaCorreccion(candidato: c, monto: _monto(c), frecuencia: _frecuencia(c)),
+      builder: (_) => _HojaCorreccion(
+        candidato: c,
+        monto: _monto(c),
+        frecuencia: _frecuencia(c),
+        nombre: _nombre(c),
+        sugerencias: _nombresCatalogo,
+      ),
     );
-    if (r != null && mounted) {
-      setState(() {
-        _correccion[c.id] = r;
-        _esMia[c.id] = true;
-      });
-    }
+    if (r == null || !mounted) return false;
+    setState(() {
+      _correccion[c.id] = r;
+      _esMia[c.id] = true;
+    });
+    return true;
   }
 
   Future<void> _terminar() async {
     HapticFeedback.lightImpact();
     final candidatos = _candidatos ?? const <CandidatoSuscripcion>[];
+    // Antes de confirmar, el usuario dice qué servicio es cada cobro de un
+    // procesador ("Pago procesado por EBANX").
+    for (final c in candidatos.where((c) => _mia(c) && _faltaNombre(c))) {
+      if (!await _corregir(c)) return;
+    }
+    if (!mounted) return;
     setState(() {
       _guardando = true;
       _error = null;
@@ -113,7 +159,12 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
       for (final c in candidatos) {
         if (_mia(c)) {
           final corregido = _correccion[c.id];
-          await widget.servicio.confirmar(c.id, monto: corregido?.monto, frecuencia: corregido?.frecuencia);
+          await widget.servicio.confirmar(
+            c.id,
+            monto: corregido?.monto,
+            frecuencia: corregido?.frecuencia,
+            nombre: corregido?.nombre,
+          );
           confirmadas++;
         } else {
           await widget.servicio.descartar(c.id);
@@ -224,9 +275,10 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
             candidato: c,
             monto: _monto(c),
             frecuencia: _frecuencia(c),
+            nombre: _nombre(c),
             esMia: _mia(c),
             corregido: _correccion.containsKey(c.id),
-            onEsMia: _guardando ? null : (v) => setState(() => _esMia[c.id] = v),
+            onEsMia: _guardando ? null : (v) => _cambiarEsMia(c, v),
             onCorregir: _guardando ? null : () => _corregir(c),
           ),
           const SizedBox(height: 10),
@@ -236,11 +288,15 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   }
 }
 
+/// Corrección del usuario en la hoja. [nombre] null = el del candidato.
+typedef Correccion = ({double monto, Frecuencia frecuencia, String? nombre});
+
 class _FilaCandidato extends StatelessWidget {
   const _FilaCandidato({
     required this.candidato,
     required this.monto,
     required this.frecuencia,
+    required this.nombre,
     required this.esMia,
     required this.corregido,
     required this.onEsMia,
@@ -250,6 +306,9 @@ class _FilaCandidato extends StatelessWidget {
   final CandidatoSuscripcion candidato;
   final double monto;
   final Frecuencia frecuencia;
+
+  /// Nombre que escribió el usuario, o null.
+  final String? nombre;
   final bool esMia;
   final bool corregido;
   final ValueChanged<bool>? onEsMia;
@@ -264,14 +323,14 @@ class _FilaCandidato extends StatelessWidget {
         children: [
           Row(
             children: [
-              LogoServicio(c.nombre, size: 38),
+              LogoServicio(nombre ?? c.nombre, size: 38),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      c.nombre,
+                      nombre ?? c.titulo,
                       style: TextStyle(
                         color: esMia ? AppColors.text : AppColors.muted,
                         fontSize: 14.5,
@@ -284,6 +343,11 @@ class _FilaCandidato extends StatelessWidget {
                       '${Formato.moneda(monto, c.moneda)} · ${frecuencia.etiqueta} · ${c.textoCobros}',
                       style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
                     ),
+                    if (c.esDeProcesador && nombre == null)
+                      const Text(
+                        '¿Qué servicio es?',
+                        style: TextStyle(color: AppColors.amber, fontSize: 12, fontWeight: FontWeight.w800),
+                      ),
                     if (corregido)
                       const Text(
                         'Corregida por ti',
@@ -293,7 +357,7 @@ class _FilaCandidato extends StatelessWidget {
                 ),
               ),
               IconButton(
-                tooltip: 'Corregir monto y frecuencia',
+                tooltip: 'Corregir nombre, monto y frecuencia',
                 onPressed: onCorregir,
                 icon: const Icon(Icons.edit_outlined, size: 19, color: AppColors.muted),
               ),
@@ -352,13 +416,24 @@ class _Opcion extends StatelessWidget {
   }
 }
 
-/// Hoja inferior para corregir monto y frecuencia antes de confirmar.
+/// Hoja inferior para corregir nombre, monto y frecuencia antes de confirmar.
+/// En un candidato de procesador el nombre es obligatorio ("¿Qué servicio es?").
 class _HojaCorreccion extends StatefulWidget {
-  const _HojaCorreccion({required this.candidato, required this.monto, required this.frecuencia});
+  const _HojaCorreccion({
+    required this.candidato,
+    required this.monto,
+    required this.frecuencia,
+    required this.nombre,
+    required this.sugerencias,
+  });
 
   final CandidatoSuscripcion candidato;
   final double monto;
   final Frecuencia frecuencia;
+  final String? nombre;
+
+  /// Nombres del catálogo que se sugieren al escribir.
+  final List<String> sugerencias;
 
   @override
   State<_HojaCorreccion> createState() => _HojaCorreccionState();
@@ -368,7 +443,10 @@ class _HojaCorreccionState extends State<_HojaCorreccion> {
   late final TextEditingController _monto =
       TextEditingController(text: widget.monto == widget.monto.roundToDouble() ? widget.monto.toStringAsFixed(0) : widget.monto.toStringAsFixed(2));
   late Frecuencia _frecuencia = widget.frecuencia;
+  late String _nombre =
+      widget.nombre ?? (widget.candidato.esDeProcesador ? '' : widget.candidato.nombre);
   String? _error;
+  String? _errorNombre;
 
   @override
   void dispose() {
@@ -383,7 +461,14 @@ class _HojaCorreccionState extends State<_HojaCorreccion> {
       setState(() => _error = 'Escribe un monto mayor que 0');
       return;
     }
-    Navigator.of(context).pop((monto: monto, frecuencia: _frecuencia));
+    final nombre = _nombre.trim();
+    if (nombre.isEmpty) {
+      setState(() => _errorNombre = 'Escribe qué servicio es');
+      return;
+    }
+    // Solo se envía si cambió (o si el candidato es de un procesador).
+    final cambiado = widget.candidato.esDeProcesador || nombre != widget.candidato.nombre;
+    Navigator.of(context).pop((monto: monto, frecuencia: _frecuencia, nombre: cambiado ? nombre : null));
   }
 
   @override
@@ -395,13 +480,42 @@ class _HojaCorreccionState extends State<_HojaCorreccion> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Corregir ${widget.candidato.nombre}',
+            widget.candidato.esDeProcesador ? '¿Qué servicio es?' : 'Corregir ${widget.candidato.nombre}',
             style: const TextStyle(color: AppColors.text, fontSize: 17, fontWeight: FontWeight.w800),
           ),
+          if (widget.candidato.esDeProcesador) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Lo cobró ${widget.candidato.procesador}, que procesa pagos de otros servicios. '
+              'Escribe el nombre del servicio que pagaste.',
+              style: const TextStyle(color: AppColors.muted, fontSize: 12.5, fontWeight: FontWeight.w600, height: 1.4),
+            ),
+          ],
           const SizedBox(height: 16),
+          const AppEtiqueta('Servicio'),
+          const SizedBox(height: 6),
+          Autocomplete<String>(
+            initialValue: TextEditingValue(text: _nombre),
+            optionsBuilder: (valor) {
+              final t = normalizarNombre(valor.text);
+              if (t.isEmpty) return const Iterable<String>.empty();
+              return widget.sugerencias.where((s) => normalizarNombre(s).contains(t));
+            },
+            onSelected: (s) => setState(() => _nombre = s),
+            fieldViewBuilder: (context, controlador, foco, alEnviar) => TextField(
+              key: const Key('campo-nombre'),
+              controller: controlador,
+              focusNode: foco,
+              textCapitalization: TextCapitalization.words,
+              onChanged: (v) => _nombre = v,
+              decoration: InputDecoration(errorText: _errorNombre, hintText: 'Por ejemplo, Crunchyroll'),
+            ),
+          ),
+          const SizedBox(height: 14),
           AppEtiqueta('Monto (${widget.candidato.moneda})'),
           const SizedBox(height: 6),
           TextField(
+            key: const Key('campo-monto'),
             controller: _monto,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(errorText: _error),
