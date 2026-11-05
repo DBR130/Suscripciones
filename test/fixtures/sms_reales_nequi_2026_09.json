@@ -56,7 +56,7 @@
       }
     },
     {
-      "caso": "DiDi Food por dLocal (DLO*): queda el comercio real, primer pedido",
+      "caso": "DiDi por dLocal (DLO*): DiDi Club a 18.900 (la suscripción real de Santiago)",
       "paquete": "com.truecaller",
       "titulo": "",
       "texto": "NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin",
@@ -65,8 +65,8 @@
         "banco": "Nequi",
         "monto": 18900,
         "moneda": "COP",
-        "comercio": "DiDi Food",
-        "servicio": null,
+        "comercio": "DiDi Club",
+        "servicio": "DiDi Club",
         "procesador": null,
         "fecha": null,
         "medio": null,
@@ -74,7 +74,7 @@
       }
     },
     {
-      "caso": "DiDi Food por dLocal (DLO*): segundo pedido el mismo día, otro monto",
+      "caso": "DiDi por dLocal (DLO*): domicilio de 16.140 el mismo día (mismo texto, otro monto)",
       "paquete": "com.truecaller",
       "titulo": "",
       "texto": "NEQUI: Pagaste 16.140,00 en DLO*DiDi Food CO Payin",
@@ -83,8 +83,8 @@
         "banco": "Nequi",
         "monto": 16140,
         "moneda": "COP",
-        "comercio": "DiDi Food",
-        "servicio": null,
+        "comercio": "DiDi Club",
+        "servicio": "DiDi Club",
         "procesador": null,
         "fecha": null,
         "medio": null,

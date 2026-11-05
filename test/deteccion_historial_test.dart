@@ -117,8 +117,23 @@ void main() {
       expect(AnalizadorPagos.seleccionarParaEnviar([junio, agosto]), [junio, agosto]);
     });
 
+    test('ambiguo por el valor exacto de su precio de referencia: sale con un solo cobro', () {
+      final youtube = cobro(r'Bancolombia: Compraste $13.300,00 en GOOGLE YouTube con tu T.Deb *0000, el 21/06/2026 a las 12:41.');
+      expect(youtube.coincidePrecioReferencia, isTrue);
+      expect(AnalizadorPagos.seleccionarParaEnviar([youtube]), [youtube]);
+      // Un alquiler de película en YouTube: otro monto, no sale.
+      final alquiler = cobro(r'Bancolombia: Compraste $26.900,00 en GOOGLE YouTube con tu T.Deb *0000, el 02/07/2026 a las 21:00.');
+      expect(AnalizadorPagos.seleccionarParaEnviar([alquiler]), isEmpty);
+
+      final club = cobro('NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin', DateTime(2026, 9, 25, 19, 44));
+      expect(club.servicio, 'DiDi Club');
+      expect(AnalizadorPagos.seleccionarParaEnviar([club]), [club]);
+      final domicilio = cobro('NEQUI: Pagaste 16.140,00 en DLO*DiDi Food CO Payin', DateTime(2026, 9, 25, 19, 46));
+      expect(AnalizadorPagos.seleccionarParaEnviar([domicilio]), isEmpty);
+    });
+
     test('una compra puntual no sale', () {
-      final didi = cobro(bancolombia('DIDI FOOD', '18.900,00', '30/10/2026'));
+      final didi = cobro(bancolombia('TIENDAS D1', '18.900,00', '30/10/2026'));
       expect(AnalizadorPagos.seleccionarParaEnviar([didi]), isEmpty);
     });
 
@@ -146,8 +161,8 @@ void main() {
       expect(AnalizadorPagos.seleccionarParaEnviar(anual), hasLength(2));
 
       final irregular = [
-        cobro(bancolombia('DIDI FOOD', '18.900,00', '01/10/2026')),
-        cobro(bancolombia('DIDI FOOD', '18.500,00', '13/10/2026')),
+        cobro(bancolombia('TIENDAS D1', '18.900,00', '01/10/2026')),
+        cobro(bancolombia('TIENDAS D1', '18.500,00', '13/10/2026')),
       ];
       expect(AnalizadorPagos.seleccionarParaEnviar(irregular), isEmpty);
     });
@@ -177,7 +192,7 @@ void main() {
 
     test('no duplica, guarda las compras puntuales y solo deja salir lo seleccionado', () async {
       final almacen = AlmacenPagosLocales(ahora: () => hoy);
-      final didi = cobro(bancolombia('DIDI FOOD', '18.900,00', '30/10/2026'));
+      final didi = cobro(bancolombia('TIENDAS D1', '18.900,00', '30/10/2026'));
       expect(await almacen.agregar([cobro(nequiClaude, llegadaNotificacion), didi]), 2);
       expect(await almacen.agregar([cobro(nequiClaude, llegadaSms)]), 0);
       expect(await almacen.leer(), hasLength(2));
@@ -211,8 +226,8 @@ void main() {
     test('se borran solos a los 400 días y al cerrar sesión', () async {
       final almacen = AlmacenPagosLocales(ahora: () => hoy);
       await almacen.agregar([
-        cobro(bancolombia('DIDI FOOD', '18.900,00', '01/09/2025')), // más de 400 días
-        cobro(bancolombia('DIDI FOOD', '18.900,00', '30/10/2026')),
+        cobro(bancolombia('TIENDAS D1', '18.900,00', '01/09/2025')), // más de 400 días
+        cobro(bancolombia('TIENDAS D1', '18.900,00', '30/10/2026')),
       ]);
       expect(await almacen.leer(), hasLength(1));
       await almacen.borrarTodo();
@@ -248,7 +263,7 @@ void main() {
     sms = [
       mensaje('sms:1', bancolombia('NETFLIX', '44.900,00', '05/10/2026'), DateTime(2026, 10, 5, 8)),
       mensaje('sms:2', nequiClaude, llegadaSms),
-      mensaje('sms:3', bancolombia('DIDI FOOD', '18.900,00', '30/10/2026'), DateTime(2026, 10, 30, 8)),
+      mensaje('sms:3', bancolombia('TIENDAS D1', '18.900,00', '30/10/2026'), DateTime(2026, 10, 30, 8)),
       mensaje('sms:4', bancolombia('GIMNASIO LA 80', '95.000,00', '05/09/2026'), DateTime(2026, 9, 5, 8)),
       mensaje('sms:5', bancolombia('GIMNASIO LA 80', '99.900,00', '05/10/2026'), DateTime(2026, 10, 5, 8)),
     ];
@@ -309,7 +324,7 @@ void main() {
         servicio.enviados.map((p) => p['comercio_normalizado']),
         unorderedEquals(['Netflix', 'Claude', 'Gimnasio La 80', 'Gimnasio La 80']),
       );
-      // La compra puntual (DiDi Food) no sale; el texto de ningún SMS tampoco.
+      // La compra puntual (Tiendas D1) no sale; el texto de ningún SMS tampoco.
       for (final p in servicio.enviados) {
         expect(p.keys, isNot(contains('texto')));
         expect(p.values.join(' '), isNot(contains('Compraste')));

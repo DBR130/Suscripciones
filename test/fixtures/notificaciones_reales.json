@@ -36,7 +36,7 @@
       }
     },
     {
-      "caso": "Bancolombia, DiDi Food: compra normal (no es un servicio del catalogo)",
+      "caso": "Bancolombia, DiDi Food: es DiDi Club (alias DiDi, servicio ambiguo); 18.900 es su precio de referencia",
       "paquete": "com.google.android.apps.messaging",
       "titulo": "",
       "texto": "Bancolombia: Compraste $18.900,00 en DIDI FOOD con tu T.Deb *0000, el 30/10/2026 a las 13:10.",
@@ -45,8 +45,8 @@
         "banco": "Bancolombia",
         "monto": 18900,
         "moneda": "COP",
-        "comercio": "Didi Food",
-        "servicio": null,
+        "comercio": "DiDi Club",
+        "servicio": "DiDi Club",
         "fecha": "2026-10-30T13:10:00",
         "medio": "T.Deb",
         "indica_suscripcion": false

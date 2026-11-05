@@ -72,6 +72,18 @@ class CatalogoServicios {
     return null;
   }
 
+  /// Margen para "el valor exacto" del precio de referencia (±1 %).
+  static const toleranciaPrecioExacto = 0.01;
+
+  /// true si [monto] (COP) es el precio de referencia de [servicio] (±1 %):
+  /// un servicio ambiguo se propone así aunque sea un solo cobro ("Cobro por
+  /// el valor exacto de YouTube Premium").
+  bool coincideConPrecio(String servicio, double monto, String moneda) {
+    if (moneda != 'COP') return false;
+    final precio = servicios.where((s) => s.nombre == servicio).firstOrNull?.precioCop;
+    return precio != null && (monto - precio).abs() <= toleranciaPrecioExacto * precio;
+  }
+
   /// true si [servicio] (un nombre del catálogo) es ambiguo.
   bool esAmbiguo(String servicio) => servicios.any((s) => s.nombre == servicio && s.ambiguo);
 

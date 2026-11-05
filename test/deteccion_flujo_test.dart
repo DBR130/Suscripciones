@@ -227,10 +227,10 @@ void main() {
       final r = await procesador(servicio).procesar();
       expect(r.revisadas, 4);
       expect(r.cobros, 3);
-      expect(r.enviados, 2);
+      expect(r.enviados, 3);
       expect(r.candidatosNuevos.map((c) => c.nombre), ['Crunchyroll', 'Claude']);
-      // DiDi Food es una compra puntual: se queda en el celular.
-      expect(servicio.enviados.map((p) => p['comercio_normalizado']), ['Crunchyroll', 'Claude']);
+      // DiDi a $18.900 es el valor exacto de DiDi Club: sale para preguntar.
+      expect(servicio.enviados.map((p) => p['comercio_normalizado']), ['Crunchyroll', 'Claude', 'DiDi Club']);
       // Nequi no trae fecha: se usa la de llegada (postTime).
       expect(servicio.enviados[1]['fecha'], '2026-10-28T10:15:00.000');
       expect(borrados, ['n0', 'n1', 'n2', 'personal']);
@@ -249,8 +249,8 @@ void main() {
       cola = [];
       servicio.error = null;
       final r = await procesador(servicio).procesar();
-      expect(r.enviados, 2);
-      expect(servicio.enviados.map((p) => p['comercio_normalizado']), ['Crunchyroll', 'Claude']);
+      expect(r.enviados, 3);
+      expect(servicio.enviados.map((p) => p['comercio_normalizado']), ['Crunchyroll', 'Claude', 'DiDi Club']);
     });
 
     test('con la cola vacía no llama al backend', () async {
@@ -265,7 +265,7 @@ void main() {
       final servicio = FakeDeteccionService();
       final p = procesador(servicio);
       await Future.wait([p.procesar(), p.procesar()]);
-      expect(servicio.enviados.length, 2);
+      expect(servicio.enviados.length, 3);
     });
   });
 

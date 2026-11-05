@@ -186,7 +186,8 @@ void main() {
 
     test('DLO* es el prefijo de dLocal: queda el comercio real (DiDi, SMS real)', () {
       final p = cobro('NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin');
-      expect((p.banco, p.monto, p.comercio, p.servicio), ('Nequi', 18900, 'DiDi Food', null));
+      // Con el alias "DiDi" del catálogo es el servicio (ambiguo) DiDi Club.
+      expect((p.banco, p.monto, p.comercio, p.servicio), ('Nequi', 18900, 'DiDi Club', 'DiDi Club'));
     });
 
     test('procesadores (T3): solo cuando el SMS no trae el servicio', () {

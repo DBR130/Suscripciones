@@ -126,6 +126,7 @@ class PagoLocal {
         'servicio': pago.servicio,
         'servicio_ambiguo': pago.servicioAmbiguo,
         'procesador': pago.procesador,
+        'coincide_precio_referencia': pago.coincidePrecioReferencia,
         'indica_suscripcion': pago.indicaSuscripcion,
         'enviado': enviado,
       };
@@ -143,6 +144,7 @@ class PagoLocal {
           servicio: j['servicio'] as String?,
           servicioAmbiguo: j['servicio_ambiguo'] as bool? ?? false,
           procesador: j['procesador'] as String?,
+          coincidePrecioReferencia: j['coincide_precio_referencia'] as bool? ?? false,
           indicaSuscripcion: j['indica_suscripcion'] as bool? ?? false,
         ),
         enviado: j['enviado'] as bool? ?? false,

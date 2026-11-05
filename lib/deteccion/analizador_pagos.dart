@@ -116,9 +116,10 @@ class AnalizadorPagos {
         seleccion.addAll(grupo);
         continue;
       }
-      // Ambiguo: los cobros con señal ("RAPPI PRO", "YouTubePremium") salen
+      // Ambiguo: los cobros con señal ("RAPPI PRO", "YouTubePremium") o por el
+      // valor exacto de su precio de referencia (YouTube a $13.300) salen
       // solos; el resto, solo si forma una serie periódica.
-      if (ambiguo) seleccion.addAll(grupo.where((p) => p.indicaSuscripcion));
+      if (ambiguo) seleccion.addAll(grupo.where((p) => p.indicaSuscripcion || p.coincidePrecioReferencia));
       // Comercio desconocido: series de montos similares (±10 %) que sean
       // periódicas en su totalidad (un gimnasio de $95.000 y luego $99.900)...
       for (final serie in _seriesPorMonto(grupo)) {

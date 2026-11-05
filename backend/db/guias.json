@@ -67,6 +67,7 @@
   },
   {
     "nombre_servicio": "YouTube Premium",
+    "precio_referencia_cop": 13300,
     "es_ambigua": true,
     "alias": ["YouTube", "YouTube Music", "YouTube Music Premium"],
     "duracion_minutos": 2,
@@ -256,6 +257,89 @@
       "Entra a Configuración (desde tu perfil) y busca la sección de facturación o plan.",
       "Elige cancelar el plan y confirma.",
       "Si te suscribiste desde la app del celular, la cancelación se hace en Google Play o App Store."
+    ]
+  },
+  {
+    "nombre_servicio": "DiDi Club",
+    "es_ambigua": true,
+    "precio_referencia_cop": 18900,
+    "alias": ["DiDi", "DLO*DiDi"],
+    "pasos": [
+      "Abre la app o el sitio web de DiDi Club e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Uber One",
+    "alias": [],
+    "pasos": [
+      "Abre la app o el sitio web de Uber One e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Meli+",
+    "alias": ["Meli Plus"],
+    "pasos": [
+      "Abre la app o el sitio web de Meli+ e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Platzi",
+    "alias": [],
+    "pasos": [
+      "Abre la app o el sitio web de Platzi e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Duolingo",
+    "es_ambigua": true,
+    "alias": ["Super Duolingo"],
+    "pasos": [
+      "Abre la app o el sitio web de Duolingo e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Deezer",
+    "alias": ["Deezer Premium"],
+    "pasos": [
+      "Abre la app o el sitio web de Deezer e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "ViX",
+    "alias": ["ViX Premium", "ViX+"],
+    "pasos": [
+      "Abre la app o el sitio web de ViX e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
+    ]
+  },
+  {
+    "nombre_servicio": "Claro video",
+    "alias": [],
+    "pasos": [
+      "Abre la app o el sitio web de Claro video e inicia sesión con la cuenta de la suscripción.",
+      "Entra a tu cuenta o perfil y busca la sección de la suscripción o membresía.",
+      "Elige cancelar la suscripción y confirma. Normalmente puedes seguir usándola hasta el final del periodo que ya pagaste.",
+      "Si la pagas por Google Play o App Store, la cancelación se hace desde allí."
     ]
   },
   {

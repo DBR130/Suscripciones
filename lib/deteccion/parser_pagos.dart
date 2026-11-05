@@ -16,6 +16,7 @@ class PagoExtraido {
     this.servicio,
     this.servicioAmbiguo = false,
     this.procesador,
+    this.coincidePrecioReferencia = false,
     this.indicaSuscripcion = false,
   });
 
@@ -56,6 +57,11 @@ class PagoExtraido {
   /// "Pagaste 19.900 en SERVICIOS WEB EBANX CO". null si el comercio es un
   /// servicio del catálogo o un comercio cualquiera.
   final String? procesador;
+
+  /// El monto es el precio de referencia del servicio (±1 %): un servicio
+  /// ambiguo se propone con un solo cobro ("¿Es tu suscripción a YouTube
+  /// Premium?").
+  final bool coincidePrecioReferencia;
 }
 
 /// Resultado del parser: un cobro con sus campos, o el motivo por el que no lo es.
@@ -114,6 +120,8 @@ class ParserPagos {
       servicio: comercio.servicio,
       servicioAmbiguo: comercio.servicio != null && catalogo.esAmbiguo(comercio.servicio!),
       procesador: comercio.procesador,
+      coincidePrecioReferencia:
+          comercio.servicio != null && catalogo.coincideConPrecio(comercio.servicio!, monto.valor, monto.moneda),
       indicaSuscripcion: comercio.indicaSuscripcion,
       fecha: fecha ?? recibidaEn,
       fechaDelMensaje: fecha != null,
