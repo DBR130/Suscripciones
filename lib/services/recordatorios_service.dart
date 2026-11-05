@@ -7,6 +7,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../deteccion/candidato_suscripcion.dart';
 import '../deteccion/deteccion_service.dart';
+import '../deteccion/procesador_detecciones.dart';
 import '../models/suscripcion.dart';
 import '../utils/formato.dart';
 import 'suscripcion_service.dart';
@@ -149,6 +150,25 @@ List<({String titulo, String cuerpo})> avisosDePagosRegistrados(List<PagoRegistr
   ];
 }
 
+/// Un aviso de la detección listo para mostrar.
+typedef AvisoDeteccion = ({int id, String titulo, String cuerpo, String? payload});
+
+/// Todos los avisos de una revisión de la cola: flujo B ("¿Tienes una
+/// suscripción a X?") y pagos registrados. Los usan igual la app al abrirse y
+/// la tarea de fondo (main.dart y segundo_plano.dart).
+List<AvisoDeteccion> avisosDelEscaneo(ResultadoEscaneo resultado) => [
+      for (final c in resultado.candidatosNuevos)
+        // Los recordatorios usan suscripción*10 + 1 o 2; aquí candidato*10 + 3.
+        (
+          id: c.id * 10 + 3,
+          titulo: tituloAvisoCandidato(c),
+          cuerpo: textoAvisoCandidato(c),
+          payload: '${RecordatoriosService.prefijoCandidato}${c.id}',
+        ),
+      for (final (i, a) in avisosDePagosRegistrados(resultado.registrados).indexed)
+        (id: idAvisoPagoRegistrado + i, titulo: a.titulo, cuerpo: a.cuerpo, payload: null),
+    ];
+
 String textoAvisoCandidato(CandidatoSuscripcion c) {
   // Un descartado que se vuelve a proponer dice por qué (T7).
   if (c.motivo != null) return '${c.motivo}. Toca para confirmarla o descartarla.';
@@ -196,6 +216,8 @@ class RecordatoriosService {
       priority: Priority.high,
       icon: 'ic_notificacion',
       color: _colorLogo,
+      // En la pantalla de bloqueo, sin el monto ni el servicio.
+      visibility: NotificationVisibility.private,
     ),
   );
 
@@ -283,6 +305,22 @@ class RecordatoriosService {
         title: aviso.titulo,
         body: aviso.cuerpo,
         notificationDetails: _detallesDeteccion,
+      );
+    }
+  }
+
+  /// Muestra los avisos de una revisión de la cola ([avisosDelEscaneo]).
+  Future<void> avisarEscaneo(ResultadoEscaneo resultado) async {
+    final avisos = avisosDelEscaneo(resultado);
+    if (!disponible || avisos.isEmpty) return;
+    await inicializar();
+    for (final a in avisos) {
+      await _plugin.show(
+        id: a.id,
+        title: a.titulo,
+        body: a.cuerpo,
+        notificationDetails: _detallesDeteccion,
+        payload: a.payload,
       );
     }
   }

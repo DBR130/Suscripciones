@@ -1,6 +1,11 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_suscripciones/deteccion/deteccion_service.dart';
+import 'package:flutter_suscripciones/deteccion/procesador_detecciones.dart';
 import 'package:flutter_suscripciones/deteccion/turno.dart';
+import 'package:flutter_suscripciones/services/recordatorios_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'deteccion_flujo_test.dart' show candidato;
 
 /// Procesar la cola en segundo plano (encargo B): turno compartido entre la
 /// app y la tarea de fondo, avisos y la función que llama el worker.
@@ -31,6 +36,32 @@ void main() {
   });
 
   tearDown(() => mensajero.setMockMethodCallHandler(canal, null));
+
+  group('avisos del escaneo (S11)', () {
+    test('flujo B y pagos registrados, con las mismas reglas de siempre', () {
+      final avisos = avisosDelEscaneo(ResultadoEscaneo(
+        revisadas: 3,
+        cobros: 3,
+        candidatosNuevos: [
+          candidato(7, 'EBANX', 19900, procesador: 'EBANX'),
+          candidato(1, 'Crunchyroll', 19900),
+        ],
+        registrados: const [PagoRegistrado(servicio: 'Netflix', monto: 49900, moneda: 'COP', montoAnterior: 44900)],
+      ));
+      expect([for (final a in avisos) (a.titulo, a.payload)], [
+        ('Pago procesado por EBANX', 'candidato:7'),
+        ('¿Tienes una suscripción a Crunchyroll?', 'candidato:1'),
+        ('Cambio de precio', null),
+      ]);
+      expect(avisos.last.cuerpo, r'Netflix subió de $44.900 a $49.900');
+      // Ids distintos: un aviso no reemplaza a otro.
+      expect(avisos.map((a) => a.id).toSet(), hasLength(3));
+    });
+
+    test('nada que avisar si no hubo candidatos ni pagos registrados', () {
+      expect(avisosDelEscaneo(ResultadoEscaneo.vacio), isEmpty);
+    });
+  });
 
   group('Turno (S12)', () {
     Turno turno() => Turno('app', disponible: true, intervalo: const Duration(milliseconds: 5));
