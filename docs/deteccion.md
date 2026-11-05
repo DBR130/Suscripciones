@@ -13,6 +13,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | 5 | Historial de SMS (opcional, READ_SMS), "Compartir" y análisis en el celular | **Hecho** |
 | 6 | Procesadores de pago, servicios ambiguos, deshacer descartes y aviso de pago registrado | **Hecho** |
 | 7 | Hallazgos de pruebas reales: unir duplicados, series dentro de una mezcla, precio de referencia de ambiguos y diagnóstico del escaneo | **Hecho** |
+| 8 | Aviso al instante con la app cerrada (WorkManager, turno entre la app y la tarea de fondo) | **Hecho** |
 
 ## Arquitectura
 
@@ -50,7 +51,9 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | `AppSmsPredeterminada.kt` | La app de SMS predeterminada del usuario (`Telephony.Sms.getDefaultSmsPackage`), que se permite aunque no esté en la lista fija. Se consulta al abrir la app y al conectarse el lector. |
 | `ColaNotificaciones.kt` | Cola en `filesDir/deteccion/cola.json` (almacenamiento interno: solo esta app puede leerlo). Máximo 200 entradas, se borran solas a los 30 días, no guarda dos veces el mismo texto de la misma app y escribe de forma atómica. |
 | `ConfiguracionDeteccion.kt` | Lee la configuración de `res/raw/deteccion_apps.json` y decide si una app está permitida (lista fija o app de SMS predeterminada). |
-| `CanalDeteccion.kt` | MethodChannel y EventChannel con Flutter; abre los ajustes de "Acceso a notificaciones" y detecta si el permiso está concedido. |
+| `CanalDeteccion.kt` | MethodChannel y EventChannel con Flutter; abre los ajustes de "Acceso a notificaciones" y detecta si el permiso está concedido. `registrarDatos` registra solo los métodos de datos en el motor sin pantalla de la tarea de fondo. |
+| `ProcesarColaWorker.kt` | Tarea de WorkManager que procesa la cola con la app cerrada (ver "Aviso al instante con la app cerrada"). |
+| `TurnoDeteccion.kt` | Candado para que la app y la tarea de fondo no procesen la cola a la vez. |
 
 El servicio está declarado en `AndroidManifest.xml` con el permiso
 `BIND_NOTIFICATION_LISTENER_SERVICE`: solo el sistema puede conectarse a él, y
@@ -68,6 +71,8 @@ solo después de que el usuario lo autoriza en Ajustes.
 | `borrarDeCola` `{ids}` / `vaciarCola` | Quita las procesadas / todas |
 | `configuracion` | Apps permitidas y palabras de cobro |
 | `modoDescubrimiento` `{activo}` | Solo en debug; en release responde "no implementado" (ver privacidad) |
+| `tomarTurno` / `soltarTurno` `{quien}` | Candado compartido con la tarea de fondo (`TurnoDeteccion`); `tomarTurno` devuelve `true` si lo consiguió |
+| `registrarEjecucionFondo` `{resultado, procesados, motivo}` | Última ejecución de la tarea de fondo; `estado` la devuelve en `ultima_ejecucion_fondo`, `resultado_fondo`, `procesados_fondo`, `motivo_fondo` |
 
 **Canal de eventos** `subtrack/deteccion/eventos`: `{tipo: guardada, notificacion}`,
 y en modo descubrimiento (solo debug) también `{tipo: descartada, paquete, motivo}` y
@@ -109,14 +114,16 @@ y en modo descubrimiento (solo debug) también `{tipo: descartada, paquete, moti
 | `parser_pagos.dart` | Parser (hito 2): de un texto de cobro saca banco, monto, moneda, comercio normalizado, fecha y medio. |
 | `catalogo_servicios.dart` | Nombres y alias del catálogo de guías (`GET /api/guias`) para reconocer servicios conocidos. |
 | `huella_pago.dart` | Huella del cobro y lo que se envía al backend (solo campos extraídos). |
-| `procesador_detecciones.dart` | Une todo: cola + notificaciones activas → parser → backend → borra lo procesado. |
+| `procesador_detecciones.dart` | Une todo: cola + notificaciones activas → parser → backend → borra lo procesado. Con el turno tomado. |
+| `segundo_plano.dart` / `turno.dart` | Tarea de fondo y turno (hito 8). |
 | `deteccion_service.dart` / `candidato_suscripcion.dart` | Llamadas a `/api/detecciones` y modelo del candidato. |
 | `permisos_page.dart`, `escaneo_page.dart`, `resultados_deteccion_page.dart` | Pantallas 03, 04 y 05. |
 
 Al abrir la app y cada vez que vuelve a primer plano, `main.dart` pide
 reconectar el servicio si está detenido y recupera las notificaciones activas
 de la barra. Si además hay sesión y permiso, procesa la cola y avisa de los
-candidatos nuevos (flujo B, ver hito 4).
+candidatos nuevos (flujo B, ver hito 4). Con la app cerrada lo hace la tarea
+de fondo (hito 8).
 
 ## Problema encontrado en la primera prueba (hito 1) y solución
 
@@ -890,6 +897,119 @@ npm run db:guias:nube
 
 Ver "Cómo probar (hito 7)".
 
+## Aviso al instante con la app cerrada (hito 8)
+
+Antes, el lector guardaba el cobro con la app cerrada, pero el envío al
+backend y los avisos ("¿Tienes una suscripción a X?", "Registramos un pago…")
+esperaban a que el usuario abriera la app. Ahora una tarea de **WorkManager**
+procesa la cola en segundo plano en cuanto llega el cobro.
+
+### Cómo funciona
+
+1. El lector guarda un cobro en la cola (`onNotificationPosted`) o recupera
+   cobros de la barra al reconectarse → `ProcesarColaWorker.programar()`.
+2. WorkManager ejecuta `ProcesarColaWorker` cuando hay red. El worker arranca
+   un **motor de Flutter sin pantalla** y ejecuta el punto de entrada de Dart
+   `procesarEnSegundoPlano()` (`lib/main.dart` → `tareaDeFondo()` en
+   `lib/deteccion/segundo_plano.dart`).
+3. Dart hace **lo mismo que la app al abrirse**: `ProcesadorDetecciones.procesar()`
+   (parser, almacén cifrado, análisis, envío en lotes) y los mismos avisos
+   (`avisosDelEscaneo`: flujo B, "Registramos un pago", subió/bajó, resumen de
+   3 o más). Luego avisa "terminar" al worker.
+4. El worker **destruye el motor siempre** (en un `finally`): éxito, error,
+   tiempo máximo o cancelación de Android. También suelta el turno.
+
+| Decisión | Valor |
+|---|---|
+| Tipo de trabajo | Único (`subtrack_procesar_cola`), `APPEND_OR_REPLACE`: si hay una ejecución en curso, la nueva va detrás; nunca dos a la vez |
+| Prioridad | Expedito en Android 12+ (`RUN_AS_NON_EXPEDITED_WORK_REQUEST` si no hay cupo); normal en Android 7–11 |
+| Restricción | Red conectada |
+| Tiempo máximo por ejecución | 150 s (incluye hasta 75 s despertando el servidor de Render) |
+| Reintentos | Backoff exponencial desde 30 s, hasta 10 intentos. Después se deja: la app lo procesa al abrirse. Nunca `Result.failure()` (con `APPEND` fallaría también lo que espera detrás) |
+| Sin sesión | No procesa y **deja la cola intacta** (resultado "sin sesión"; no reintenta) |
+| Servidor caído o dormido | La cola queda intacta (sin catálogo no se interpreta nada) y se reintenta |
+| Avisos | Los mismos textos de siempre. En el canal de detección, visibilidad **privada** en la pantalla de bloqueo (no muestra servicio ni monto) |
+
+### Concurrencia: el turno
+
+La app y la tarea de fondo son **dos motores de Flutter en el mismo proceso**.
+Para que nunca procesen la misma cola a la vez hay un candado nativo,
+`TurnoDeteccion.kt` (un dueño a la vez, vence a los 3 min por si un motor
+muere sin soltarlo). En Dart, `Turno` (`lib/deteccion/turno.dart`):
+
+- **Procesamiento automático** (la tarea de fondo, la app al abrirse o volver):
+  un solo intento. Si el turno está ocupado no procesa: la tarea de fondo
+  reintenta luego; la app no hace nada (la tarea avisará).
+- **Acciones del usuario** ("Buscar suscripciones en mis SMS" en la 04 y
+  "Compartir"): esperan hasta 90 s mostrando **"Terminando de revisar tus
+  cobros…"**. Si no lo consiguen: "No pudimos revisar tus SMS ahora. Inténtalo
+  de nuevo en un momento." / "No pudimos registrar el cobro ahora. Inténtalo
+  de nuevo en un momento."
+
+### Archivos
+
+| Archivo | Qué hace |
+|---|---|
+| `ProcesarColaWorker.kt` | Programa la tarea y ejecuta el motor sin pantalla (150 s, destruido siempre) |
+| `TurnoDeteccion.kt` | Candado del proceso (`tomarTurno` / `soltarTurno` en el canal) |
+| `CanalDeteccion.kt` | `registrarDatos`: los métodos de datos sin Activity, para el motor sin pantalla; `registrarEjecucionFondo` |
+| `RegistroDeteccion.kt` | Última ejecución en segundo plano (hora, resultado, revisadas, motivo) |
+| `src/debug/.../ProcesarColaReceiver.kt` | Solo debug: forzar la tarea por adb |
+| `lib/deteccion/segundo_plano.dart` | `ejecutarEnSegundoPlano` (sesión, turno, avisos, registro) y `tareaDeFondo` |
+| `lib/deteccion/turno.dart` | Turno en Dart (un intento o esperar) |
+| `lib/services/recordatorios_service.dart` | `avisosDelEscaneo` (función pura) y `avisarEscaneo`, usados por la app y la tarea |
+
+Funciona igual en las versiones **completa** y **sinSms** (no usa READ_SMS).
+"Compartir" y el historial no cambian, salvo que esperan el turno.
+
+### Depuración (solo debug)
+
+- **Perfil → Depuración: detección → "Última ejecución en segundo plano"**:
+  hora · resultado (`ok`, `sin sesión`, `reintento`, `reintento: la app
+  estaba procesando`, `sin más reintentos`) · revisadas · motivo (un error
+  del servidor o "tiempo máximo (150 s)"; nunca el texto de un SMS).
+- Logs (`adb logcat -v time -s SubTrackDeteccion:V flutter:V`):
+
+| Log | Significa |
+|---|---|
+| `Tarea de fondo programada (cobro guardado)` | El lector la programó |
+| `Tarea de fondo: intento N de 10` | WorkManager la ejecutó |
+| `Motor de fondo listo en N ms` | **Lo que tarda en arrancar el motor** (anótalo en el Xiaomi) |
+| `SubTrackDeteccion segundo plano: ok` (tag `flutter`) | Resultado en Dart |
+| `Motor de fondo destruido tras N ms` | Duración total; siempre debe aparecer |
+| `Tarea de fondo: tiempo máximo (150 s)` | Se cortó y se reintentará |
+
+### Xiaomi (HyperOS) y Android
+
+- WorkManager funciona con la app **en segundo plano** y **cerrada desde
+  recientes**: el lector sigue vivo (es un servicio del sistema) y programa la
+  tarea. Si MIUI detuvo el lector, no hay cobro guardado y no hay tarea (ver
+  "Lector desconectado").
+- Tras **reiniciar el celular**, Android reconecta el lector; el trabajo
+  pendiente de WorkManager sobrevive al reinicio.
+- HyperOS puede **retrasar** la tarea con el ahorro de batería. Si en
+  "Ahorro de batería" SubTrack está en "Sin restricciones" y con **Inicio
+  automático** activado, llega en segundos; si no, puede tardar minutos o
+  esperar a abrir la app (la cola queda guardada; no se pierde nada).
+- Android 12+ limita el cupo de trabajo expedito; sin cupo corre como
+  trabajo normal (unos segundos o minutos más).
+- La primera ejecución tras instalar arranca el motor desde cero: unos
+  cientos de ms a un par de segundos. Mídelo con `Motor de fondo listo en`.
+
+### Tests
+
+- `test/deteccion_segundo_plano_test.dart`: `ejecutarEnSegundoPlano` (sin
+  sesión la cola queda intacta; turno ocupado y servidor caído reintentan y
+  sueltan el turno; procesa, avisa y registra), `avisosDelEscaneo` y `Turno`.
+- `test/deteccion_historial_test.dart`: la 04 y Compartir esperan el turno
+  ("Terminando de revisar tus cobros…") o muestran el mensaje claro.
+- `test/deteccion_lector_test.dart`: "Última ejecución en segundo plano".
+- `TurnoDeteccionTest.kt` (JUnit): un dueño a la vez, vence a los 3 min.
+- Sin test automático (prueba manual en el Xiaomi): el worker real, el
+  arranque del motor, la visibilidad en la pantalla de bloqueo y HyperOS.
+
+No hay cambios de backend ni migraciones.
+
 ## Parser (hito 2)
 
 `ParserPagos.interpretar(texto, titulo:, recibidaEn:)` devuelve un
@@ -1098,7 +1218,8 @@ sesión y permiso, se procesa la cola igual que en la 04. Por cada candidato
 suscripción a {servicio}?"** ("Detectamos un cobro de $68.139 en Nequi…"), en
 el canal "Suscripciones detectadas". Al tocarla se abre la 05. No se procesa
 en segundo plano mientras están abiertas la 03, la 04, la 05 o la pantalla de
-depuración (ellas mismas lo hacen, o se está revisando la cola).
+depuración (ellas mismas lo hacen, o se está revisando la cola). Desde el
+hito 8 el aviso llega también con la app cerrada (WorkManager).
 
 ### Huella
 
@@ -1680,12 +1801,96 @@ queda UNA suscripción Crunchyroll (revisa el total del Resumen). Si ya la
 habías creado antes, la pregunta dice "…en tus suscripciones…" y los pagos se
 agregan a ella.
 
+## Cómo probar (hito 8): aviso al instante con la app cerrada
+
+### Preparación
+
+```powershell
+flutter build apk --debug --flavor completa
+adb install -r build\app\outputs\flutter-apk\app-completa-debug.apk
+adb reverse tcp:3000 tcp:3000      # si usas el backend local (npm run dev)
+```
+
+Abre la app, **inicia sesión** y verifica que la detección esté activa. En
+otra terminal:
+
+```powershell
+adb logcat -c
+adb logcat -v time -s SubTrackDeteccion:V flutter:V
+```
+
+Usa un comercio que **salga** al backend (un servicio conocido, como Netflix)
+y cambia la etiqueta (`pagoF1`, `pagoF2`…) y la fecha en cada prueba para que
+no sea "repetida".
+
+### 1. App en segundo plano
+
+1. Abre SubTrack y vuelve al inicio del celular (botón de inicio).
+2. Simula el cobro:
+
+```powershell
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' pagoF1 'Bancolombia: Compraste `$44.900,00 en NETFLIX con tu T.Deb *0000, el 05/11/2026 a las 08:00.'"
+```
+
+3. Deben salir `Recibida de com.android.shell: guardada`, `Tarea de fondo
+   programada (cobro guardado)`, `Motor de fondo listo en N ms`,
+   `segundo plano: ok` y `Motor de fondo destruido…`. En segundos llega
+   "¿Tienes una suscripción a Netflix?" (o "Registramos un pago…" si ya la
+   tienes).
+
+### 2. App cerrada desde recientes
+
+1. Abre recientes y desliza SubTrack para cerrarla.
+2. Repite el comando con `pagoF2` y otra fecha (por ejemplo `06/11/2026`).
+3. Mismo resultado que en el paso 1. Bloquea el celular antes de enviar el
+   cobro: en la pantalla de bloqueo el aviso **no** debe mostrar el servicio
+   ni el monto (visibilidad privada).
+
+### 3. Celular reiniciado
+
+1. Reinicia el celular y **no abras** SubTrack. Desbloquéalo.
+2. Espera a ver `Servicio conectado` en los logs (vuelve a lanzar
+   `adb logcat` tras el reinicio).
+3. Repite el comando con `pagoF3` y otra fecha. Debe llegar el aviso sin
+   abrir la app.
+
+### 4. Forzar la tarea (solo debug)
+
+Programa la tarea sin un cobro nuevo (por ejemplo, con la cola llena de antes
+o para ver el arranque del motor):
+
+```powershell
+adb shell am broadcast -a com.example.flutter_suscripciones.PROCESAR_COLA -p com.example.flutter_suscripciones
+```
+
+Ver qué tiene programado WorkManager:
+
+```powershell
+adb shell dumpsys jobscheduler | Select-String "flutter_suscripciones"
+```
+
+### 5. Casos de error
+
+- **Sin sesión:** cierra sesión, cierra la app y simula un cobro. La
+  depuración dice `sin sesión` y la cola queda intacta; al iniciar sesión y
+  abrir la app se procesa.
+- **Servidor caído:** con el backend local, deténlo (`Ctrl+C` en `npm run
+  dev`) y simula un cobro: `reintento` con el motivo. Vuelve a arrancarlo: el
+  reintento (30 s, 60 s, 2 min…) lo procesa y avisa.
+- **Turno:** simula un cobro e inmediatamente abre Perfil → Buscar
+  suscripciones en mis SMS: la 04 muestra "Terminando de revisar tus
+  cobros…" y luego sigue.
+
+Anota en cada caso lo que dice "Última ejecución en segundo plano" y el
+tiempo de `Motor de fondo listo en`.
+
 ## Limitaciones conocidas
 
-- **La cola se procesa cuando la app se abre o vuelve a primer plano.** El
-  lector guarda los cobros aunque la app esté cerrada, pero el envío al backend
-  y la notificación del flujo B ocurren al abrir la app (no hay trabajo en
-  segundo plano de Flutter).
+- **El aviso con la app cerrada depende de WorkManager y de HyperOS.** Con
+  ahorro de batería o sin "Inicio automático", HyperOS puede retrasar la
+  tarea; sin red espera a que haya. Tras 10 intentos fallidos se deja para
+  cuando se abra la app. Sin sesión no se procesa. Nada se pierde: la cola y
+  el almacén quedan guardados.
 - **Después de reinstalar o actualizar la app, HyperOS puede no reconectar el
   lector.** La app lo intenta sola (`requestRebind` y reinicio del
   componente). Si no lo logra, avisa "La detección está pausada" y el usuario
