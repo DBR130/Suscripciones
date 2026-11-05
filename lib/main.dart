@@ -12,6 +12,7 @@ import 'deteccion/deteccion_service.dart';
 import 'deteccion/lector_notificaciones.dart';
 import 'deteccion/procesador_detecciones.dart';
 import 'deteccion/receptor_compartir.dart';
+import 'deteccion/segundo_plano.dart';
 import 'deteccion/vigilante_deteccion.dart';
 import 'services/api_client.dart';
 import 'services/auth_service.dart';
@@ -120,6 +121,11 @@ Future<void> main() async {
     if (texto != null) router.push(Routers.compartir, extra: texto);
   });
 }
+
+/// Punto de entrada de la tarea de fondo (ProcesarColaWorker.kt): procesa la
+/// cola con la app cerrada. Ver lib/deteccion/segundo_plano.dart.
+@pragma('vm:entry-point')
+Future<void> procesarEnSegundoPlano() => tareaDeFondo();
 
 /// Al abrir la app y cada vez que vuelve a primer plano: comprueba que el
 /// lector esté conectado (y si no, intenta reconectarlo: MIUI lo detiene y

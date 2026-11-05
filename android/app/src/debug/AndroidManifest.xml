@@ -11,5 +11,15 @@
          principal; release y profile se quedan solo con HTTPS. -->
     <application
         android:usesCleartextTraffic="true"
-        tools:replace="android:usesCleartextTraffic"/>
+        tools:replace="android:usesCleartextTraffic">
+        <!-- Solo en debug: forzar la tarea de fondo desde el PC.
+             adb shell am broadcast -a com.example.flutter_suscripciones.PROCESAR_COLA -p com.example.flutter_suscripciones -->
+        <receiver
+            android:name=".deteccion.ProcesarColaReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.example.flutter_suscripciones.PROCESAR_COLA" />
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>

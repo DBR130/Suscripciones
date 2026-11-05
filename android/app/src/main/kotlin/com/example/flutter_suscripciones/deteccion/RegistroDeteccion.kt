@@ -38,6 +38,19 @@ object RegistroDeteccion {
             .putString("resultado_reconexion", resultado)
             .apply()
 
+    /**
+     * Última ejecución de la tarea de fondo (ProcesarColaWorker): resultado
+     * ("ok", "sin sesión", "reintento…"), cuántas notificaciones revisó y el
+     * motivo (un error del servidor, nunca el texto de un SMS).
+     */
+    fun marcarEjecucionFondo(context: Context, resultado: String, procesados: Int, motivo: String?) =
+        prefs(context).edit()
+            .putLong("ultima_ejecucion_fondo", System.currentTimeMillis())
+            .putString("resultado_fondo", resultado)
+            .putInt("procesados_fondo", procesados)
+            .putString("motivo_fondo", motivo)
+            .apply()
+
     fun leer(context: Context): Map<String, Any?> {
         val p = prefs(context)
         fun hora(clave: String): Long? = p.getLong(clave, 0L).takeIf { it > 0 }
@@ -48,6 +61,10 @@ object RegistroDeteccion {
             "ultimo_resultado" to p.getString("ultimo_resultado", null),
             "ultima_reconexion" to hora("ultima_reconexion"),
             "resultado_reconexion" to p.getString("resultado_reconexion", null),
+            "ultima_ejecucion_fondo" to hora("ultima_ejecucion_fondo"),
+            "resultado_fondo" to p.getString("resultado_fondo", null),
+            "procesados_fondo" to p.getInt("procesados_fondo", 0),
+            "motivo_fondo" to p.getString("motivo_fondo", null),
         )
     }
 

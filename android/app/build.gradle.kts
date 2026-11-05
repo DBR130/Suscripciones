@@ -68,6 +68,8 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // Tarea de fondo: procesar la cola con la app cerrada (ProcesarColaWorker).
+    implementation("androidx.work:work-runtime-ktx:2.10.1")
     // Tests del filtro nativo (src/test): corren en el PC, sin celular.
     // org.json real, porque el de Android en los tests de JVM es solo un esqueleto.
     testImplementation("junit:junit:4.13.2")

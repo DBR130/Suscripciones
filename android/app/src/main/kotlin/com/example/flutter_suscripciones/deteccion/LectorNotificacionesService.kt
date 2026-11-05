@@ -69,7 +69,8 @@ class LectorNotificacionesService : NotificationListenerService() {
         RegistroDeteccion.log(this, "Servicio conectado")
         // Por si el usuario cambió de app de SMS mientras el lector no estaba.
         AppSmsPredeterminada.actualizar(this, "servicio conectado")
-        recuperarActivas()
+        // Cobros que llegaron con el lector detenido: también se procesan ya.
+        if (recuperarActivas() > 0) ProcesarColaWorker.programar(this, "cobros recuperados al reconectarse")
     }
 
     override fun onListenerDisconnected() {
@@ -85,6 +86,8 @@ class LectorNotificacionesService : NotificationListenerService() {
         try {
             val resultado = procesar(sbn)
             RegistroDeteccion.log(this, "Recibida de ${sbn.packageName}: $resultado")
+            // Aviso al instante aunque la app esté cerrada (ProcesarColaWorker).
+            if (resultado == "guardada") ProcesarColaWorker.programar(this, "cobro guardado")
         } catch (e: Exception) {
             // Nunca tumbar el servicio por una notificación con formato raro.
             RegistroDeteccion.log(this, "Error procesando una notificación de ${sbn.packageName}", e)

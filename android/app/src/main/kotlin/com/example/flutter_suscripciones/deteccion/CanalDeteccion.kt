@@ -2,6 +2,7 @@ package com.example.flutter_suscripciones.deteccion
 
 import android.app.Activity
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Handler
@@ -9,12 +10,17 @@ import android.os.Looper
 import android.provider.Settings
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /**
  * Canales entre Flutter (lib/deteccion/lector_notificaciones.dart) y el lector:
  *  - MethodChannel "subtrack/deteccion": estado, permiso, cola y configuración.
  *  - EventChannel "subtrack/deteccion/eventos": notificaciones en vivo.
+ *
+ * La app (MainActivity) registra todo con [registrar]. La tarea de fondo
+ * (ProcesarColaWorker, motor sin pantalla) solo [registrarDatos]: cola,
+ * estado, configuración y turno, sin nada que necesite una Activity.
  */
 object CanalDeteccion {
     private const val METODOS = "subtrack/deteccion"
@@ -25,6 +31,22 @@ object CanalDeteccion {
         val componente = ReconexionLector.componente(contexto)
 
         MethodChannel(engine.dartExecutor.binaryMessenger, METODOS).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "abrirAjustesAcceso" -> result.success(abrirAjustesAcceso(activity, componente))
+                else -> manejarDatos(contexto, call, result)
+            }
+        }
+        registrarEventos(contexto, engine)
+    }
+
+    /** Solo los métodos de datos: para el motor sin pantalla de la tarea de fondo. */
+    fun registrarDatos(contexto: Context, engine: FlutterEngine) {
+        MethodChannel(engine.dartExecutor.binaryMessenger, METODOS).setMethodCallHandler { call, result ->
+            manejarDatos(contexto.applicationContext, call, result)
+        }
+    }
+
+    private fun manejarDatos(contexto: Context, call: MethodCall, result: MethodChannel.Result) {
             when (call.method) {
                 "estado" -> {
                     // Flutter pide el estado al abrir la app y al volver a ella:
@@ -41,7 +63,6 @@ object CanalDeteccion {
                         ) + RegistroDeteccion.leer(contexto)
                     )
                 }
-                "abrirAjustesAcceso" -> result.success(abrirAjustesAcceso(activity, componente))
                 // Turno compartido con la tarea de fondo (TurnoDeteccion).
                 "tomarTurno" -> result.success(TurnoDeteccion.tomar(call.argument<String>("quien") ?: "app"))
                 "soltarTurno" -> {
@@ -72,6 +93,16 @@ object CanalDeteccion {
                     ColaNotificaciones.vaciar(contexto)
                     result.success(null)
                 }
+                // Lo anota la tarea de fondo (lib/deteccion/segundo_plano.dart).
+                "registrarEjecucionFondo" -> {
+                    RegistroDeteccion.marcarEjecucionFondo(
+                        contexto,
+                        call.argument<String>("resultado") ?: "?",
+                        call.argument<Int>("procesados") ?: 0,
+                        call.argument<String>("motivo"),
+                    )
+                    result.success(null)
+                }
                 "configuracion" -> {
                     val config = ConfiguracionDeteccion.de(contexto)
                     result.success(
@@ -94,8 +125,9 @@ object CanalDeteccion {
                 }
                 else -> result.notImplemented()
             }
-        }
+    }
 
+    private fun registrarEventos(contexto: Context, engine: FlutterEngine) {
         EventChannel(engine.dartExecutor.binaryMessenger, EVENTOS).setStreamHandler(
             object : EventChannel.StreamHandler {
                 private val principal = Handler(Looper.getMainLooper())
