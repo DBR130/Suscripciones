@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_suscripciones/Common/AppTheme.dart';
 import 'package:flutter_suscripciones/Common/Routers.dart';
 import 'package:flutter_suscripciones/Pages/PerfilPage.dart';
+import 'package:flutter_suscripciones/deteccion/candidato_suscripcion.dart';
 import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
+import 'package:flutter_suscripciones/services/recordatorios_service.dart';
 import 'package:flutter_suscripciones/deteccion/descartadas_page.dart';
 import 'package:flutter_suscripciones/deteccion/resultados_deteccion_page.dart';
 import 'package:flutter_suscripciones/models/suscripcion.dart';
@@ -143,6 +145,28 @@ void main() {
       expect(servicio.restaurados, [2]);
       expect(find.text('Claude'), findsNothing);
       expect(find.text('Volveremos a proponer Claude'), findsOneWidget);
+    });
+  });
+
+  group('reapertura (T7)', () {
+    final reabierto = CandidatoSuscripcion.fromJson({
+      'id': 4,
+      'comercio_normalizado': 'Gimnasio La 80',
+      'monto': 99900,
+      'moneda': 'COP',
+      'frecuencia_estimada': 'mensual',
+      'fecha_ultimo_pago': '2026-10-05',
+      'reabierto': true,
+      'motivo': 'Vimos 3 cobros mensuales de \$99.900',
+    });
+
+    testWidgets('la tarjeta dice por qué se vuelve a proponer', (tester) async {
+      await abrir(tester, FakeDeteccionService(lista: [reabierto]));
+      expect(find.text('Vimos 3 cobros mensuales de \$99.900'), findsOneWidget);
+    });
+
+    test('el aviso del flujo B también lo dice', () {
+      expect(textoAvisoCandidato(reabierto), 'Vimos 3 cobros mensuales de \$99.900. Toca para confirmarla o descartarla.');
     });
   });
 

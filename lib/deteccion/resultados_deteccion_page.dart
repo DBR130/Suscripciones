@@ -370,6 +370,11 @@ class _FilaCandidato extends StatelessWidget {
                       '${Formato.moneda(monto, c.moneda)} · ${frecuencia.etiqueta} · ${c.textoCobros}',
                       style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
                     ),
+                    if (c.motivo != null)
+                      Text(
+                        c.motivo!,
+                        style: const TextStyle(color: AppColors.amber, fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
                     if (c.esDeProcesador && nombre == null)
                       const Text(
                         '¿Qué servicio es?',

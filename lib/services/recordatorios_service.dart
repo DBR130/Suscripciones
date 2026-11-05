@@ -120,6 +120,8 @@ List<RecordatorioPlan> planificarRecordatorios(
 /// Cuerpo del aviso del flujo B: "Detectamos un cobro de $68.139 en Nequi."
 /// o "Detectamos 3 cobros de $89.900 con la misma periodicidad."
 String textoAvisoCandidato(CandidatoSuscripcion c) {
+  // Un descartado que se vuelve a proponer dice por qué (T7).
+  if (c.motivo != null) return '${c.motivo}. Toca para confirmarla o descartarla.';
   final monto = Formato.moneda(c.monto, c.moneda);
   if (c.numPagos > 1) return 'Detectamos ${c.numPagos} cobros de $monto con la misma periodicidad. Toca para confirmarla.';
   final banco = c.banco.isEmpty ? '' : ' en ${c.banco}';

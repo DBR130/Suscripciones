@@ -14,6 +14,7 @@ class CandidatoSuscripcion {
     this.esServicioConocido = false,
     this.numPagos = 1,
     this.procesador,
+    this.motivo,
   });
 
   final int id;
@@ -38,6 +39,10 @@ class CandidatoSuscripcion {
 
   bool get esDeProcesador => procesador != null;
 
+  /// Por qué se vuelve a proponer un comercio que el usuario había descartado
+  /// ("Vimos 3 cobros mensuales de $99.900"), o null.
+  final String? motivo;
+
   /// "Pago procesado por EBANX" o el nombre del comercio.
   String get titulo => esDeProcesador ? 'Pago procesado por $procesador' : nombre;
 
@@ -53,6 +58,7 @@ class CandidatoSuscripcion {
         // candidatos_nuevos (al enviar pagos) no trae el conteo.
         numPagos: json['num_pagos'] as int? ?? 1,
         procesador: json['procesador'] as String?,
+        motivo: json['motivo'] as String?,
       );
 
   /// "3 cobros detectados" / "1 cobro detectado".
