@@ -70,6 +70,30 @@ void main() {
     });
   });
 
+  group('sugerencia por monto (T5)', () {
+    testWidgets('a ±5 % del precio de referencia sugiere el servicio sin elegirlo', (tester) async {
+      final servicio = FakeDeteccionService(lista: [candidato(7, 'EBANX', 19900, pagos: 2, procesador: 'EBANX')]);
+      await abrir(tester, servicio);
+      await tester.tap(find.text('Es mía'));
+      await tester.pumpAndSettle();
+      expect(find.text('¿Es Crunchyroll?'), findsOneWidget);
+      // No se elige solo: el campo sigue vacío.
+      expect(tester.widget<TextField>(find.byKey(const Key('campo-nombre'))).controller!.text, isEmpty);
+
+      await tester.tap(find.text('¿Es Crunchyroll?'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(find.byKey(const Key('campo-nombre'))).controller!.text, 'Crunchyroll');
+    });
+
+    testWidgets('lejos de cualquier precio de referencia no sugiere nada', (tester) async {
+      final servicio = FakeDeteccionService(lista: [candidato(8, 'EBANX', 34900, pagos: 2, procesador: 'EBANX')]);
+      await abrir(tester, servicio);
+      await tester.tap(find.text('Es mía'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('¿Es '), findsNothing);
+    });
+  });
+
   group('nombre editable (T4)', () {
     testWidgets('el lápiz permite cambiar el nombre de cualquier candidato, con sugerencias del catálogo',
         (tester) async {

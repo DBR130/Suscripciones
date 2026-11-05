@@ -12,7 +12,9 @@ class CatalogoServicios {
 
   /// [ambiguo]: el comercio también vende cosas sueltas (Rappi, Apple,
   /// PlayStation...): solo se propone con patrón o señal de suscripción.
-  final List<({String nombre, List<String> alias, bool ambiguo})> servicios;
+  /// [precioCop]: precio de referencia en Colombia, para sugerir el servicio
+  /// de un cobro de procesador ("¿Es Crunchyroll?"); null si no se conoce.
+  final List<({String nombre, List<String> alias, bool ambiguo, double? precioCop})> servicios;
 
   /// Procesadores de pago (EBANX, PayU, dLocal...): cobran en nombre de otro
   /// servicio, así que el SMS trae su nombre y no el del servicio
@@ -35,6 +37,7 @@ class CatalogoServicios {
             nombre: g['nombre_servicio'] as String,
             alias: ((g['alias'] as List?) ?? const []).cast<String>(),
             ambiguo: g['es_ambigua'] == true,
+            precioCop: (g['precio_referencia_cop'] as num?)?.toDouble(),
           ),
     ]);
   }
@@ -51,6 +54,20 @@ class CatalogoServicios {
         final a = normalizarNombre(alias);
         if (a.isNotEmpty && (t.contains(' $a ') || tSeparado.contains(' $a '))) return p.nombre;
       }
+    }
+    return null;
+  }
+
+  /// Margen para sugerir un servicio por el monto de un cobro (±5 %).
+  static const toleranciaSugerencia = 0.05;
+
+  /// Servicio cuyo precio de referencia está a ±5 % de [monto] (solo COP), o
+  /// null. Es una sugerencia: el usuario decide.
+  String? sugerirPorMonto(double monto, String moneda) {
+    if (moneda != 'COP') return null;
+    for (final s in servicios) {
+      final precio = s.precioCop;
+      if (precio != null && (monto - precio).abs() <= toleranciaSugerencia * precio) return s.nombre;
     }
     return null;
   }

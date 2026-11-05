@@ -210,7 +210,7 @@ void main() {
       theme: AppTheme.dark,
       home: DepuracionDeteccionPage(
         lector: lector(),
-        cargarCatalogo: () async => const CatalogoServicios([(nombre: 'Crunchyroll', alias: [], ambiguo: false)]),
+        cargarCatalogo: () async => const CatalogoServicios([(nombre: 'Crunchyroll', alias: [], ambiguo: false, precioCop: null)]),
       ),
     ));
     await tester.pumpAndSettle();

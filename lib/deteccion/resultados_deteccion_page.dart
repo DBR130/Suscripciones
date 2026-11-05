@@ -63,8 +63,8 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   /// Correcciones del usuario (monto, frecuencia y nombre) antes de confirmar.
   final Map<int, Correccion> _correccion = {};
 
-  /// Nombres del catálogo para las sugerencias de la hoja.
-  List<String> _nombresCatalogo = const [];
+  /// Catálogo para las sugerencias de la hoja (nombres y precios).
+  CatalogoServicios _catalogo = CatalogoServicios.vacio;
 
   @override
   void initState() {
@@ -76,9 +76,7 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
   Future<void> _cargarCatalogo() async {
     try {
       final catalogo = await widget.cargarCatalogo?.call();
-      if (catalogo != null && mounted) {
-        setState(() => _nombresCatalogo = [for (final s in catalogo.servicios) s.nombre]);
-      }
+      if (catalogo != null && mounted) setState(() => _catalogo = catalogo);
     } on ApiException {
       // Sin sugerencias: el usuario igual puede escribir el nombre.
     }
@@ -130,7 +128,8 @@ class _ResultadosDeteccionPageState extends State<ResultadosDeteccionPage> {
         monto: _monto(c),
         frecuencia: _frecuencia(c),
         nombre: _nombre(c),
-        sugerencias: _nombresCatalogo,
+        sugerencias: [for (final s in _catalogo.servicios) s.nombre],
+        sugerenciaPorMonto: _catalogo.sugerirPorMonto(_monto(c), c.moneda),
       ),
     );
     if (r == null || !mounted) return false;
@@ -425,6 +424,7 @@ class _HojaCorreccion extends StatefulWidget {
     required this.frecuencia,
     required this.nombre,
     required this.sugerencias,
+    this.sugerenciaPorMonto,
   });
 
   final CandidatoSuscripcion candidato;
@@ -434,6 +434,10 @@ class _HojaCorreccion extends StatefulWidget {
 
   /// Nombres del catálogo que se sugieren al escribir.
   final List<String> sugerencias;
+
+  /// Servicio con un precio de referencia parecido al monto (T5): se ofrece
+  /// como chip "¿Es Crunchyroll?", nunca se elige solo.
+  final String? sugerenciaPorMonto;
 
   @override
   State<_HojaCorreccion> createState() => _HojaCorreccionState();
@@ -447,6 +451,14 @@ class _HojaCorreccionState extends State<_HojaCorreccion> {
       widget.nombre ?? (widget.candidato.esDeProcesador ? '' : widget.candidato.nombre);
   String? _error;
   String? _errorNombre;
+
+  /// El del campo del nombre (lo crea Autocomplete).
+  TextEditingController? _controlNombre;
+
+  void _usarSugerencia(String servicio) {
+    setState(() => _nombre = servicio);
+    _controlNombre?.text = servicio;
+  }
 
   @override
   void dispose() {
@@ -504,13 +516,25 @@ class _HojaCorreccionState extends State<_HojaCorreccion> {
             onSelected: (s) => setState(() => _nombre = s),
             fieldViewBuilder: (context, controlador, foco, alEnviar) => TextField(
               key: const Key('campo-nombre'),
-              controller: controlador,
+              // Se guarda para que el chip de la sugerencia pueda llenarlo.
+              controller: _controlNombre = controlador,
               focusNode: foco,
               textCapitalization: TextCapitalization.words,
               onChanged: (v) => _nombre = v,
               decoration: InputDecoration(errorText: _errorNombre, hintText: 'Por ejemplo, Crunchyroll'),
             ),
           ),
+          if (widget.sugerenciaPorMonto case final sugerencia? when sugerencia != _nombre) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ActionChip(
+                avatar: const Icon(Icons.lightbulb_outline, size: 16, color: AppColors.amber),
+                label: Text('¿Es $sugerencia?'),
+                onPressed: () => _usarSugerencia(sugerencia),
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           AppEtiqueta('Monto (${widget.candidato.moneda})'),
           const SizedBox(height: 6),
