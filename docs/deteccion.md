@@ -11,6 +11,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | 3 | Backend: pagos detectados y candidatos de suscripción | **Hecho** |
 | 4 | Pantallas 03, 04, 05 y flujo B | **Hecho** |
 | 5 | Historial de SMS (opcional, READ_SMS), "Compartir" y análisis en el celular | **Hecho** |
+| 6 | Procesadores de pago, servicios ambiguos, deshacer descartes y aviso de pago registrado | **Hecho** |
 
 ## Arquitectura
 
@@ -597,6 +598,159 @@ y `app-sinsms-release.apk` (en debug, `app-completa-debug.apk` y
 
 Ver el resumen al final de "Cómo probar (hito 5)".
 
+## Procesadores, servicios ambiguos y descartes (hito 6)
+
+Tickets en [docs/tickets/](tickets/README.md), implementados con TDD.
+
+### Hallazgos de los probadores
+
+- **EBANX.** La búsqueda en el historial le propuso a Santiago una suscripción
+  llamada "Servicios Web Ebanx Co". EBANX es un **procesador de pagos**: cobra
+  en nombre de servicios internacionales (era Crunchyroll, $19.900, según su
+  correo). La detección del patrón funcionó; el problema era el nombre.
+- **SMS reales de Nequi** (septiembre de 2026), ahora fixtures en
+  `test/fixtures/sms_reales_nequi_2026_09.json`:
+  - "NEQUI: Pagaste 19.900,00 en SERVICIOS WEB EBANX CO": procesador EBANX.
+  - "NEQUI: Pagaste 39.381,00 en STEAMGAMES.COM 4259522985": el número es un
+    teléfono pegado al comercio, no un monto ni parte del nombre.
+  - "NEQUI: Pagaste 64.925,65 en ANTHROPIC* CLAUDE SUB" y el de octubre
+    (68.139,27): dos cobros mensuales de Claude con 4,95 % de diferencia solo
+    por la tasa del dólar.
+  - "NEQUI: Pagaste 18.900,00 en DLO*DiDi Food CO Payin" (y otro de 16.140 dos
+    minutos después): `DLO*` es el prefijo de **dLocal**; el comercio real es
+    DiDi Food. Compras normales.
+  - En Truecaller el remitente aparece como "Robocall · Potential fraud", pero
+    los SMS llegan: el filtro no usa el título.
+- **`GOOGLE *YouTubePremium`** no se reconocía: las palabras pegadas no
+  coincidían con "YouTube Premium" del catálogo.
+- **Falsos positivos posibles:** un pedido de Rappi se reconocía como "Rappi
+  Pro" y un juego de PlayStation como "PlayStation Plus", desde el primer pago.
+
+### Limpieza del comercio (parser)
+
+- **Palabras pegadas:** se compara de dos formas, tal cual ("YOUTUBE
+  PREMIUM") y separando las palabras pegadas por mayúsculas en los dos lados
+  ("YouTubePremium" ↔ "YouTube Premium"). Igual en Dart
+  (`CatalogoServicios.buscar`) y en JS (`buscarGuia`).
+- **Teléfono al final:** un número de 7 o más dígitos al final del comercio se
+  quita.
+- **dLocal:** `DLO*` es prefijo de pasarela (como `GOOGLE *` o `PAYPAL *`) y se
+  quitan "CO Payin" al final.
+- Las palabras con mayúsculas y minúsculas mezcladas se conservan ("DiDi").
+- **Señal de suscripción**, como palabra completa: SUB, SUBS, SUBSCRIPTION,
+  SUSCRIPCION (se quitan del nombre) y MEMBRESIA, PRIME, PRO, PLUS, PREMIUM
+  (no se quitan: son parte de nombres como "YouTube Premium"). "PRO" no
+  coincide con "PRODUCTOS". La lista está en `parser_pagos.dart` y en
+  `services/detecciones.js`.
+
+### Servicios ambiguos
+
+Algunos comercios venden cosas sueltas además de la suscripción. En
+`backend/db/guias.json` tienen `"es_ambigua": true`: Rappi Pro, Apple,
+PlayStation Plus, Xbox Game Pass, YouTube Premium, Google One, Adobe, Prime
+Video y Microsoft 365 (migración 008).
+
+- Un servicio ambiguo **solo se propone con patrón** (2 o más cobros con
+  montos ±10 % y periodicidad semanal, mensual o anual), salvo que el comercio
+  traiga **señal de suscripción** ("RAPPI PRO", "YouTubePremium"): entonces
+  desde el primer pago.
+- La regla está en los dos lados: en el celular, un cobro suelto de un
+  servicio ambiguo sin señal no sale (queda como compra puntual local); en el
+  backend no se propone.
+
+### Procesadores de pago
+
+`backend/db/procesadores.json` (EBANX, PayU, dLocal —con alias "dlo"—,
+Mercado Pago, PayPal, Stripe, 2Checkout/Verifone, Paddle, FastSpring, ePayco,
+Wompi, PlacetoPay/Evertec, Kushki y Bold). El backend lo lee al arrancar y lo
+entrega en `GET /api/guias` como `procesadores`: una sola lista para los dos
+lados.
+
+- Un comercio es de un procesador si contiene un alias como palabra completa
+  **y no es un servicio del catálogo** ("PAYPAL *NETFLIX" sigue siendo
+  Netflix; con `DLO*` el SMS trae el comercio real).
+- Se propone **solo con patrón**, como un comercio desconocido.
+- Los cobros del mismo procesador se **separan por monto** (±10 %): cada
+  grupo es un candidato distinto, con `comercio_normalizado` = `procesador` =
+  "EBANX" (migración 009: columna `procesador` e índice único parcial
+  `WHERE procesador IS NULL`).
+- En la pantalla 05 se ve **"Pago procesado por EBANX"** con **"¿Qué servicio
+  es?"**. Antes de confirmarlo, el usuario escribe el nombre real (con
+  sugerencias del catálogo). El lápiz permite editar nombre, monto y
+  frecuencia de **cualquier** candidato.
+- **Sugerencia por monto:** si el monto está a ±5 % del precio de referencia
+  de un servicio (`precio_referencia_cop`, migración 008), aparece el chip
+  "¿Es Crunchyroll?". Nunca se elige solo. Por ahora solo Crunchyroll tiene
+  precio (19.900 COP, de un SMS y un correo reales); los demás quedan vacíos
+  hasta conocerlos con seguridad.
+- Al confirmar, la suscripción queda con el nombre elegido y se le enlazan
+  solo los pagos del procesador con monto similar. Los **cobros siguientes**
+  del mismo procesador con monto ±10 % se registran en esa suscripción.
+- **Limitación:** si el servicio sube más del 10 %, el cobro cae fuera del
+  grupo y aparece como un candidato nuevo "Pago procesado por EBANX", en vez
+  de registrarse como cambio de precio.
+
+### Descartes: deshacer, lista y reapertura
+
+- En la pantalla 05, **"No es mía" descarta al instante**; una barra de 5 s
+  ofrece **"Deshacer"** (restaura). El botón de confirmar está en la barra
+  inferior del Scaffold, así la barra de Deshacer flota encima sin taparlo.
+- **Perfil → "Detecciones descartadas"**: la lista con "Volver a proponer".
+- **Reapertura (migración 010):** si un comercio descartado acumula **3 o más
+  cobros periódicos con montos similares**, el candidato vuelve a pendiente
+  **una sola vez** (`reabierto`), con el motivo ("Vimos 3 cobros mensuales de
+  $99.900") en la tarjeta y en el aviso del flujo B. Si se descarta otra vez,
+  no se reabre solo.
+- Para poder contarlos, los pagos de un comercio descartado se conservan
+  **hasta 400 días** (ver Privacidad).
+
+### Aviso de pago registrado y cobros convertidos
+
+- En el **flujo en vivo** (al abrir o volver a la app), cuando un pago se
+  registra en una suscripción existente: "Registramos un pago de $44.900 en
+  Netflix"; si cambió el precio, "Netflix subió de $44.900 a $49.900" (o
+  "bajó"). Con 3 o más en la misma revisión, un solo aviso de resumen. Nada si
+  fue repetido, compra normal o comercio descartado. No se avisa en la
+  búsqueda del historial (serían meses de pagos viejos) ni en "Compartir".
+- **Cobros convertidos de USD** (montos en COP con centavos distintos de ,00):
+  la tolerancia de cambio de precio sube del 5 % al **15 %**, para que la tasa
+  del dólar no produzca avisos falsos (Claude varió 4,95 %).
+- El aviso del flujo B de un procesador se titula "Pago procesado por EBANX".
+
+### Migraciones
+
+| Migración | Qué agrega |
+|---|---|
+| 008 | `guias_cancelacion.es_ambigua` y `precio_referencia_cop` (después, `npm run db:guias`) |
+| 009 | `candidatos_suscripcion.procesador` e índice único parcial |
+| 010 | `candidatos_suscripcion.reabierto` y `motivo` |
+
+Aplicarlas en local y en Neon **antes** de subir a `develop`, y volver a
+cargar el catálogo:
+
+```powershell
+cd backend
+npm run db:migrate; npm run db:guias
+npm run db:migrate:nube; npm run db:guias:nube
+```
+
+### Tests
+
+- Flutter: `deteccion_parser_test` (palabras pegadas, Steam, dLocal,
+  procesadores, fixtures reales), `deteccion_historial_test` (ambiguos,
+  procesadores y almacén), `deteccion_resultados_test` (pantalla 05,
+  descartadas, sugerencia, reapertura), `deteccion_avisos_pago_test` (aviso
+  de pago registrado).
+- Backend: `detecciones.test.js` (ambiguos, procesadores, enlace posterior,
+  restaurar con 404/409, reapertura, retención de 400 días, cobros
+  convertidos) y `guias.test.js` (`es_ambigua`, `precio_referencia_cop`,
+  procesadores).
+- Nativo: `FiltroCobrosTest` también revisa los SMS reales de Nequi.
+
+### Cómo probarlo en el Xiaomi
+
+Ver "Cómo probar (hito 6)".
+
 ## Parser (hito 2)
 
 `ParserPagos.interpretar(texto, titulo:, recibidaEn:)` devuelve un
@@ -703,7 +857,9 @@ enviando una huella, si otro usuario ya la registró.
 | `POST /api/detecciones/pagos` | Recibe `{pagos: [...]}` (máx. 100) y devuelve `{resultados, candidatos_nuevos}` |
 | `GET /api/detecciones/candidatos` | Candidatos pendientes (`?estado=pendiente,confirmada,descartada` para otros), con `num_pagos` |
 | `POST /api/detecciones/candidatos/:id/confirmar` | Crea la suscripción. Cuerpo opcional con los datos corregidos (mismos campos que una suscripción); lo que falte sale del candidato. 201 `{suscripcion, candidato, pagos_enlazados}` |
-| `POST /api/detecciones/candidatos/:id/descartar` | El comercio no se vuelve a proponer. `{candidato}` |
+| `POST /api/detecciones/candidatos/:id/descartar` | El comercio no se vuelve a proponer (salvo reapertura, hito 6). `{candidato}` |
+| `GET /api/detecciones/descartadas` | Candidatos descartados del usuario (hito 6). `{candidatos}` |
+| `POST /api/detecciones/candidatos/:id/restaurar` | Deshace un descarte: vuelve a pendiente (hito 6). 404 si no existe o es de otro usuario; 409 si no está descartado |
 
 Cada pago del lote:
 
@@ -848,6 +1004,15 @@ Android muestra una advertencia fuerte al activarlo.
 | Resúmenes de grupo y notificaciones fijas (música, descargas) | Solo sus banderas | Se ignoran |
 | Llamadas y llamadas perdidas (por ejemplo, de Truecaller) | Solo su categoría | Se ignoran sin leer el texto |
 | Con "llamada", "spam" o "estafa" (avisos de Truecaller) | El texto, en memoria | Se descarta siempre, aunque tenga monto |
+
+**Pagos de comercios descartados (hito 6).** Cuando el usuario marca un
+candidato "No es mía", sus pagos detectados (banco, comercio, monto, fecha;
+nunca el texto) se conservan en el servidor **hasta 400 días**. Son solo de
+servicios conocidos o de cobros recurrentes (las compras sueltas nunca llegan
+al servidor). Sirven para notar si ese comercio sigue cobrando cada mes y
+proponerlo de nuevo una sola vez. Se borran a los 400 días (tarea diaria), al
+eliminar la cuenta (en cascada), y dejan de tener retención especial si el
+usuario lo vuelve a proponer o lo confirma.
 
 Apps permitidas hoy: la **app de SMS predeterminada** del usuario, más la lista
 fija de respaldo (Mensajes de Google, Truecaller, Mensajes de Samsung y
@@ -1269,6 +1434,62 @@ Con un cobro de Nequi (sin fecha) que ya llegó por la notificación, busca en
 el historial: el backend responde `repetido` y no aparece un segundo pago
 (la notificación y el SMS difieren unos segundos; tolerancia de 5 minutos).
 
+## Cómo probar (hito 6): procesadores, ambiguos y descartes
+
+### Preparación
+
+```powershell
+cd backend
+npm run db:migrate; npm run db:guias
+cd ..
+flutter build apk --debug
+adb install -r build\app\outputs\flutter-apk\app-completa-debug.apk
+adb logcat -v time -s SubTrackDeteccion:V
+```
+
+(Con el backend de Render: `db:migrate:nube` y `db:guias:nube`, y subir a
+`develop`.)
+
+### 1. EBANX con nombre real
+
+Un procesador necesita patrón (2 cobros mensuales), y con adb solo se
+simulan cobros de hoy. Por eso hay dos formas:
+
+- **Recomendada:** la búsqueda en el historial de SMS en un celular que tenga
+  cobros reales de EBANX (el de Santiago).
+- Simular un cobro de hoy y comprobar que **no** aparece todavía (es compra
+  puntual hasta que se repita):
+
+```powershell
+adb shell "cmd notification post -S bigtext -t 'NEQUI' ebanx1 'NEQUI: Pagaste 19.900,00 en SERVICIOS WEB EBANX CO'"
+```
+
+Con dos cobros mensuales, en la pantalla 05 debe aparecer **"Pago procesado por EBANX"** con "¿Qué
+servicio es?". Al tocar "Es mía" se abre la hoja con el chip **"¿Es
+Crunchyroll?"**; tócalo y confirma. La suscripción queda como Crunchyroll.
+
+### 2. Ambiguos
+
+```powershell
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' rappi1 'Bancolombia: Compraste `$32.500,00 en RAPPI con tu T.Deb *0000, el 03/11/2026 a las 20:10.'"
+adb shell "cmd notification post -S bigtext -t 'Bancolombia' yt1 'Bancolombia: Compraste `$26.900,00 en GOOGLE *YouTubePremium con tu T.Deb *0000, el 03/11/2026 a las 08:00.'"
+```
+
+Rappi suelto: no aparece en la pantalla 05. YouTube Premium: sí, desde el
+primer cobro.
+
+### 3. Deshacer y descartadas
+
+En la pantalla 05 toca "No es mía": la tarjeta se va y aparece "Descartamos X
+· Deshacer" durante 5 s. Toca "Deshacer": vuelve. Descarta otra y ve a
+**Perfil → Detecciones descartadas → Volver a proponer**.
+
+### 4. Aviso de pago registrado
+
+Con una suscripción "Netflix" de $44.900 creada, simula un cobro de Netflix y
+vuelve a la app: llega "Registramos un pago de $44.900 en Netflix". Con
+$49.900: "Netflix subió de $44.900 a $49.900".
+
 ## Limitaciones conocidas
 
 - **La cola se procesa cuando la app se abre o vuelve a primer plano.** El
@@ -1303,6 +1524,11 @@ el historial: el backend responde `repetido` y no aparece un segundo pago
 - **Un comercio desconocido con un solo cobro** no llega al backend hasta que
   se repite. Si el usuario ya creó esa suscripción a mano, el primer pago no
   se enlaza; lo puede registrar con "Compartir".
+- **Procesadores:** si el servicio sube más del 10 %, su cobro aparece como un
+  candidato nuevo del procesador, no como cambio de precio. Solo Crunchyroll
+  tiene precio de referencia para la sugerencia "¿Es X?".
+- **Servicios ambiguos sin señal** (Rappi, Apple, PlayStation…) tardan al
+  menos dos cobros en proponerse.
 - Los cobros publicados mientras el lector estaba detenido solo se recuperan
   si siguen en la barra de notificaciones.
 - Solo se reconocen los formatos de Bancolombia y Nequi probados con mensajes
