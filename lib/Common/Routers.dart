@@ -153,6 +153,7 @@ class Routers {
               lector: lectorNotificaciones,
               recordatorios: recordatorios,
               cargarCatalogo: suscripcionService.catalogoServicios,
+              diagnostico: procesadorDetecciones.ultimoDiagnostico,
             ),
           ),
         GoRoute(

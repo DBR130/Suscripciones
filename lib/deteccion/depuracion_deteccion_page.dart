@@ -7,11 +7,13 @@ import 'package:intl/intl.dart';
 
 import '../Common/AppTheme.dart';
 import '../services/recordatorios_service.dart';
+import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/guia_xiaomi.dart';
+import 'analizador_pagos.dart';
 import 'catalogo_servicios.dart';
 import 'lector_notificaciones.dart';
 import 'notificacion_capturada.dart';
@@ -28,7 +30,13 @@ const comandoSimulacion = r'''adb shell "cmd notification post -S bigtext -t 'Ba
 /// extrae el parser (hito 2). Sirve para identificar los paquetes del banco y
 /// de la app de SMS del celular y para probar el parser con cobros reales.
 class DepuracionDeteccionPage extends StatefulWidget {
-  const DepuracionDeteccionPage({super.key, required this.lector, this.recordatorios, this.cargarCatalogo});
+  const DepuracionDeteccionPage({
+    super.key,
+    required this.lector,
+    this.recordatorios,
+    this.cargarCatalogo,
+    this.diagnostico,
+  });
 
   final LectorNotificaciones lector;
 
@@ -38,6 +46,10 @@ class DepuracionDeteccionPage extends StatefulWidget {
   /// Catálogo de servicios para normalizar comercios (GET /api/guias). Si
   /// falla, el parser funciona igual, sin reconocer servicios.
   final Future<CatalogoServicios> Function()? cargarCatalogo;
+
+  /// "Último escaneo": cada comercio que agrupó el análisis, con su decisión
+  /// (ProcesadorDetecciones.ultimoDiagnostico).
+  final ValueListenable<List<DiagnosticoComercio>>? diagnostico;
 
   @override
   State<DepuracionDeteccionPage> createState() => _DepuracionDeteccionPageState();
@@ -188,6 +200,22 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
           const SizedBox(height: 14),
           _tarjetaApps(),
           const SizedBox(height: 14),
+          if (widget.diagnostico case final diagnostico?)
+            ValueListenableBuilder(
+              valueListenable: diagnostico,
+              builder: (context, comercios, _) => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _Seccion('Último escaneo (${comercios.length} ${comercios.length == 1 ? 'comercio' : 'comercios'})'),
+                  if (comercios.isEmpty)
+                    const _Vacio('Haz un escaneo (pantalla 04 o "Buscar suscripciones en mis SMS") para ver qué '
+                        'decidió el análisis con cada comercio.')
+                  else
+                    for (final c in comercios) ...[_TarjetaDiagnostico(c), const SizedBox(height: 8)],
+                  const SizedBox(height: 14),
+                ],
+              ),
+            ),
           _Seccion('En vivo (${_enVivo.length})'),
           if (_enVivo.isEmpty)
             const _Vacio('Deja esta pantalla abierta y llegará aquí cada notificación que procese el lector.')
@@ -512,6 +540,46 @@ class _TarjetaEvento extends StatelessWidget {
             TextSpan(text: detalle, style: const TextStyle(color: AppColors.muted)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Un comercio del último escaneo: banco, cobros, montos, fechas y la decisión
+/// con su motivo. Solo campos extraídos.
+class _TarjetaDiagnostico extends StatelessWidget {
+  const _TarjetaDiagnostico(this.comercio);
+
+  final DiagnosticoComercio comercio;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = comercio;
+    final cobros = c.cobros == 1 ? '1 cobro' : '${c.cobros} cobros';
+    final montos = c.montos.map((m) => Formato.moneda(m, c.moneda)).join(', ');
+    final fechas = c.fechas.map(Formato.fechaCorta).join(', ');
+    final repetidos = c.repetidos == 0 ? '' : ' · ${c.repetidos} repetido${c.repetidos == 1 ? '' : 's'}';
+    return AppCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(c.nombre, style: const TextStyle(color: AppColors.text, fontSize: 13.5, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 2),
+          Text(
+            '${c.bancos.join(', ')} · $cobros · $montos · $fechas',
+            style: const TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${c.salen > 0 ? 'SALE' : 'NO SALE'} · ${c.motivo}$repetidos',
+            style: TextStyle(
+              color: c.salen > 0 ? AppColors.accentSoft : AppColors.amber,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

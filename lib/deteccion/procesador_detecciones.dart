@@ -1,4 +1,8 @@
+import 'package:flutter/foundation.dart';
+
+import '../utils/formato.dart';
 import 'almacen_pagos_locales.dart';
+import 'analizador_pagos.dart';
 import 'candidato_suscripcion.dart';
 import 'catalogo_servicios.dart';
 import 'deteccion_service.dart';
@@ -89,6 +93,23 @@ class ProcesadorDetecciones {
 
   /// Recién dado el permiso, Android tarda un momento en conectar el lector.
   final Duration esperaConexion;
+
+  /// Diagnóstico del último escaneo (pantalla de depuración, solo debug): cada
+  /// comercio con su decisión. Solo campos extraídos, nunca el texto.
+  final ValueNotifier<List<DiagnosticoComercio>> ultimoDiagnostico = ValueNotifier(const []);
+
+  /// Analiza los pagos del celular (lo mismo que decide qué sale), guarda el
+  /// diagnóstico y, en debug, lo escribe en los logs.
+  Future<void> _diagnosticar() async {
+    final diagnostico = AnalizadorPagos.diagnosticar([for (final l in await almacen.leer()) l.pago]);
+    ultimoDiagnostico.value = diagnostico;
+    if (!kDebugMode) return;
+    for (final c in diagnostico) {
+      debugPrint('SubTrackDeteccion escaneo: ${c.nombre} · ${c.bancos.join(', ')} · ${c.cobros} cobros '
+          '(${c.montos.map((m) => Formato.moneda(m, c.moneda)).join(', ')}) · '
+          '${c.salen > 0 ? 'sale' : 'no sale'}: ${c.motivo}');
+    }
+  }
   static const _intentosConexion = 6;
 
   Future<ResultadoEscaneo>? _enCurso;
@@ -127,6 +148,7 @@ class ProcesadorDetecciones {
     // Minimización: el texto crudo no se queda en la cola. Lo interpretado ya
     // está en el almacén local (solo campos extraídos).
     await lector.borrarDeCola(cola.map((n) => n.id).toList());
+    await _diagnosticar();
     final r = await _enviarPendientes();
     return ResultadoEscaneo(
       revisadas: cola.length,
@@ -150,6 +172,7 @@ class ProcesadorDetecciones {
     alAvanzar?.call(EtapaHistorial.analizando);
     final pagos = _interpretar(lectura.mensajes, ParserPagos(await cargarCatalogo()));
     await almacen.agregar(pagos);
+    await _diagnosticar();
 
     alAvanzar?.call(EtapaHistorial.enviando);
     final r = await _enviarPendientes();

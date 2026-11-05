@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_suscripciones/Common/AppTheme.dart';
 import 'package:flutter_suscripciones/Common/Routers.dart';
+import 'package:flutter_suscripciones/deteccion/analizador_pagos.dart';
 import 'package:flutter_suscripciones/deteccion/catalogo_servicios.dart';
 import 'package:flutter_suscripciones/deteccion/depuracion_deteccion_page.dart';
 import 'package:flutter_suscripciones/deteccion/lector_notificaciones.dart';
@@ -260,6 +261,33 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump();
     expect(descubrimiento, isFalse);
+  });
+
+  testWidgets('"Último escaneo": cada comercio con su decisión, sin texto de SMS', (tester) async {
+    tester.view.physicalSize = const Size(1080, 6000);
+    tester.view.devicePixelRatio = 2.5;
+    addTearDown(tester.view.reset);
+    final diagnostico = ValueNotifier([
+      DiagnosticoComercio(
+        nombre: 'Rappi Pro',
+        bancos: {'Bancolombia'},
+        montos: [30300],
+        fechas: [DateTime(2026, 6, 21, 13, 24)],
+        decision: DecisionEscaneo.ambiguoSinSenalNiPatron,
+        motivo: 'Ambiguo sin señal, sin precio de referencia y sin serie',
+        pagosQueSalen: const [],
+        repetidos: 0,
+      ),
+    ]);
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.dark,
+      home: DepuracionDeteccionPage(lector: lector(), diagnostico: diagnostico),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Último escaneo (1 comercio)'), findsOneWidget);
+    expect(find.text('Rappi Pro'), findsOneWidget);
+    expect(find.text(r'Bancolombia · 1 cobro · $30.300 · 21 jun'), findsOneWidget);
+    expect(find.text('NO SALE · Ambiguo sin señal, sin precio de referencia y sin serie'), findsOneWidget);
   });
 
   testWidgets('al actualizar, avisa cuántas notificaciones recuperó de la barra', (tester) async {

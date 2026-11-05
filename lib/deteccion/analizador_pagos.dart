@@ -41,12 +41,14 @@ class DiagnosticoComercio {
     required this.motivo,
     required this.pagosQueSalen,
     required this.repetidos,
+    this.moneda = 'COP',
   });
 
   /// Comercio normalizado, o el procesador ("EBANX").
   final String nombre;
   final Set<String> bancos;
   final List<double> montos;
+  final String moneda;
   final List<DateTime> fechas;
   final DecisionEscaneo decision;
   final String motivo;
@@ -190,6 +192,7 @@ class AnalizadorPagos {
           nombre: primero.procesador ?? primero.comercio,
           bancos: {for (final p in grupo) p.banco},
           montos: [for (final p in grupo) p.monto],
+          moneda: primero.moneda,
           fechas: [for (final p in grupo) p.fecha],
           decision: decision,
           motivo: motivo,

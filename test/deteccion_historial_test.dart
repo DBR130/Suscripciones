@@ -385,7 +385,12 @@ void main() {
     test('envía solo servicios conocidos y comercios recurrentes, sin el texto', () async {
       final servicio = FakeDeteccionService();
       final etapas = <EtapaHistorial>[];
-      final r = await procesador(servicio).buscarEnHistorial(alAvanzar: etapas.add);
+      final p = procesador(servicio);
+      final r = await p.buscarEnHistorial(alAvanzar: etapas.add);
+      // El diagnóstico del último escaneo queda para la pantalla de depuración.
+      final diagnostico = {for (final c in p.ultimoDiagnostico.value) c.nombre: c.decision};
+      expect(diagnostico['Tiendas D1'], DecisionEscaneo.compraSuelta);
+      expect(diagnostico['Netflix'], DecisionEscaneo.servicioConocido);
       expect(etapas, EtapaHistorial.values);
       expect(r.revisadas, 240);
       expect(r.cobros, 5);
