@@ -4,10 +4,12 @@ import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import com.example.flutter_suscripciones.deteccion.CanalCompartir
 import com.example.flutter_suscripciones.deteccion.CanalDeteccion
 import com.example.flutter_suscripciones.deteccion.CanalHistorialSms
+import com.example.flutter_suscripciones.deteccion.FabricanteSegundoPlano
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -21,14 +23,22 @@ class MainActivity : FlutterActivity() {
         CanalHistorialSms.registrar(this, flutterEngine)
         // Compartir un SMS con SubTrack (las dos versiones).
         CanalCompartir.registrar(flutterEngine, intent)
-        // Canal que usa RecordatoriosService (lib/services/recordatorios_service.dart)
-        // para saber el fabricante y abrir ajustes del sistema.
+        // Canal "subtrack/sistema": ajustes de la app (RecordatoriosService) y
+        // guía de segundo plano (lib/deteccion/guia_segundo_plano.dart).
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "subtrack/sistema")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "fabricante" -> result.success(Build.MANUFACTURER)
                     "abrirAjustesApp" -> result.success(abrirAjustesApp())
-                    "abrirInicioAutomatico" -> result.success(abrirInicioAutomatico())
+                    // Guía de segundo plano (encargo C).
+                    "segundoPlano" -> result.success(
+                        mapOf(
+                            "fabricante" to Build.MANUFACTURER,
+                            "grupo" to FabricanteSegundoPlano.grupo(Build.MANUFACTURER),
+                            "bateria_sin_restricciones" to bateriaSinRestricciones(),
+                        )
+                    )
+                    "abrirSegundoPlano" -> result.success(abrirSegundoPlano())
+                    "abrirBateria" -> result.success(abrirBateria())
                     else -> result.notImplemented()
                 }
             }
@@ -60,16 +70,27 @@ class MainActivity : FlutterActivity() {
         Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
     )
 
-    // "Inicio automático" de MIUI/HyperOS. Si el celular no la tiene, se
-    // abren los ajustes de la app.
-    private fun abrirInicioAutomatico(): Boolean {
-        val xiaomi = Intent().setComponent(
-            ComponentName(
-                "com.miui.securitycenter",
-                "com.miui.permcenter.autostart.AutoStartManagementActivity"
-            )
-        )
-        return abrir(xiaomi) || abrirAjustesApp()
+    // Pantalla de la marca para dejar a SubTrack en segundo plano (autoencendido
+    // o inicio automático). Si no existe o no se deja abrir, los ajustes de la
+    // app. Con try/catch en vez de resolveActivity: desde Android 11 las
+    // actividades de otros paquetes no son visibles sin <queries>, y así es
+    // como ya se probó en el Xiaomi.
+    private fun abrirSegundoPlano(): Boolean {
+        for ((paquete, actividad) in FabricanteSegundoPlano.pantallas(FabricanteSegundoPlano.grupo(Build.MANUFACTURER))) {
+            if (abrir(Intent().setComponent(ComponentName(paquete, actividad)))) return true
+        }
+        return abrirAjustesApp()
+    }
+
+    // Lista de "Optimización de batería" del sistema; si no existe, los ajustes
+    // de la app. Sin REQUEST_IGNORE_BATTERY_OPTIMIZATIONS (políticas de Google Play).
+    private fun abrirBateria(): Boolean =
+        abrir(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) || abrirAjustesApp()
+
+    private fun bateriaSinRestricciones(): Boolean = try {
+        (getSystemService(POWER_SERVICE) as PowerManager).isIgnoringBatteryOptimizations(packageName)
+    } catch (e: Exception) {
+        false
     }
 
     private fun abrir(intent: Intent): Boolean = try {

@@ -77,6 +77,8 @@ object CanalDeteccion {
                     if (!LectorNotificacionesService.conectado) {
                         val motivo = call.argument<String>("motivo") ?: "desde la app"
                         RegistroDeteccion.log(contexto, "App con el lector desconectado ($motivo): se intenta reconectar")
+                        // Lo que se rescate de la barra al reconectarse llegó tarde (encargo C).
+                        RescateTardio.pedir()
                         ReconexionLector.reconectar(contexto, motivo)
                     }
                     result.success(null)

@@ -70,7 +70,10 @@ class LectorNotificacionesService : NotificationListenerService() {
         // Por si el usuario cambió de app de SMS mientras el lector no estaba.
         AppSmsPredeterminada.actualizar(this, "servicio conectado")
         // Cobros que llegaron con el lector detenido: también se procesan ya.
-        if (recuperarActivas() > 0) ProcesarColaWorker.programar(this, "cobros recuperados al reconectarse")
+        // Si la app acababa de pedir la reconexión, se marcan como rescate
+        // tardío (Flutter decide si eran cobros nuevos: aviso de segundo plano).
+        val tardio = RescateTardio.tomar()
+        if (recuperarActivas(tardio) > 0) ProcesarColaWorker.programar(this, "cobros recuperados al reconectarse")
     }
 
     override fun onListenerDisconnected() {
@@ -94,8 +97,12 @@ class LectorNotificacionesService : NotificationListenerService() {
         }
     }
 
-    /** Recorre las notificaciones activas y guarda las que falten (sin duplicar). */
-    fun recuperarActivas(): Int {
+    /**
+     * Recorre las notificaciones activas y guarda las que falten (sin duplicar).
+     * [tardio]: el lector estaba desconectado al abrir la app; lo que se guarde
+     * va marcado "rescate_tardio" en la cola.
+     */
+    fun recuperarActivas(tardio: Boolean = false): Int {
         val activas = try {
             activeNotifications ?: emptyArray()
         } catch (e: Exception) {
@@ -106,12 +113,13 @@ class LectorNotificacionesService : NotificationListenerService() {
         var guardadas = 0
         for (sbn in activas) {
             try {
-                if (procesar(sbn, enVivo = false) == "guardada") guardadas++
+                if (procesar(sbn, enVivo = false, tardio = tardio) == "guardada") guardadas++
             } catch (e: Exception) {
                 RegistroDeteccion.log(this, "Error recuperando una notificación activa", e)
             }
         }
-        RegistroDeteccion.log(this, "Notificaciones activas revisadas: ${activas.size}, guardadas: $guardadas")
+        RegistroDeteccion.log(this, "Notificaciones activas revisadas: ${activas.size}, guardadas: $guardadas" +
+            if (tardio) " (rescate tardío)" else "")
         return guardadas
     }
 
@@ -123,7 +131,7 @@ class LectorNotificacionesService : NotificationListenerService() {
      * enVivo = false cuando viene de recuperarActivas(): no cuenta como
      * "última notificación recibida" ni informa apps no permitidas.
      */
-    private fun procesar(sbn: StatusBarNotification, enVivo: Boolean = true): String {
+    private fun procesar(sbn: StatusBarNotification, enVivo: Boolean = true, tardio: Boolean = false): String {
         val n = sbn.notification ?: return "ignorada (sin contenido)"
         // Resúmenes de grupo y notificaciones fijas (música, descargas) no son cobros.
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return "ignorada (resumen de grupo)"
@@ -171,6 +179,7 @@ class LectorNotificacionesService : NotificationListenerService() {
             .put("titulo", titulo)
             .put("texto", texto)
             .put("recibida_en", sbn.postTime)
+        if (tardio) notificacion.put("rescate_tardio", true)
         val guardada = ColaNotificaciones.agregar(this, notificacion)
         if (enVivo) RegistroDeteccion.marcarNotificacion(this, if (guardada) "guardada" else "repetida")
         if (!guardada) return "repetida"
