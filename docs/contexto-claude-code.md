@@ -1,7 +1,6 @@
 # SubTrack: contexto para Claude Code (traspaso a Santiago)
 
 > **Copia este archivo como `CLAUDE.md` en la raíz del repo antes de empezar.**
-> (`CLAUDE.md` está en `.gitignore`: cada uno tiene su copia local.)
 
 Responde y documenta **en español**.
 
@@ -82,8 +81,6 @@ adb install -r build\app\outputs\flutter-apk\app-completa-debug.apk
 adb logcat -v time -s SubTrackDeteccion:V flutter:V
 adb shell am broadcast -a com.example.flutter_suscripciones.PROCESAR_COLA -p com.example.flutter_suscripciones   # forzar la tarea de fondo
 ```
-
-Simular un cobro y más comandos: `docs/deteccion.md` › "Cómo probar".
 
 ## Estado actual
 
