@@ -14,6 +14,7 @@ privacidad y cómo probar cada parte. Se actualiza al terminar cada hito.
 | 6 | Procesadores de pago, servicios ambiguos, deshacer descartes y aviso de pago registrado | **Hecho** |
 | 7 | Hallazgos de pruebas reales: unir duplicados, series dentro de una mezcla, precio de referencia de ambiguos y diagnóstico del escaneo | **Hecho** |
 | 8 | Aviso al instante con la app cerrada (WorkManager, turno entre la app y la tarea de fondo) | **Hecho** |
+| C | Fabricantes que cierran apps: guía de segundo plano y aviso cuando hubo cobros revisados tarde | **Hecho** |
 
 ## Arquitectura
 
@@ -1010,6 +1011,138 @@ Funciona igual en las versiones **completa** y **sinSms** (no usa READ_SMS).
 
 No hay cambios de backend ni migraciones.
 
+## Fabricantes que cierran apps (encargo C)
+
+### Lo probado en el Xiaomi
+
+Xiaomi 25080RABDG (HyperOS, Android 16). Todo lo del hito 8 funciona
+**mientras el proceso de SubTrack está vivo**. Cuando HyperOS lo mata (cerrar
+desde recientes, reinicio o bloqueo largo), el `NotificationListenerService`
+**no se vuelve a lanzar**: en Xiaomi el **"Autoencendido en segundo plano"**
+(también llamado "Inicio automático") viene apagado por defecto para toda app
+instalada. El cobro se queda en la barra y solo se procesa al abrir la app:
+
+```
+App con el lector desconectado (app abierta o en primer plano): se intenta reconectar
+Notificaciones activas revisadas: N, guardadas: 1 (rescate tardío)
+```
+
+Con el autoencendido activado a mano, el aviso llega al instante con la app
+cerrada y el celular bloqueado. No existe API para activarlo ni para leer su
+estado.
+
+### Por qué no se pide en el onboarding
+
+- **No hay forma de comprobarlo.** Un paso que no se puede verificar no puede
+  marcarse "hecho" ni insistir con criterio.
+- **No hace falta en todos los celulares.** Muchas marcas no cierran el lector,
+  y en las que sí, depende de la versión de su capa.
+- **El onboarding ya pide lo esencial** (acceso a notificaciones, recordatorios,
+  historial opcional). Un paso más, en ajustes de terceros con nombres
+  distintos por marca, hace que más gente abandone.
+
+Por eso la guía es una **pantalla aparte** ("Mantén SubTrack activa en segundo
+plano") y se ofrece **solo cuando hace falta**: cuando la app nota que el
+sistema la cerró y hubo cobros que se revisaron tarde. También está siempre en
+**Perfil → Segundo plano**. La pantalla de permisos (03) no cambió.
+
+### Cómo se detecta la falla
+
+1. Al abrir la app, `VigilanteDeteccion` encuentra el lector desconectado y
+   llama `reconectar`. El nativo anota el pedido (`RescateTardio`, en memoria,
+   vence a los 2 min).
+2. Cuando el lector se conecta, `onListenerConnected` recupera la barra con
+   `recuperarActivas(tardio = true)`: lo que guarde **nuevo en la cola** va
+   marcado `"rescate_tardio": true`. Lo repetido no se marca.
+3. `ProcesadorDetecciones` (la app o la tarea de fondo) interpreta primero lo
+   marcado y solo cuenta lo que `AlmacenPagosLocales.agregar` acepta como
+   **nuevo** (huella y tolerancia de `AnalizadorPagos.mismoCobro`). Un cobro
+   que ya estaba en el celular (sigue en la barra y se reabre la app) **no
+   cuenta**. Si hay al menos uno, anota la falla en el almacenamiento seguro
+   (`RegistroSegundoPlano`, solo fechas).
+4. `main.dart`, al terminar cada revisión (abrir o volver a la app), llama
+   `ControlSegundoPlano.revisar()`: si hay falla pendiente y pasó **una semana
+   desde el último aviso mostrado** (o nunca se mostró), aparece en Inicio:
+   *"Tu celular cerró SubTrack y algunos cobros se revisaron tarde. Activa el
+   segundo plano para que te avisemos al instante."* con **"Cómo activarlo"** y
+   una X. Cada falla se usa una sola vez: si cae dentro de la semana, se
+   descarta sin mostrar nada.
+
+Si el lector estaba desconectado pero no había cobros nuevos, no se muestra
+nada. Si la tarea de fondo ganó el turno y termina después, el aviso aparece
+la próxima vez que se vuelva a la app.
+
+### La guía
+
+| Parte | Qué hace |
+|---|---|
+| Marca | `Build.MANUFACTURER` → grupo (`FabricanteSegundoPlano.grupo`): Xiaomi/Redmi/POCO, Samsung, Oppo/Realme/OnePlus, Vivo, Huawei/Honor u otra |
+| "Abrir ajustes" | Pantalla de la marca (en Xiaomi `com.miui.securitycenter` / `com.miui.permcenter.autostart.AutoStartManagementActivity`). Si no existe o no se deja abrir, `ACTION_APPLICATION_DETAILS_SETTINGS`. Con try/catch: la app nunca se cierra. En "otra" no aparece: solo la batería |
+| Batería | Botón a `ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS` (o los ajustes de la app) y estado con `PowerManager.isIgnoringBatteryOptimizations`, que se actualiza al volver. **Sin** `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (políticas de Google Play) |
+| "Ya lo activé" | Guarda la fecha en el almacenamiento seguro y vuelve. No impide un aviso futuro: si el lector vuelve a caerse con cobros, el aviso reaparece (máximo uno por semana). En Perfil la fila dice "Revisado" |
+
+Solo la pantalla de Xiaomi está probada en un celular real. Las de Oppo, Vivo y
+Huawei son las conocidas de cada capa; si no existen, se abren los ajustes de
+la app. Samsung no tiene pantalla de inicio automático: lo que cuenta es la
+batería "Sin restricciones". Los textos de Xiaomi son los de la guía anterior
+(`GuiaXiaomi`, ya borrada), que estaban probados.
+
+### Archivos
+
+| Archivo | Qué hace |
+|---|---|
+| `deteccion/SegundoPlano.kt` | `FabricanteSegundoPlano` (grupo y pantallas por marca) y `RescateTardio` |
+| `MainActivity.kt` | Canal `subtrack/sistema`: `segundoPlano`, `abrirSegundoPlano`, `abrirBateria` (y `abrirAjustesApp`) |
+| `LectorNotificacionesService.kt`, `CanalDeteccion.kt` | Marca `rescate_tardio` en la cola |
+| `lib/deteccion/aviso_segundo_plano.dart` | Regla de la semana, `RegistroSegundoPlano`, `ControlSegundoPlano` |
+| `lib/deteccion/guia_segundo_plano.dart` | Pantalla de la guía, textos por marca, tarjeta del aviso, puente con el canal |
+| `lib/deteccion/procesador_detecciones.dart` | Cuenta los cobros nuevos rescatados tarde y anota la falla |
+
+Funciona igual en **completa** y **sinSms** (todo está en `src/main`). Sin
+cambios de backend ni migraciones.
+
+### Depuración (solo debug)
+
+**Perfil → Depuración: detección → Segundo plano**: marca detectada (y su
+grupo), batería sin restricciones (Sí/No), fecha del último aviso de falla
+mostrado y el botón **"Forzar aviso de falla"** (lo muestra en Inicio sin
+esperar a que el sistema cierre la app; cuenta como mostrado).
+
+### Tests
+
+- `test/segundo_plano_aviso_test.dart`: regla de la semana, falla consumida
+  una sola vez, X, "Ya lo activé", forzar; el procesador cuenta solo cobros
+  **nuevos** marcados como rescate tardío.
+- `test/segundo_plano_guia_test.dart`: textos por marca (sin emojis), guía
+  (botones, batería al volver, otra marca, "Ya lo activé"), aviso en Inicio,
+  fila de Perfil y tarjeta de Depuración.
+- `SegundoPlanoTest.kt` (JUnit): grupos de marca, pantalla de Xiaomi, ventana
+  del rescate tardío.
+
+### Cómo probarlo en el Xiaomi
+
+1. Instala la debug de la rama y entra con tu cuenta (detección activa).
+2. **Reproducir el problema:** Ajustes → Aplicaciones → Administrar
+   aplicaciones → SubTrack → **desactiva "Autoencendido" / "Inicio
+   automático"**.
+3. Cierra SubTrack desde recientes (deslízala fuera). Comprueba que el lector
+   murió: `adb shell dumpsys notification | Select-String LectorNotificacionesService`
+   no debe mostrarlo conectado.
+4. Simula un cobro (`comandoSimulacion` de la pantalla de depuración, o un SMS
+   real). No llega aviso: el proceso está muerto.
+5. Abre SubTrack. En el log: `App con el lector desconectado (…): se intenta
+   reconectar` y `Notificaciones activas revisadas: N, guardadas: 1 (rescate
+   tardío)`. En Inicio aparece el aviso azul.
+6. Toca **Cómo activarlo** → guía de Xiaomi → **Abrir ajustes** (debe abrir
+   Inicio automático) y **Abrir ajustes de batería**. Al volver, la batería
+   debe decir "Activo" si elegiste "Sin restricciones".
+7. Repite 3–5 el mismo día: **no** vuelve a salir (máximo uno por semana).
+   Para verlo otra vez usa **Depuración → Forzar aviso de falla**.
+8. Con el autoencendido **activado**, repite 3–4: el aviso del cobro llega al
+   instante con la app cerrada y, al abrir, no hay aviso de falla.
+9. Abre otra vez la misma notificación de la barra sin cobros nuevos: no hay
+   aviso (el cobro ya estaba en el celular).
+
 ## Parser (hito 2)
 
 `ParserPagos.interpretar(texto, titulo:, recibidaEn:)` devuelve un
@@ -1329,8 +1462,8 @@ notificaciones", y puede quitarlo cuando quiera desde los ajustes de Android.
 2. Entra a **Perfil → Depuración: detección**.
 3. Toca **Dar acceso** y activa SubTrack en "Acceso a notificaciones". Al
    volver, la pantalla debe decir *Acceso: Concedido* y *Servicio: Conectado*.
-4. En Xiaomi, sigue la guía de la misma pantalla: **Inicio automático** activado
-   y **Ahorro de batería → Sin restricciones**.
+4. En Xiaomi, abre **Perfil → Segundo plano** y sigue la guía: **Inicio
+   automático** activado y **Ahorro de batería → Sin restricciones**.
 
 > **"Ajuste restringido"** (Android 13+): si al activar el acceso aparece ese
 > aviso, ve a Ajustes → Apps → SubTrack → menú ⋮ → **Permitir ajustes
