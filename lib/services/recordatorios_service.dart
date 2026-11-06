@@ -429,24 +429,8 @@ class RecordatoriosService {
 
   // ─── Ajustes del sistema (MainActivity.kt) ──────────────────────────────
 
-  /// true en Xiaomi, Redmi y POCO (HyperOS/MIUI cierra apps en segundo plano).
-  Future<bool> esXiaomi() async {
-    if (!disponible) return false;
-    try {
-      final fabricante = await _sistema.invokeMethod<String>('fabricante') ?? '';
-      return RegExp('xiaomi|redmi|poco', caseSensitive: false).hasMatch(fabricante);
-    } on PlatformException {
-      return false;
-    } on MissingPluginException {
-      return false;
-    }
-  }
-
   /// Abre la pantalla de información de la app (permisos, batería...).
   Future<void> abrirAjustesApp() => _invocar('abrirAjustesApp');
-
-  /// Abre "Inicio automático" de Xiaomi; si no existe, los ajustes de la app.
-  Future<void> abrirInicioAutomatico() => _invocar('abrirInicioAutomatico');
 
   Future<void> _invocar(String metodo) async {
     if (!disponible) return;

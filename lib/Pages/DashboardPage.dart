@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
 import '../deteccion/aviso_deteccion_pausada.dart';
+import '../deteccion/aviso_segundo_plano.dart';
+import '../deteccion/guia_segundo_plano.dart';
 import '../deteccion/vigilante_deteccion.dart';
 import '../models/resumen.dart';
 import '../models/suscripcion.dart';
@@ -35,7 +37,11 @@ class DashboardPage extends StatefulWidget {
     required this.suscripcionService,
     this.recordatorios,
     this.vigilante,
+    this.segundoPlano,
   });
+
+  /// Aviso "Tu celular cerró SubTrack…" (encargo C): debajo del de pausa.
+  final ControlSegundoPlano? segundoPlano;
 
   final AuthService authService;
   final SuscripcionService suscripcionService;
@@ -151,6 +157,19 @@ class _DashboardPageState extends State<DashboardPage> {
                     ? Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                         child: AvisoDeteccionPausada(onAbrirAjuste: widget.vigilante!.lector.abrirAjustesAcceso),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            if (widget.segundoPlano != null)
+              ValueListenableBuilder<bool>(
+                valueListenable: widget.segundoPlano!.avisoVisible,
+                builder: (context, visible, _) => visible
+                    ? Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                        child: AvisoSegundoPlano(
+                          onComoActivar: () => context.push(Routers.segundoPlano),
+                          onCerrar: widget.segundoPlano!.cerrar,
+                        ),
                       )
                     : const SizedBox.shrink(),
               ),

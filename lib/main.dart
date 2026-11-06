@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import 'Common/AppTheme.dart';
 import 'Common/Routers.dart';
+import 'deteccion/aviso_segundo_plano.dart';
 import 'deteccion/deteccion_service.dart';
 import 'deteccion/lector_notificaciones.dart';
 import 'deteccion/procesador_detecciones.dart';
@@ -52,6 +53,8 @@ Future<void> main() async {
   // Estado real de la detección (permiso + lector conectado), para Perfil,
   // el dashboard y la pantalla de permisos.
   final vigilante = VigilanteDeteccion(lector);
+  // Aviso "Tu celular cerró SubTrack…" en Inicio (encargo C).
+  final segundoPlano = ControlSegundoPlano(registro: procesador.segundoPlano);
   // Los pagos detectados que viven solo en el celular son del usuario de la
   // sesión: se borran al cerrarla.
   authService.alCerrarSesion = procesador.almacen.borrarTodo;
@@ -74,6 +77,7 @@ Future<void> main() async {
     deteccionService: deteccionService,
     procesador: procesador,
     vigilante: vigilante,
+    segundoPlano: segundoPlano,
     initialLocation: haySesion ? Routers.dashboard : Routers.home,
   );
   // Si el token vence mientras se usa la app, se vuelve al login.
@@ -96,7 +100,7 @@ Future<void> main() async {
   final compartir = ReceptorCompartir();
   compartir.escuchar((texto) => router.push(Routers.compartir, extra: texto));
 
-  final deteccion = _DeteccionEnSegundoPlano(api, vigilante, procesador, recordatorios, router);
+  final deteccion = _DeteccionEnSegundoPlano(api, vigilante, procesador, recordatorios, router, segundoPlano);
   WidgetsBinding.instance.addObserver(deteccion);
 
   // La animación de inicio termina antes de pasar a la app (si la sesión
@@ -133,13 +137,14 @@ Future<void> procesarEnSegundoPlano() => tareaDeFondo();
 /// permiso, procesa la cola de cobros y avisa de las suscripciones nuevas que
 /// detectó el backend (flujo B).
 class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
-  _DeteccionEnSegundoPlano(this.api, this.vigilante, this.procesador, this.recordatorios, this.router);
+  _DeteccionEnSegundoPlano(this.api, this.vigilante, this.procesador, this.recordatorios, this.router, this.segundoPlano);
 
   final ApiClient api;
   final VigilanteDeteccion vigilante;
   final ProcesadorDetecciones procesador;
   final RecordatoriosService recordatorios;
   final GoRouter router;
+  final ControlSegundoPlano segundoPlano;
 
   /// En estas pantallas no se procesa aquí: la propia pantalla lo hace (03,
   /// 04, 05), o se está revisando la cola (depuración).
@@ -175,6 +180,14 @@ class _DeteccionEnSegundoPlano with WidgetsBindingObserver {
     } catch (e) {
       // Sin conexión con el backend: la cola queda para la próxima vez.
       debugPrint('Detección en segundo plano: $e');
+    } finally {
+      // Aviso de segundo plano (encargo C): si el procesamiento (aquí o en la
+      // tarea de fondo) anotó cobros rescatados tarde. Si la tarea de fondo
+      // aún no termina, se verá al volver a la app.
+      await segundoPlano.revisar().catchError((Object e) {
+        debugPrint('Aviso de segundo plano: $e');
+        return false;
+      });
     }
   }
 }

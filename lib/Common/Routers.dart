@@ -15,6 +15,8 @@ import '../deteccion/lector_notificaciones.dart';
 import '../deteccion/permisos_page.dart';
 import '../deteccion/procesador_detecciones.dart';
 import '../deteccion/resultados_deteccion_page.dart';
+import '../deteccion/aviso_segundo_plano.dart';
+import '../deteccion/guia_segundo_plano.dart';
 import '../deteccion/vigilante_deteccion.dart';
 import '../services/api_client.dart';
 import '../services/avisos_nuevos.dart';
@@ -82,6 +84,10 @@ class Routers {
   /// "Detecciones descartadas" (desde Perfil), sin barra de pestañas.
   static const String deteccionesDescartadas = '/detecciones-descartadas';
 
+  /// Guía "Mantén SubTrack activa en segundo plano" (encargo C): desde el
+  /// aviso de Inicio o desde Perfil, nunca en el onboarding.
+  static const String segundoPlano = '/segundo-plano';
+
   static String _conParametros(String ruta, Map<String, bool> banderas) {
     final activas = [for (final MapEntry(:key, :value) in banderas.entries) if (value) '$key=1'];
     return activas.isEmpty ? ruta : '$ruta?${activas.join('&')}';
@@ -108,6 +114,7 @@ class Routers {
     ProcesadorDetecciones? procesador,
     VigilanteDeteccion? vigilante,
     HistorialSms? historial,
+    ControlSegundoPlano? segundoPlano,
     String initialLocation = home,
     bool depuracion = kDebugMode,
   }) {
@@ -122,6 +129,7 @@ class Routers {
           historial: historial,
         );
     final historialSmsApp = historial ?? procesadorDetecciones.historial;
+    final controlSegundoPlano = segundoPlano ?? ControlSegundoPlano(registro: procesadorDetecciones.segundoPlano);
     // Número de la campana de avisos (encabezados de las pestañas).
     final avisosNuevos = AvisosNuevos(suscripcionService);
     return GoRouter(
@@ -151,9 +159,10 @@ class Routers {
             path: depuracionDeteccion,
             builder: (context, state) => DepuracionDeteccionPage(
               lector: lectorNotificaciones,
-              recordatorios: recordatorios,
               cargarCatalogo: suscripcionService.catalogoServicios,
               diagnostico: procesadorDetecciones.ultimoDiagnostico,
+              segundoPlano: controlSegundoPlano,
+              sistema: SistemaSegundoPlano(),
             ),
           ),
         GoRoute(
@@ -244,6 +253,10 @@ class Routers {
         ),
         // Avisos: se abre desde la campana, encima de la pestaña (sin barra).
         GoRoute(
+          path: Routers.segundoPlano,
+          builder: (context, state) => GuiaSegundoPlanoPage(registro: controlSegundoPlano.registro),
+        ),
+        GoRoute(
           path: deteccionesDescartadas,
           builder: (context, state) => DescartadasPage(servicio: servicioDeteccion),
         ),
@@ -262,6 +275,7 @@ class Routers {
                 suscripcionService: suscripcionService,
                 recordatorios: recordatorios,
                 vigilante: vigilanteDeteccion,
+                segundoPlano: controlSegundoPlano,
               ),
             ),
             GoRoute(
@@ -292,6 +306,7 @@ class Routers {
                 recordatorios: recordatorios,
                 vigilante: vigilanteDeteccion,
                 historial: historialSmsApp,
+                segundoPlano: controlSegundoPlano.registro,
               ),
             ),
             GoRoute(

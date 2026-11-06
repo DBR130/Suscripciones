@@ -6,15 +6,15 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../Common/AppTheme.dart';
-import '../services/recordatorios_service.dart';
 import '../utils/formato.dart';
 import '../widgets/app_botones.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
-import '../widgets/guia_xiaomi.dart';
 import 'analizador_pagos.dart';
+import 'aviso_segundo_plano.dart';
 import 'catalogo_servicios.dart';
+import 'guia_segundo_plano.dart';
 import 'lector_notificaciones.dart';
 import 'notificacion_capturada.dart';
 import 'parser_pagos.dart';
@@ -33,15 +33,19 @@ class DepuracionDeteccionPage extends StatefulWidget {
   const DepuracionDeteccionPage({
     super.key,
     required this.lector,
-    this.recordatorios,
     this.cargarCatalogo,
     this.diagnostico,
+    this.segundoPlano,
+    this.sistema,
   });
 
   final LectorNotificaciones lector;
 
-  /// Para la guía de Xiaomi (abrir Inicio automático y ajustes de la app).
-  final RecordatoriosService? recordatorios;
+  /// Aviso de segundo plano (encargo C): fecha del último y botón para forzarlo.
+  final ControlSegundoPlano? segundoPlano;
+
+  /// Marca detectada y estado de la batería (canal subtrack/sistema).
+  final SistemaSegundoPlano? sistema;
 
   /// Catálogo de servicios para normalizar comercios (GET /api/guias). Si
   /// falla, el parser funciona igual, sin reconocer servicios.
@@ -63,7 +67,8 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
   List<NotificacionCapturada> _cola = const [];
   final List<EventoDeteccion> _enVivo = [];
   StreamSubscription<EventoDeteccion>? _suscripcion;
-  bool _xiaomi = false;
+  InfoSegundoPlano? _infoSistema;
+  DateTime? _ultimoAvisoFalla;
   ParserPagos _parser = const ParserPagos();
 
   /// null mientras carga; si no se pudo cargar, el motivo.
@@ -77,9 +82,6 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
     _cargarCatalogo();
     _suscripcion = widget.lector.eventos().listen(_alLlegar, onError: (Object e) => debugPrint('Lector: $e'));
     _actualizar();
-    widget.recordatorios?.esXiaomi().then((v) {
-      if (mounted) setState(() => _xiaomi = v);
-    });
   }
 
   @override
@@ -115,8 +117,12 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
     final estado = await widget.lector.estado();
     final config = await widget.lector.configuracion();
     final cola = await widget.lector.leerCola();
+    final info = await widget.sistema?.info();
+    final ultimoAviso = await widget.segundoPlano?.registro.ultimoAviso();
     if (!mounted) return;
     setState(() {
+      _infoSistema = info;
+      _ultimoAvisoFalla = ultimoAviso;
       _estado = estado;
       _config = config;
       _cola = cola.reversed.toList(); // más recientes primero
@@ -238,16 +244,48 @@ class _DepuracionDeteccionPageState extends State<DepuracionDeteccionPage> with 
             ],
           const SizedBox(height: 14),
           _tarjetaSimulacion(),
-          if (_xiaomi && widget.recordatorios != null) ...[
+          if (widget.segundoPlano != null || widget.sistema != null) ...[
             const SizedBox(height: 14),
-            GuiaXiaomi(
-              titulo: 'En Xiaomi, activa esto para que el lector no se detenga',
-              onInicioAutomatico: widget.recordatorios!.abrirInicioAutomatico,
-              onAjustes: widget.recordatorios!.abrirAjustesApp,
-            ),
+            _tarjetaSegundoPlano(),
           ],
         ],
       ),
+    );
+  }
+
+  /// Encargo C: marca, batería y último aviso de falla; forzar el aviso de
+  /// Inicio sin esperar a que el sistema cierre la app.
+  Widget _tarjetaSegundoPlano() {
+    final info = _infoSistema;
+    final control = widget.segundoPlano;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Seccion('Segundo plano'),
+        AppCard(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FilaDato('Marca detectada', info == null ? '?' : '${info.fabricante} (${info.grupo})'),
+              FilaDato('Batería sin restricciones', info == null ? '?' : (info.bateriaSinRestricciones ? 'Sí' : 'No')),
+              FilaDato('Último aviso de falla', _horaONunca(_ultimoAvisoFalla), ultima: true),
+            ],
+          ),
+        ),
+        if (control != null) ...[
+          const SizedBox(height: 9),
+          AppBotonSecundario(
+            texto: 'Forzar aviso de falla',
+            onPressed: () async {
+              await control.forzar();
+              if (!mounted) return;
+              mostrarToast(context, 'El aviso aparecerá en Inicio');
+              _actualizar();
+            },
+          ),
+        ],
+      ],
     );
   }
 

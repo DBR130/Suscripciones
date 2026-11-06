@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../Common/AppTheme.dart';
 import '../Common/Routers.dart';
+import '../deteccion/aviso_segundo_plano.dart';
 import '../deteccion/historial_sms.dart';
 import '../deteccion/vigilante_deteccion.dart';
 import '../models/ahorro.dart';
@@ -19,7 +20,6 @@ import '../widgets/app_feedback.dart';
 import '../widgets/app_header.dart';
 import '../widgets/app_shell.dart';
 import '../widgets/campana_avisos.dart';
-import '../widgets/guia_xiaomi.dart';
 
 /// Perfil y configuración (pantalla 14 del diseño, pestaña 4): días de
 /// anticipación, recordatorios en el celular, cerrar sesión y eliminar la
@@ -32,9 +32,14 @@ class PerfilPage extends StatefulWidget {
     this.recordatorios,
     this.vigilante,
     this.historial,
+    this.segundoPlano,
   });
 
   final AuthService authService;
+
+  /// Fila "Segundo plano" (guía del encargo C): dice "Revisado" si el usuario
+  /// ya tocó "Ya lo activé".
+  final RegistroSegundoPlano? segundoPlano;
 
   /// "Buscar suscripciones en mis SMS": solo si la versión lo incluye
   /// (completa) y en Android.
@@ -64,8 +69,8 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
   bool _activos = true;
   bool _resumen = true;
   bool _permiso = false;
-  bool _xiaomi = false;
   bool _conHistorial = false;
+  bool _guiaVista = false;
 
   VigilanteDeteccion? get _vigilante =>
       widget.vigilante?.lector.disponible ?? false ? widget.vigilante : null;
@@ -82,6 +87,7 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     _cargarRecordatorios();
     _cargarAhorro();
     _vigilante?.verificar(motivo: 'perfil');
+    _cargarGuiaVista();
     widget.historial?.disponible().then((si) {
       if (mounted && si) setState(() => _conHistorial = true);
     });
@@ -104,6 +110,16 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
         return;
     }
     vigilante.verificar(motivo: 'perfil');
+  }
+
+  Future<void> _cargarGuiaVista() async {
+    final vista = await widget.segundoPlano?.guiaVista();
+    if (mounted) setState(() => _guiaVista = vista != null);
+  }
+
+  Future<void> _abrirSegundoPlano() async {
+    await context.push(Routers.segundoPlano);
+    _cargarGuiaVista();
   }
 
   Future<void> _cargarAhorro() async {
@@ -149,13 +165,11 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
     final activos = await rec.activos();
     final resumen = await rec.resumenMensual();
     final permiso = await rec.tienePermiso();
-    final xiaomi = await rec.esXiaomi();
     if (!mounted) return;
     setState(() {
       _activos = activos;
       _resumen = resumen;
       _permiso = permiso;
-      _xiaomi = xiaomi;
     });
   }
 
@@ -304,13 +318,6 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
           icon: Icons.notifications_outlined,
           onPressed: _probarAviso,
         ),
-        if (_xiaomi) ...[
-          const SizedBox(height: 14),
-          GuiaXiaomi(
-            onInicioAutomatico: _rec!.abrirInicioAutomatico,
-            onAjustes: _rec!.abrirAjustesApp,
-          ),
-        ],
       ],
     );
   }
@@ -408,12 +415,24 @@ class _PerfilPageState extends State<PerfilPage> with WidgetsBindingObserver {
                     valueListenable: _vigilante!.estado,
                     builder: (context, estado, _) => AppCard(
                       padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: _FilaInterruptor(
-                        titulo: 'Permiso de notificaciones',
-                        descripcion: textoInterruptorDeteccion(estado),
-                        // "Activo" solo si el lector está conectado de verdad.
-                        valor: estado == EstadoDeteccion.activa || estado == EstadoDeteccion.comprobando,
-                        onChanged: estado == EstadoDeteccion.comprobando ? null : (_) => _cambiarDeteccion(estado),
+                      child: Column(
+                        children: [
+                          _FilaInterruptor(
+                            titulo: 'Permiso de notificaciones',
+                            descripcion: textoInterruptorDeteccion(estado),
+                            // "Activo" solo si el lector está conectado de verdad.
+                            valor: estado == EstadoDeteccion.activa || estado == EstadoDeteccion.comprobando,
+                            onChanged: estado == EstadoDeteccion.comprobando ? null : (_) => _cambiarDeteccion(estado),
+                          ),
+                          // Guía de segundo plano (encargo C), para todas las marcas.
+                          const Divider(height: 1, color: AppColors.divider),
+                          _FilaEnlace(
+                            texto: 'Segundo plano',
+                            detalle: _guiaVista ? 'Revisado ›' : '›',
+                            colorDetalle: AppColors.muted,
+                            onTap: _abrirSegundoPlano,
+                          ),
+                        ],
                       ),
                     ),
                   ),
