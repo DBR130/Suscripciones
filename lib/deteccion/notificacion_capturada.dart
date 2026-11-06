@@ -9,7 +9,13 @@ class NotificacionCapturada {
     required this.titulo,
     required this.texto,
     required this.recibidaEn,
+    this.rescateTardio = false,
   });
+
+  /// La rescató de la barra el lector al reconectarse, después de que la app
+  /// lo encontró desconectado (el sistema había cerrado SubTrack). Ver
+  /// aviso_segundo_plano.dart.
+  final bool rescateTardio;
 
   /// Huella SHA-256 (paquete, título, texto, hora): identifica la notificación.
   final String id;
@@ -30,6 +36,7 @@ class NotificacionCapturada {
         titulo: mapa['titulo'] as String? ?? '',
         texto: mapa['texto'] as String? ?? '',
         recibidaEn: DateTime.fromMillisecondsSinceEpoch((mapa['recibida_en'] as num).toInt()),
+        rescateTardio: mapa['rescate_tardio'] == true,
       );
 }
 

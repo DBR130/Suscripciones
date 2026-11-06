@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../utils/formato.dart';
 import 'almacen_pagos_locales.dart';
 import 'analizador_pagos.dart';
+import 'aviso_segundo_plano.dart';
 import 'candidato_suscripcion.dart';
 import 'catalogo_servicios.dart';
 import 'deteccion_service.dart';
@@ -30,7 +31,12 @@ class ResultadoEscaneo {
     required this.candidatosNuevos,
     this.enviados = 0,
     this.registrados = const [],
+    this.rescatadosTarde = 0,
   });
+
+  /// Cobros nuevos (no estaban ya en el celular) que el lector rescató de la
+  /// barra al reconectarse tras encontrarse desconectado: llegaron tarde.
+  final int rescatadosTarde;
 
   static const vacio = ResultadoEscaneo(revisadas: 0, cobros: 0, candidatosNuevos: []);
 
@@ -89,12 +95,17 @@ class ProcesadorDetecciones {
     AlmacenPagosLocales? almacen,
     HistorialSms? historial,
     Turno? turno,
+    RegistroSegundoPlano? segundoPlano,
     this.esperaConexion = const Duration(milliseconds: 500),
     DateTime Function()? ahora,
   })  : almacen = almacen ?? AlmacenPagosLocales(),
         historial = historial ?? HistorialSms(),
         turno = turno ?? Turno('app'),
+        segundoPlano = segundoPlano ?? RegistroSegundoPlano(),
         _ahora = ahora ?? DateTime.now;
+
+  /// Dónde se anota que hubo cobros rescatados tarde (aviso de segundo plano).
+  final RegistroSegundoPlano segundoPlano;
 
   final LectorNotificaciones lector;
   final DeteccionService servicio;
@@ -172,8 +183,16 @@ class ProcesadorDetecciones {
 
     // Sin catálogo (backend no disponible) no se procesa nada: la cola queda
     // intacta para la próxima vez.
-    final pagos = _interpretar(cola, ParserPagos(await cargarCatalogo()));
-    await almacen.agregar(pagos);
+    final parser = ParserPagos(await cargarCatalogo());
+    // Lo rescatado tarde va primero y aparte: solo cuenta lo que el almacén
+    // acepta como nuevo (huella y tolerancia de AnalizadorPagos.mismoCobro).
+    // Un cobro que ya estaba (sigue en la barra y se reabre la app) no cuenta.
+    final rescatados = _interpretar(cola.where((n) => n.rescateTardio).toList(), parser);
+    final resto = _interpretar(cola.where((n) => !n.rescateTardio).toList(), parser);
+    final pagos = [...rescatados, ...resto];
+    final rescatadosTarde = rescatados.isEmpty ? 0 : await almacen.agregar(rescatados);
+    await almacen.agregar(resto);
+    if (rescatadosTarde > 0) await segundoPlano.anotarFalla(_ahora());
     // Minimización: el texto crudo no se queda en la cola. Lo interpretado ya
     // está en el almacén local (solo campos extraídos).
     await lector.borrarDeCola(cola.map((n) => n.id).toList());
@@ -185,6 +204,7 @@ class ProcesadorDetecciones {
       enviados: r.enviados,
       candidatosNuevos: r.nuevos,
       registrados: r.registrados,
+      rescatadosTarde: rescatadosTarde,
     );
   }
 
