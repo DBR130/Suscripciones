@@ -52,6 +52,7 @@ android {
             // de debug (se instala en el celular sin problema). Para publicar
             // en Play Store haría falta una llave propia; no se configura.
             signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
 }

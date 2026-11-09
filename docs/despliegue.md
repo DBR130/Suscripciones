@@ -262,6 +262,13 @@ Para desarrollar contra la nube con hot reload (y simular pagos con adb), usa
 la configuración **"Celular (nube)"** de `.vscode/launch.json`, después de
 cambiar `TU-SERVICIO` por el nombre real.
 
+> **Probar siempre el APK release en el celular antes de dar por terminado un
+> cambio; R8 puede romper clases que en debug funcionan.** El release pasa por
+> R8 (minify), que borra lo que no ve usado, incluidas clases que una librería
+> crea por reflexión. Ejemplo real: WorkManager (encargo B) cerraba la app al
+> abrir (`NoSuchMethodException: androidx.work.impl.WorkDatabase_Impl.<init>`).
+> Las reglas para conservarlas están en `android/app/proguard-rules.pro`.
+
 ---
 
 ## 6. Antes de una demostración, y límites del plan gratuito
