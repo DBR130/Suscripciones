@@ -59,3 +59,7 @@ backend/node_modules/
 postman/
 # Contexto para Claude Code (solo local)
 CLAUDE.md
+
+# Video promocional (Remotion)
+video/node_modules/
+video/out/

@@ -1,0 +1,21 @@
+{
+  "name": "subtrack-video",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Video promocional de SubTrack (15 s, 1920x1080, 30 fps) hecho con Remotion",
+  "scripts": {
+    "studio": "remotion studio",
+    "render": "remotion render Anuncio out/subtrack-anuncio.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.543",
+    "@remotion/google-fonts": "4.0.543",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "remotion": "4.0.543"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.8",
+    "typescript": "5.8.3"
+  }
+}
