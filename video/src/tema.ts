@@ -32,13 +32,26 @@ export const FPS = 30;
 export const pesos = (n: number) =>
   '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
-// Servicios con iniciales y color de marca (design/subtrack-pantallas.md).
-export const SERVICIOS = [
-  {ini: 'NF', nombre: 'Netflix', color: '#C1121F', monto: 44900},
-  {ini: 'SP', nombre: 'Spotify', color: '#12833F', monto: 19900},
-  {ini: 'D+', nombre: 'Disney+', color: '#113CCF', monto: 26900},
-  {ini: 'YP', nombre: 'YouTube Premium', color: '#FF0000', monto: 13300},
-  {ini: 'CL', nombre: 'Claude', color: '#D97757', monto: 85000},
-];
+// Misma regla que LogoServicio.iniciales (lib/widgets/logo_servicio.dart):
+// una palabra → primera mayúscula + segunda minúscula ("Netflix" → "Ne");
+// varias → primera letra de las dos primeras ("YouTube Premium" → "YP").
+export const iniciales = (nombre: string) => {
+  const palabras = nombre.trim().split(/\s+/).filter((p) => p.length > 0);
+  if (palabras.length === 0) return '?';
+  if (palabras.length === 1) {
+    const p = palabras[0];
+    return p.length >= 2 ? p[0].toUpperCase() + p[1].toLowerCase() : p.toUpperCase();
+  }
+  return (palabras[0][0] + palabras[1][0]).toUpperCase();
+};
 
-export const TOTAL_MES = SERVICIOS.reduce((t, s) => t + s.monto, 0); // 190.000
+// Servicios con su color de marca (LogoServicio.coloresMarca).
+export const SERVICIOS = [
+  {nombre: 'Netflix', color: '#C1121F', monto: 44900},
+  {nombre: 'Spotify', color: '#12833F', monto: 19900},
+  {nombre: 'Disney+', color: '#113CCF', monto: 26900},
+  {nombre: 'YouTube Premium', color: '#FF0000', monto: 13300},
+  {nombre: 'Claude', color: '#D97757', monto: 65570}, // precio real detectado
+].map((s) => ({...s, ini: iniciales(s.nombre)}));
+
+export const TOTAL_MES = SERVICIOS.reduce((t, s) => t + s.monto, 0); // 170.570

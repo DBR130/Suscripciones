@@ -34,12 +34,12 @@ const TarjetaServicio: React.FC<{s: (typeof SERVICIOS)[number]; desde: number}> 
   );
 };
 
-export const EscenaTarjetas: React.FC<{duracion: number}> = ({duracion}) => {
+export const EscenaTarjetas: React.FC = () => {
   const frame = useCurrentFrame();
   const total = interpolate(frame, [12, 72], [0, TOTAL_MES], {...clamp, easing: Easing.out(Easing.cubic)});
   const contador = useResorte(10, 18);
   return (
-    <Escena duracion={duracion}>
+    <Escena>
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', gap: 70}}>
         <Titular desde={2}>¿Sabes cuánto pagas en suscripciones?</Titular>
         <div style={{display: 'flex', gap: 30}}>
@@ -131,12 +131,12 @@ const IconoMensajes: React.FC<{size: number}> = ({size}) => (
 );
 
 /* ---------- 3–7 s: llega el SMS y SubTrack lo detecta ---------- */
-export const EscenaDeteccion: React.FC<{duracion: number}> = ({duracion}) => {
+export const EscenaDeteccion: React.FC = () => {
   const celular = useResorte(0, 16);
   const sms = useResorte(14, 15);
   const push = useResorte(46, 13);
   return (
-    <Escena duracion={duracion}>
+    <Escena>
       <AbsoluteFill style={{flexDirection: 'row', alignItems: 'center', padding: '0 170px', gap: 120}}>
         <div style={{flex: 1}}>
           <Titular desde={50} size={92}>
@@ -173,7 +173,7 @@ export const EscenaDeteccion: React.FC<{duracion: number}> = ({duracion}) => {
                 icono={<IconoApp size={50} />}
                 app="SubTrack · ahora"
                 titulo="¿Tienes una suscripción a Netflix?"
-                cuerpo="Detectamos un cobro de $44.900. Toca para confirmarla."
+                cuerpo="Detectamos un cobro de $44.900 en Bancolombia. Toca para confirmarla o descartarla."
               />
             </div>
           </Celular>
@@ -246,12 +246,12 @@ const Grafica: React.FC = () => {
   );
 };
 
-export const EscenaAviso: React.FC<{duracion: number}> = ({duracion}) => {
-  const aviso = useResorte(4, 13);
+export const EscenaAviso: React.FC = () => {
+  const aviso = useResorte(0, 13);
   return (
-    <Escena duracion={duracion}>
+    <Escena>
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center', gap: 64}}>
-        <Titular desde={2} size={64} style={{textAlign: 'center'}}>
+        <Titular desde={0} size={64} style={{textAlign: 'center'}}>
           Te avisa antes de cada cobro
           <br />
           <span style={{color: C.accent}}>y te muestra en qué se va tu plata.</span>
@@ -275,13 +275,14 @@ export const EscenaAviso: React.FC<{duracion: number}> = ({duracion}) => {
 };
 
 /* ---------- 11–15 s: logo y cierre ---------- */
-export const EscenaCierre: React.FC<{duracion: number}> = ({duracion}) => {
+export const EscenaCierre: React.FC = () => {
   const frame = useCurrentFrame();
-  const ms = ((frame - 6) / FPS) * 1000;
+  // El logo arranca en el frame 0 de la escena: justo en el golpe del segundo 11.
+  const ms = (frame / FPS) * 1000;
   const lema = useResorte(56, 18);
   const privacidad = interpolate(frame, [76, 90], [0, 1], clamp);
   return (
-    <Escena duracion={duracion} sinSalida>
+    <Escena>
       <AbsoluteFill style={{alignItems: 'center', justifyContent: 'center'}}>
         <LogoConNombre ms={ms} ancho={1100} />
         <div
@@ -294,7 +295,7 @@ export const EscenaCierre: React.FC<{duracion: number}> = ({duracion}) => {
             transform: `translateY(${(1 - lema) * 24}px)`,
           }}
         >
-          SubTrack. <span style={{color: C.accent}}>Que ningún cobro te tome por sorpresa.</span>
+          <span style={{color: C.accent}}>Que ningún cobro te tome por sorpresa.</span>
         </div>
         <div style={{marginTop: 34, fontSize: 28, fontWeight: 600, color: C.muted, opacity: privacidad}}>
           Tus mensajes nunca salen de tu celular.

@@ -35,18 +35,12 @@ export const Fondo: React.FC<{children: React.ReactNode}> = ({children}) => {
   );
 };
 
-// Entrada y salida suaves de cada escena.
-export const Escena: React.FC<{duracion: number; children: React.ReactNode; sinSalida?: boolean}> = ({
-  duracion,
-  children,
-  sinSalida,
-}) => {
+// Corte seco en el golpe de la música: la escena entra en su frame 0 con un
+// pequeño "golpe" de escala (sin fundido de salida que adelante el cambio).
+export const Escena: React.FC<{children: React.ReactNode}> = ({children}) => {
   const frame = useCurrentFrame();
-  const entrada = interpolate(frame, [0, 8], [0, 1], {extrapolateRight: 'clamp'});
-  const salida = sinSalida
-    ? 1
-    : interpolate(frame, [duracion - 8, duracion], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-  return <AbsoluteFill style={{opacity: Math.min(entrada, salida)}}>{children}</AbsoluteFill>;
+  const golpe = interpolate(frame, [0, 6], [1.03, 1], {extrapolateRight: 'clamp'});
+  return <AbsoluteFill style={{transform: `scale(${golpe})`}}>{children}</AbsoluteFill>;
 };
 
 // Valor 0→1 con resorte que arranca en `desde` (frames).

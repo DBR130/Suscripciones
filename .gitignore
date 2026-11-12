@@ -63,3 +63,5 @@ CLAUDE.md
 # Video promocional (Remotion)
 video/node_modules/
 video/out/
+# Musica con licencia de Epidemic Sound: no se puede redistribuir
+video/public/musica.mp3
