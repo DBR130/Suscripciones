@@ -60,8 +60,10 @@ const List<SeccionTexto> textoPrivacidad = [
     titulo: 'Permisos que usa la app',
     parrafos: [
       '• Notificaciones: para enviarte los recordatorios de cobro y los avisos de detección.',
-      '• Acceso a notificaciones: para leer los avisos de cobro de tu banco y detectar suscripciones. Es '
-          'opcional y lo puedes quitar cuando quieras en los ajustes de Android.',
+      '• Acceso a notificaciones: para leer los avisos de cobro de tu banco y detectar suscripciones. '
+          'Android le entrega a SubTrack las notificaciones de todas las apps; SubTrack descarta al instante '
+          'las de apps que no son de mensajes, sin leer su contenido, y de tu app de SMS solo guarda las que '
+          'parecen un cobro. Es opcional y lo puedes quitar cuando quieras en los ajustes de Android.',
       '• SMS (solo en la versión completa): para buscar suscripciones en tus SMS de los últimos 6 meses, '
           'solo cuando lo pides y con un permiso aparte.',
       '• Internet: para guardar tus suscripciones en el servidor.',
@@ -149,7 +151,8 @@ const List<SeccionTexto> textoDatos = [
   (
     titulo: 'Lo que nunca guardamos',
     parrafos: [
-      '• Tus chats, correos ni notificaciones de otras apps: se descartan sin leerlos ni guardarlos.',
+      '• Las notificaciones de otras apps (chats, correos, redes): se descartan sin leer su contenido.',
+      '• Los mensajes que no son cobros: se revisan en tu celular y se descartan sin guardarlos.',
       '• Los números de tus tarjetas ni los teléfonos que traen los mensajes.',
     ],
   ),
