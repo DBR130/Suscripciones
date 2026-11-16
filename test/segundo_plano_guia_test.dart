@@ -233,7 +233,9 @@ void main() {
         Routers.segundoPlano: () => const Scaffold(body: Text('GUIA')),
       });
       expect(find.text('Segundo plano'), findsOneWidget);
-      expect(find.text('Revisado ›'), findsOneWidget);
+      // Rediseño del Perfil: "Revisado" es el subtítulo de la fila.
+      expect(find.text('Revisado'), findsOneWidget);
+      await tester.ensureVisible(find.text('Segundo plano'));
       await tester.tap(find.text('Segundo plano'));
       await tester.pumpAndSettle();
       expect(find.text('GUIA'), findsOneWidget);

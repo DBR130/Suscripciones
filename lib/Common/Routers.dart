@@ -31,6 +31,8 @@ import '../Pages/RegistroPage.dart';
 import '../Pages/SuscripcionDetallePage.dart';
 import '../Pages/SuscripcionFormPage.dart';
 import '../Pages/SuscripcionesPage.dart';
+import '../Pages/TextosLegalesPage.dart';
+import '../textos/textos_legales.dart';
 import '../models/suscripcion.dart';
 import '../services/auth_service.dart';
 import '../services/recordatorios_service.dart';
@@ -87,6 +89,12 @@ class Routers {
   /// Guía "Mantén SubTrack activa en segundo plano" (encargo C): desde el
   /// aviso de Inicio o desde Perfil, nunca en el onboarding.
   static const String segundoPlano = '/segundo-plano';
+
+  /// Pantallas de solo texto del Perfil (textos en lib/textos/textos_legales.dart).
+  static const String privacidad = '/privacidad';
+  static const String terminos = '/terminos';
+  static const String datosGuardados = '/datos-guardados';
+  static const String acercaDe = '/acerca-de';
 
   static String _conParametros(String ruta, Map<String, bool> banderas) {
     final activas = [for (final MapEntry(:key, :value) in banderas.entries) if (value) '$key=1'];
@@ -256,6 +264,23 @@ class Routers {
           path: Routers.segundoPlano,
           builder: (context, state) => GuiaSegundoPlanoPage(registro: controlSegundoPlano.registro),
         ),
+        GoRoute(
+          path: privacidad,
+          builder: (context, state) => const TextoLegalPage(
+            titulo: tituloPrivacidad,
+            aviso: avisoPrivacidad,
+            secciones: textoPrivacidad,
+          ),
+        ),
+        GoRoute(
+          path: terminos,
+          builder: (context, state) => const TextoLegalPage(titulo: tituloTerminos, secciones: textoTerminos),
+        ),
+        GoRoute(
+          path: datosGuardados,
+          builder: (context, state) => const TextoLegalPage(titulo: tituloDatos, secciones: textoDatos),
+        ),
+        GoRoute(path: acercaDe, builder: (context, state) => const AcercaDePage()),
         GoRoute(
           path: deteccionesDescartadas,
           builder: (context, state) => DescartadasPage(servicio: servicioDeteccion),
